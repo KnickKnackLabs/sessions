@@ -1,0 +1,80 @@
+#!/usr/bin/env bash
+#MISE description="Generate a graphviz DAG from git history, color-coded by author"
+#USAGE flag "--num <n>" default="40" help="Number of commits to include (default: 40)"
+#USAGE flag "--output <path>" help="Output PNG path (default: stdout as dot)"
+#USAGE flag "--repo <path>" help="Path to git repo (default: current directory)"
+
+set -euo pipefail
+
+N="${usage_num:-40}"
+OUTPUT="${usage_output:-}"
+REPO="${usage_repo:-$CALLER_PWD}"
+
+# Author → color mapping
+declare -A COLORS=(
+  [k7r2]="#4fc3f7"
+  [c0da]="#81c784"
+  [x1f9]="#ffb74d"
+  [quick]="#e57373"
+  [brownie]="#ba68c8"
+  [johnson]="#fff176"
+  [junior]="#4db6ac"
+  [rho]="#f06292"
+  [rikonor]="#90a4ae"
+  [zeke]="#ff8a65"
+  [baby-joel]="#aed581"
+)
+DEFAULT_COLOR="#bdbdbd"
+
+get_color() {
+  local author="$1"
+  # Strip -ricon suffix for matching
+  local base="${author%-ricon}"
+  echo "${COLORS[$base]:-$DEFAULT_COLOR}"
+}
+
+generate_dot() {
+  echo 'digraph git {'
+  echo '  rankdir=BT;'
+  echo '  node [style=filled, fontname="Helvetica", fontsize=10];'
+  echo '  edge [color="#666666"];'
+  echo ''
+
+  git -C "$REPO" log --all --format='%h|%p|%an|%s' -"$N" | while IFS='|' read -r hash parents author subject; do
+    # Truncate subject
+    short_subject="${subject:0:40}"
+    [ "${#subject}" -gt 40 ] && short_subject="${short_subject}..."
+
+    # Escape quotes
+    short_subject="${short_subject//\"/\\\"}"
+
+    color=$(get_color "$author")
+    base_author="${author%-ricon}"
+
+    # Merge commits get a different shape
+    if [[ "$parents" == *" "* ]]; then
+      echo "  \"$hash\" [label=\"$hash\\n$base_author\" fillcolor=\"$color\" shape=diamond];"
+    else
+      echo "  \"$hash\" [label=\"$hash\\n$short_subject\" fillcolor=\"$color\" shape=box];"
+    fi
+
+    # Edges to parents
+    for parent in $parents; do
+      echo "  \"$hash\" -> \"$parent\";"
+    done
+  done
+
+  echo '}'
+}
+
+if [[ -n "$OUTPUT" ]]; then
+  if ! command -v dot &>/dev/null; then
+    echo "Error: graphviz not installed (need 'dot' command)" >&2
+    echo "  brew install graphviz" >&2
+    exit 1
+  fi
+  generate_dot | dot -Tpng -o "$OUTPUT"
+  echo "Written to $OUTPUT"
+else
+  generate_dot
+fi
