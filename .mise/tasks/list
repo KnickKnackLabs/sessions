@@ -1,0 +1,79 @@
+#!/usr/bin/env bash
+#MISE description="List recent Claude Code sessions with metadata"
+#USAGE flag "--limit <n>" default="20" help="Max sessions to show (default: 20)"
+#USAGE flag "--project <filter>" help="Filter by project directory (substring match)"
+
+set -euo pipefail
+
+SESSIONS_DIR="$HOME/.claude/projects"
+LIMIT="${usage_limit:-20}"
+FILTER="${usage_project:-}"
+
+if [[ ! -d "$SESSIONS_DIR" ]]; then
+  echo "No sessions found at $SESSIONS_DIR" >&2
+  exit 1
+fi
+
+# Collect session files sorted by modification time (newest first)
+mapfile -t files < <(
+  find "$SESSIONS_DIR" -name "*.jsonl" -type f -print0 \
+    | xargs -0 stat -f '%m %N' \
+    | sort -rn \
+    | awk '{print $2}'
+)
+
+count=0
+for filepath in "${files[@]}"; do
+  [[ "$count" -ge "$LIMIT" ]] && break
+
+  # Project is the parent directory name
+  project=$(basename "$(dirname "$filepath")")
+
+  # Apply project filter
+  if [[ -n "$FILTER" && "$project" != *"$FILTER"* ]]; then
+    continue
+  fi
+
+  # Extract metadata
+  meta=$(python3 -c "
+import json, sys
+with open(sys.argv[1]) as f:
+    first_ts = None
+    last_ts = None
+    session_id = slug = ''
+    msg_count = 0
+    for line in f:
+        try:
+            obj = json.loads(line)
+        except:
+            continue
+        ts = obj.get('timestamp', '')
+        if ts and not first_ts:
+            first_ts = ts
+        if ts:
+            last_ts = ts
+        if not session_id:
+            session_id = obj.get('sessionId', '')
+        if not slug:
+            slug = obj.get('slug', '')
+        t = obj.get('type', '')
+        if t in ('user', 'assistant'):
+            msg_count += 1
+    date = first_ts[:10] if first_ts else '?'
+    sid = session_id[:8] if session_id else '?'
+    print(f'{sid}\t{slug}\t{date}\t{msg_count}')
+" "$filepath" 2>/dev/null) || continue
+
+  [[ -z "$meta" ]] && continue
+
+  IFS=$'\t' read -r sid slug date msg_count <<< "$meta"
+
+  # Decode project dir to readable path
+  readable_project="${project//-/\/}"
+  readable_project="${readable_project#/}"
+  # Trim to last two components (owner/repo style)
+  readable_project=$(echo "$readable_project" | rev | cut -d/ -f1-2 | rev)
+
+  printf "  %-10s %-28s %-24s %s %6s msgs\n" "$sid" "$slug" "$readable_project" "$date" "$msg_count"
+  count=$((count + 1))
+done
