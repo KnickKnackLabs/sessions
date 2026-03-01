@@ -1,0 +1,134 @@
+#!/usr/bin/env bash
+#MISE description="Full-text search across past Claude Code session transcripts"
+#USAGE flag "--project <filter>" help="Filter by project directory (substring match)"
+#USAGE flag "--limit <n>" default="10" help="Max results to show (default: 10)"
+#USAGE flag "--context <n>" default="1" help="Lines of context around matches (default: 1)"
+#USAGE arg "<query>" help="Search query (regex supported)"
+
+set -euo pipefail
+
+SESSIONS_DIR="$HOME/.claude/projects"
+QUERY="${usage_query:-}"
+LIMIT="${usage_limit:-10}"
+CONTEXT="${usage_context:-1}"
+FILTER="${usage_project:-}"
+
+if [[ -z "$QUERY" ]]; then
+  echo "Usage: sessions search <query>" >&2
+  exit 1
+fi
+
+if [[ ! -d "$SESSIONS_DIR" ]]; then
+  echo "No sessions found at $SESSIONS_DIR" >&2
+  exit 1
+fi
+
+# Build file list, optionally filtered by project
+mapfile -t files < <(
+  find "$SESSIONS_DIR" -name "*.jsonl" -type f -print0 \
+    | xargs -0 stat -f '%m %N' \
+    | sort -rn \
+    | awk '{print $2}' \
+    | if [[ -n "$FILTER" ]]; then grep "$FILTER"; else cat; fi
+)
+
+count=0
+for filepath in "${files[@]}"; do
+  [[ "$count" -ge "$LIMIT" ]] && break
+
+  project=$(basename "$(dirname "$filepath")")
+  readable_project="${project//-/\/}"
+  readable_project="${readable_project#/}"
+  readable_project=$(echo "$readable_project" | rev | cut -d/ -f1-2 | rev)
+
+  # Search within the session, extracting matching text content
+  results=$(python3 -c "
+import json, sys, re
+
+query = sys.argv[1]
+context_lines = int(sys.argv[2])
+filepath = sys.argv[3]
+pattern = re.compile(query, re.IGNORECASE)
+
+matches = []
+with open(filepath) as f:
+    for line in f:
+        try:
+            obj = json.loads(line)
+        except:
+            continue
+
+        msg_type = obj.get('type', '')
+        if msg_type not in ('user', 'assistant'):
+            continue
+
+        role = msg_type
+        ts = obj.get('timestamp', '')
+        session_id = obj.get('sessionId', '')[:8] if obj.get('sessionId') else '?'
+        slug = obj.get('slug', '')
+
+        # Extract text content
+        content = obj.get('message', {}).get('content', [])
+        if isinstance(content, str):
+            texts = [content]
+        elif isinstance(content, list):
+            texts = []
+            for c in content:
+                if isinstance(c, dict):
+                    if c.get('type') == 'text':
+                        texts.append(c.get('text', ''))
+                    elif c.get('type') == 'tool_result':
+                        # Search tool results too
+                        tr_content = c.get('content', '')
+                        if isinstance(tr_content, str):
+                            texts.append(tr_content)
+        else:
+            continue
+
+        # Also search tool call inputs
+        if isinstance(content, list):
+            for c in content:
+                if isinstance(c, dict) and c.get('type') == 'tool_use':
+                    inp = c.get('input', {})
+                    for v in inp.values():
+                        if isinstance(v, str):
+                            texts.append(v)
+
+        for text in texts:
+            if not pattern.search(text):
+                continue
+            # Find matching lines with context
+            lines = text.split('\n')
+            for i, line in enumerate(lines):
+                if pattern.search(line):
+                    start = max(0, i - context_lines)
+                    end = min(len(lines), i + context_lines + 1)
+                    snippet = '\n'.join(lines[start:end])
+                    matches.append({
+                        'role': role,
+                        'ts': ts[:19] if ts else '?',
+                        'snippet': snippet,
+                        'session_id': session_id,
+                        'slug': slug,
+                    })
+                    break  # one match per text block
+
+if matches:
+    print(f'SESSION:{matches[0][\"session_id\"]}|SLUG:{matches[0][\"slug\"]}')
+    for m in matches[:5]:
+        print(f'  [{m[\"role\"]}] {m[\"ts\"]}')
+        for sline in m['snippet'].split('\n'):
+            print(f'    {sline[:120]}')
+        print()
+" "$QUERY" "$CONTEXT" "$filepath" 2>/dev/null) || continue
+
+  [[ -z "$results" ]] && continue
+
+  echo "── $readable_project ──────────────────────────────────"
+  echo "$results"
+  count=$((count + 1))
+done
+
+if [[ "$count" -eq 0 ]]; then
+  echo "No matches for \"$QUERY\""
+fi
