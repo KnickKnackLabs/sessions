@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+#MISE description="Show contributor summary for a git repo, sorted by commit count"
+#USAGE flag "--repo <path>" help="Path to git repo (default: current directory)"
+#USAGE flag "--since <date>" help="Only count commits after this date (e.g. 2026-01-01)"
+
+set -euo pipefail
+
+REPO="${usage_repo:-$CALLER_PWD}"
+SINCE="${usage_since:-}"
+
+SINCE_FLAG=""
+if [[ -n "$SINCE" ]]; then
+  SINCE_FLAG="--since=$SINCE"
+fi
+
+echo "Contributors: $(basename "$REPO")"
+echo "─────────────────────────────────────────"
+
+git -C "$REPO" log --all --format='%an' $SINCE_FLAG \
+  | sed 's/-ricon$//; s/^Or Ricon$/rikonor/; s/^Claude$/claude-bot/; s/^github-actions\[bot\]$/ci/' \
+  | sort \
+  | uniq -c \
+  | sort -rn \
+  | while read -r count author; do
+    printf "  %4d  %s\n" "$count" "$author"
+  done
+
+echo ""
+total=$(git -C "$REPO" log --all --format='%h' $SINCE_FLAG | wc -l | tr -d ' ')
+echo "  Total: $total commits"
