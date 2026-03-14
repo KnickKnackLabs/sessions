@@ -123,6 +123,8 @@ jq -nc \
   }' >> "${PROJECT_DIR}${NEW_ID}.jsonl"
 
 # --- Update sessions index ---
+# Disable ERR trap — the fork is valid without an index entry
+trap - ERR
 
 INDEX_FILE="${PROJECT_DIR}sessions-index.json"
 if [ -f "$INDEX_FILE" ]; then
