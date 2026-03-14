@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+#MISE description="Run BATS test suite"
+
+set -euo pipefail
+
+REPO_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
+bats "$REPO_DIR/test/"
