@@ -1,0 +1,69 @@
+#!/usr/bin/env python3
+#MISE description="Show the last N messages of a session (quick resume context)"
+#USAGE arg "<session_id>" help="Session ID (prefix match supported)"
+#USAGE flag "--limit <n>" default="20" help="Number of messages to show (default: 20)"
+#USAGE flag "--no-tools" help="Hide tool_use/tool_result blocks"
+
+import os
+import sys
+import textwrap
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "lib"))
+import parse
+
+session_id = os.environ.get("usage_session_id", "")
+if not session_id:
+    print("Usage: sessions tail <session_id>", file=sys.stderr)
+    sys.exit(1)
+
+limit = int(os.environ.get("usage_limit", "20"))
+no_tools = os.environ.get("usage_no_tools", "") == "true"
+
+filepath = parse.find_session(session_id)
+session = parse.load(filepath)
+meta = session.metadata()
+
+messages = session.text_messages()
+
+# Apply tool filtering before slicing
+if no_tools:
+    filtered = []
+    for idx, role, ts, text in messages:
+        lines = text.split("\n")
+        lines = [l for l in lines if not l.startswith("[tool_use:") and not l.startswith("[tool_result:")]
+        text = "\n".join(lines).strip()
+        if text:
+            filtered.append((idx, role, ts, text))
+    messages = filtered
+
+# Take last N
+tail_msgs = messages[-limit:]
+
+# Header
+print(f"Session: {meta['session_id'][:12]}…  ({meta['project']})")
+print(f"Showing last {len(tail_msgs)} of {len(messages)} messages")
+print("═" * 80)
+print()
+
+for idx, role, ts, text in tail_msgs:
+    time_str = ts[11:19] if len(ts) >= 19 else ""
+
+    if role == "user":
+        header = f"┌─ 👤 User  {time_str}"
+    else:
+        header = f"┌─ 🤖 Assistant  {time_str}"
+
+    print(header)
+    print("│")
+
+    for line in text.split("\n"):
+        if len(line) > 120:
+            wrapped = textwrap.wrap(line, width=118)
+            for w in wrapped:
+                print(f"│  {w}")
+        else:
+            print(f"│  {line}")
+
+    print("│")
+    print("└" + "─" * 79)
+    print()

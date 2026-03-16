@@ -1,0 +1,139 @@
+#!/usr/bin/env python3
+#MISE description="Show forensic metadata for a session (model, context, duration, compaction)"
+#USAGE arg "<session_id>" help="Session ID (prefix match supported)"
+#USAGE flag "--json" help="Output as JSON"
+
+import json
+import os
+import sys
+from datetime import datetime
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "lib"))
+import parse
+
+session_id = os.environ.get("usage_session_id", "")
+if not session_id:
+    print("Usage: sessions inspect <session_id>", file=sys.stderr)
+    sys.exit(1)
+
+output_json = os.environ.get("usage_json", "") == "true"
+
+filepath = parse.find_session(session_id)
+session = parse.load(filepath)
+meta = session.metadata()
+
+# Extended analysis
+file_size = os.path.getsize(filepath)
+
+# Duration
+duration_str = "?"
+if meta["first_timestamp"] and meta["last_timestamp"]:
+    try:
+        fmt = "%Y-%m-%dT%H:%M:%S"
+        t1 = datetime.strptime(meta["first_timestamp"][:19], fmt)
+        t2 = datetime.strptime(meta["last_timestamp"][:19], fmt)
+        delta = t2 - t1
+        hours, remainder = divmod(int(delta.total_seconds()), 3600)
+        minutes, seconds = divmod(remainder, 60)
+        if hours > 0:
+            duration_str = f"{hours}h {minutes}m"
+        else:
+            duration_str = f"{minutes}m {seconds}s"
+    except Exception:
+        pass
+
+# Models used
+models = {}
+for e in session.entries:
+    if e.get("type") == "assistant":
+        m = e.get("message", {}).get("model", "")
+        if m:
+            models[m] = models.get(m, 0) + 1
+
+# Tools used
+tools = {}
+for e in session.entries:
+    msg = e.get("message", {})
+    content = msg.get("content", [])
+    if isinstance(content, list):
+        for block in content:
+            if isinstance(block, dict) and block.get("type") == "tool_use":
+                name = block.get("name", "?")
+                tools[name] = tools.get(name, 0) + 1
+
+# Subagent sessions
+subagent_dir = filepath.replace(".jsonl", "")
+subagent_count = 0
+if os.path.isdir(subagent_dir):
+    subagent_count = len([f for f in os.listdir(subagent_dir) if f.endswith(".jsonl")])
+
+# Context usage from user messages (look for /context command output)
+context_snapshots = []
+for e in session.entries:
+    if e.get("type") != "user":
+        continue
+    msg = e.get("message", {})
+    content = msg.get("content", "")
+    if isinstance(content, str) and "Context Usage" in content and "Tokens:" in content:
+        # Parse "**Tokens:** 132.6k / 200.0k (66%)"
+        for line in content.split("\n"):
+            if "Tokens:" in line and "/" in line:
+                context_snapshots.append(line.strip().replace("**", ""))
+
+# Check for compaction/summary evidence
+has_summary = False
+for e in session.entries:
+    if e.get("type") == "summary":
+        has_summary = True
+        break
+
+result = {
+    **meta,
+    "file_size_bytes": file_size,
+    "duration": duration_str,
+    "models": models,
+    "tools": tools,
+    "subagent_sessions": subagent_count,
+    "context_snapshots": context_snapshots,
+    "has_compaction": has_summary,
+}
+
+if output_json:
+    print(json.dumps(result, indent=2))
+else:
+    print(f"Session:    {meta['session_id']}")
+    if meta["slug"]:
+        print(f"Slug:       {meta['slug']}")
+    print(f"Project:    {meta['project']}")
+    print(f"File:       {filepath}")
+    print(f"File size:  {file_size / 1024:.1f} KB")
+    print()
+    print(f"Started:    {meta['first_timestamp']}")
+    print(f"Ended:      {meta['last_timestamp']}")
+    print(f"Duration:   {duration_str}")
+    print()
+    print(f"Entries:    {meta['total_entries']} total ({meta['user_messages']} user, {meta['assistant_messages']} assistant)")
+    print(f"Compacted:  {'Yes' if has_summary else 'No'}")
+    print()
+
+    print("Models:")
+    for m, c in sorted(models.items(), key=lambda x: -x[1]):
+        label = "(synthetic)" if m == "<synthetic>" else m
+        print(f"  {label:30s} {c:4d} messages")
+    print()
+
+    if tools:
+        print("Tools used:")
+        for t, c in sorted(tools.items(), key=lambda x: -x[1]):
+            print(f"  {t:30s} {c:4d} calls")
+        print()
+
+    if subagent_count:
+        print(f"Subagents:  {subagent_count} sessions")
+        print()
+
+    if context_snapshots:
+        print("Context snapshots:")
+        for snap in context_snapshots:
+            print(f"  {snap}")
+        print()

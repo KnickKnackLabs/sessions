@@ -1,0 +1,77 @@
+#!/usr/bin/env python3
+#MISE description="List recent sessions with metadata"
+#USAGE flag "--limit <n>" default="20" help="Max sessions to show (default: 20)"
+#USAGE flag "--project <filter>" help="Filter by project directory (substring match)"
+#USAGE flag "--all" help="Include subagent sessions (excluded by default)"
+#USAGE flag "--json" help="Output as JSON"
+
+import os
+import sys
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "lib"))
+import parse
+
+limit = int(os.environ.get("usage_limit", "20"))
+project_filter = os.environ.get("usage_project", "")
+include_agents = os.environ.get("usage_all", "") == "true"
+output_json = os.environ.get("usage_json", "") == "true"
+
+sessions_dir = parse.discover_sessions_dir()
+if not os.path.isdir(sessions_dir):
+    print(f"No sessions directory at {sessions_dir}", file=sys.stderr)
+    sys.exit(1)
+
+# Collect all JSONL files with their mtime
+files = []
+for project_dir in os.listdir(sessions_dir):
+    project_path = os.path.join(sessions_dir, project_dir)
+    if not os.path.isdir(project_path):
+        continue
+    if project_filter and project_filter not in project_dir:
+        continue
+    for fname in os.listdir(project_path):
+        if not fname.endswith(".jsonl"):
+            continue
+        # Skip subagent sessions unless --all
+        if not include_agents and fname.startswith("agent-"):
+            continue
+        filepath = os.path.join(project_path, fname)
+        mtime = os.path.getmtime(filepath)
+        files.append((mtime, filepath))
+
+# Sort by mtime descending
+files.sort(key=lambda x: -x[0])
+
+import json
+
+results = []
+count = 0
+for mtime, filepath in files:
+    if count >= limit:
+        break
+    try:
+        session = parse.load(filepath)
+        meta = session.metadata()
+        results.append(meta)
+        count += 1
+    except Exception:
+        continue
+
+if output_json:
+    print(json.dumps(results, indent=2))
+else:
+    if not results:
+        print("No sessions found.")
+        sys.exit(0)
+
+    # Table output
+    print(f"  {'ID':10s} {'Slug':20s} {'Project':24s} {'Date':12s} {'Model':20s} {'Msgs':>6s}")
+    print(f"  {'─'*10} {'─'*20} {'─'*24} {'─'*12} {'─'*20} {'─'*6}")
+    for m in results:
+        sid = m["session_id"][:8]
+        slug = (m["slug"] or "—")[:20]
+        project = m["project"][:24]
+        date = m["first_timestamp"][:10] if m["first_timestamp"] else "?"
+        model = m["model"][:20]
+        msgs = m["user_messages"] + m["assistant_messages"]
+        print(f"  {sid:10s} {slug:20s} {project:24s} {date:12s} {model:20s} {msgs:6d}")

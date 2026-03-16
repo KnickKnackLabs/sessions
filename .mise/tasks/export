@@ -1,0 +1,105 @@
+#!/usr/bin/env python3
+#MISE description="Export a session as a portable bundle (JSONL + metadata)"
+#USAGE arg "<session_id>" help="Session ID (prefix match supported)"
+#USAGE flag "--output <path>" help="Output directory (default: ./exports/)"
+#USAGE flag "--format <fmt>" default="bundle" help="Export format: bundle (JSONL+meta), markdown, jsonl"
+
+import json
+import os
+import shutil
+import sys
+from datetime import datetime, timezone
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "lib"))
+import parse
+
+session_id = os.environ.get("usage_session_id", "")
+if not session_id:
+    print("Usage: sessions export <session_id>", file=sys.stderr)
+    sys.exit(1)
+
+output_dir = os.environ.get("usage_output", "./exports")
+fmt = os.environ.get("usage_format", "bundle")
+
+filepath = parse.find_session(session_id)
+session = parse.load(filepath)
+meta = session.metadata()
+full_id = meta["session_id"]
+
+os.makedirs(output_dir, exist_ok=True)
+
+
+def export_bundle():
+    """Export as a directory containing the JSONL, metadata JSON, and any subagent sessions."""
+    bundle_dir = os.path.join(output_dir, full_id)
+    os.makedirs(bundle_dir, exist_ok=True)
+
+    # Copy the JSONL
+    shutil.copy2(filepath, os.path.join(bundle_dir, f"{full_id}.jsonl"))
+
+    # Copy subagent sessions if they exist
+    subagent_dir = filepath.replace(".jsonl", "")
+    if os.path.isdir(subagent_dir):
+        shutil.copytree(subagent_dir, os.path.join(bundle_dir, "subagents"), dirs_exist_ok=True)
+
+    # Write metadata
+    export_meta = {
+        **meta,
+        "exported_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z"),
+        "export_version": "sessions-export-1.0",
+        "source_machine": os.uname().nodename,
+    }
+    with open(os.path.join(bundle_dir, "metadata.json"), "w") as f:
+        json.dump(export_meta, f, indent=2)
+
+    print(f"Exported bundle: {bundle_dir}/")
+    print(f"  {full_id}.jsonl ({meta['total_entries']} entries)")
+    if os.path.isdir(subagent_dir):
+        count = len([f for f in os.listdir(subagent_dir) if f.endswith(".jsonl")])
+        print(f"  subagents/ ({count} sessions)")
+    print(f"  metadata.json")
+
+
+def export_markdown():
+    """Export as a human-readable markdown transcript."""
+    messages = session.text_messages()
+    md_path = os.path.join(output_dir, f"{full_id}.md")
+
+    with open(md_path, "w") as f:
+        f.write(f"# Session {full_id}\n\n")
+        if meta["slug"]:
+            f.write(f"**Slug:** {meta['slug']}  \n")
+        f.write(f"**Project:** {meta['project']}  \n")
+        f.write(f"**Model:** {meta['model']}  \n")
+        f.write(f"**Started:** {meta['first_timestamp']}  \n")
+        f.write(f"**Ended:** {meta['last_timestamp']}  \n")
+        f.write(f"**Messages:** {meta['user_messages']} user, {meta['assistant_messages']} assistant  \n")
+        f.write(f"\n---\n\n")
+
+        for idx, role, ts, text in messages:
+            time_str = ts[11:19] if len(ts) >= 19 else ""
+            emoji = "👤" if role == "user" else "🤖"
+            f.write(f"### {emoji} {role.capitalize()} — {time_str}\n\n")
+            f.write(f"{text}\n\n---\n\n")
+
+    print(f"Exported markdown: {md_path}")
+    print(f"  {len(messages)} messages")
+
+
+def export_jsonl():
+    """Export as a plain JSONL copy."""
+    out_path = os.path.join(output_dir, f"{full_id}.jsonl")
+    shutil.copy2(filepath, out_path)
+    print(f"Exported JSONL: {out_path}")
+    print(f"  {meta['total_entries']} entries, {os.path.getsize(filepath) / 1024:.1f} KB")
+
+
+if fmt == "bundle":
+    export_bundle()
+elif fmt == "markdown":
+    export_markdown()
+elif fmt == "jsonl":
+    export_jsonl()
+else:
+    print(f"Unknown format: {fmt}. Use: bundle, markdown, jsonl", file=sys.stderr)
+    sys.exit(1)

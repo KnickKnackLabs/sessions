@@ -1,0 +1,124 @@
+#!/usr/bin/env python3
+#MISE description="Import a previously exported session bundle"
+#USAGE arg "<path>" help="Path to exported bundle directory or JSONL file"
+#USAGE flag "--project <project>" help="Target project directory name (required for JSONL imports)"
+
+import json
+import os
+import shutil
+import sys
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "lib"))
+import parse
+
+import_path = os.environ.get("usage_path", "")
+if not import_path:
+    print("Usage: sessions import <path>", file=sys.stderr)
+    sys.exit(1)
+
+project_override = os.environ.get("usage_project", "")
+
+sessions_dir = parse.discover_sessions_dir()
+if not os.path.isdir(sessions_dir):
+    print(f"Error: No sessions directory at {sessions_dir}", file=sys.stderr)
+    sys.exit(1)
+
+import_path = os.path.abspath(import_path)
+
+
+def import_bundle(bundle_dir):
+    """Import a bundle directory (JSONL + metadata + optional subagents)."""
+    # Read metadata to find session ID and project
+    meta_path = os.path.join(bundle_dir, "metadata.json")
+    if not os.path.isfile(meta_path):
+        print(f"Error: No metadata.json in {bundle_dir}", file=sys.stderr)
+        sys.exit(1)
+
+    with open(meta_path) as f:
+        meta = json.load(f)
+
+    session_id = meta.get("session_id", "")
+    if not session_id:
+        print("Error: metadata.json missing session_id", file=sys.stderr)
+        sys.exit(1)
+
+    # Determine target project directory
+    if project_override:
+        project_dir_name = project_override
+    else:
+        # Reconstruct from the original filepath
+        orig_path = meta.get("filepath", "")
+        if orig_path:
+            project_dir_name = os.path.basename(os.path.dirname(orig_path))
+        else:
+            print("Error: Cannot determine project directory. Use --project.", file=sys.stderr)
+            sys.exit(1)
+
+    target_project = os.path.join(sessions_dir, project_dir_name)
+    os.makedirs(target_project, exist_ok=True)
+
+    # Check for conflicts
+    target_jsonl = os.path.join(target_project, f"{session_id}.jsonl")
+    if os.path.exists(target_jsonl):
+        print(f"Error: Session {session_id} already exists at {target_jsonl}", file=sys.stderr)
+        print("Delete it first or use a different session ID.", file=sys.stderr)
+        sys.exit(1)
+
+    # Copy JSONL
+    source_jsonl = os.path.join(bundle_dir, f"{session_id}.jsonl")
+    if not os.path.isfile(source_jsonl):
+        # Try to find any JSONL in the bundle
+        jsonls = [f for f in os.listdir(bundle_dir) if f.endswith(".jsonl")]
+        if len(jsonls) == 1:
+            source_jsonl = os.path.join(bundle_dir, jsonls[0])
+        else:
+            print(f"Error: No JSONL file found in {bundle_dir}", file=sys.stderr)
+            sys.exit(1)
+
+    shutil.copy2(source_jsonl, target_jsonl)
+
+    # Copy subagents if present
+    subagent_src = os.path.join(bundle_dir, "subagents")
+    if os.path.isdir(subagent_src):
+        subagent_dst = os.path.join(target_project, session_id)
+        shutil.copytree(subagent_src, subagent_dst, dirs_exist_ok=True)
+
+    print(f"Imported session {session_id[:12]}…")
+    print(f"  → {target_jsonl}")
+    print(f"Resume with: wibey --resume {session_id}")
+
+
+def import_jsonl(jsonl_path):
+    """Import a standalone JSONL file."""
+    if not project_override:
+        # Try to infer project from the JSONL content
+        session = parse.load(jsonl_path)
+        # Can't reliably infer — require --project
+        print("Error: --project required when importing standalone JSONL", file=sys.stderr)
+        print("  Use the project directory name, e.g.:", file=sys.stderr)
+        print(f"  sessions import {jsonl_path} --project -Users-me-myproject", file=sys.stderr)
+        sys.exit(1)
+
+    target_project = os.path.join(sessions_dir, project_override)
+    os.makedirs(target_project, exist_ok=True)
+
+    basename = os.path.basename(jsonl_path)
+    target = os.path.join(target_project, basename)
+    if os.path.exists(target):
+        print(f"Error: {target} already exists", file=sys.stderr)
+        sys.exit(1)
+
+    shutil.copy2(jsonl_path, target)
+    session_id = basename.replace(".jsonl", "")
+    print(f"Imported {basename}")
+    print(f"  → {target}")
+    print(f"Resume with: wibey --resume {session_id}")
+
+
+if os.path.isdir(import_path):
+    import_bundle(import_path)
+elif os.path.isfile(import_path) and import_path.endswith(".jsonl"):
+    import_jsonl(import_path)
+else:
+    print(f"Error: {import_path} is not a bundle directory or JSONL file", file=sys.stderr)
+    sys.exit(1)

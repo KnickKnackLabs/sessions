@@ -1,0 +1,76 @@
+#!/usr/bin/env python3
+#MISE description="Pretty-print a session transcript"
+#USAGE arg "<session_id>" help="Session ID (prefix match supported)"
+#USAGE flag "--no-tools" help="Hide tool_use/tool_result blocks"
+#USAGE flag "--user-only" help="Show only user messages"
+
+import os
+import sys
+import textwrap
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "lib"))
+import parse
+
+session_id = os.environ.get("usage_session_id", "")
+if not session_id:
+    print("Usage: sessions show <session_id>", file=sys.stderr)
+    sys.exit(1)
+
+no_tools = os.environ.get("usage_no_tools", "") == "true"
+user_only = os.environ.get("usage_user_only", "") == "true"
+
+filepath = parse.find_session(session_id)
+session = parse.load(filepath)
+meta = session.metadata()
+
+# Header
+print(f"Session: {meta['session_id']}")
+if meta["slug"]:
+    print(f"Slug:    {meta['slug']}")
+print(f"Project: {meta['project']}")
+print(f"Model:   {meta['model']}")
+print(f"Started: {meta['first_timestamp']}")
+print(f"Ended:   {meta['last_timestamp']}")
+print(f"Messages: {meta['user_messages']} user, {meta['assistant_messages']} assistant")
+print("═" * 80)
+print()
+
+messages = session.text_messages()
+
+for idx, role, ts, text in messages:
+    if user_only and role != "user":
+        continue
+
+    # Filter tool blocks if requested
+    if no_tools:
+        lines = text.split("\n")
+        lines = [l for l in lines if not l.startswith("[tool_use:") and not l.startswith("[tool_result:")]
+        text = "\n".join(lines).strip()
+        if not text:
+            continue
+
+    # Format timestamp
+    time_str = ts[11:19] if len(ts) >= 19 else ""
+
+    # Role styling
+    if role == "user":
+        header = f"┌─ 👤 User  {time_str}"
+    else:
+        header = f"┌─ 🤖 Assistant  {time_str}"
+
+    print(header)
+    print("│")
+
+    # Print content with left border
+    for line in text.split("\n"):
+        # Wrap long lines
+        if len(line) > 120:
+            wrapped = textwrap.wrap(line, width=118)
+            for w in wrapped:
+                print(f"│  {w}")
+        else:
+            print(f"│  {line}")
+
+    print("│")
+    print("└" + "─" * 79)
+    print()

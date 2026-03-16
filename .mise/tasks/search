@@ -1,0 +1,121 @@
+#!/usr/bin/env python3
+#MISE description="Full-text search across session transcripts"
+#USAGE arg "<query>" help="Search query (regex supported)"
+#USAGE flag "--project <filter>" help="Filter by project directory (substring match)"
+#USAGE flag "--limit <n>" default="10" help="Max sessions to search (default: 10)"
+#USAGE flag "--context <n>" default="1" help="Lines of context around matches (default: 1)"
+
+import json
+import os
+import re
+import sys
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "lib"))
+import parse
+
+query = os.environ.get("usage_query", "")
+if not query:
+    print("Usage: sessions search <query>", file=sys.stderr)
+    sys.exit(1)
+
+project_filter = os.environ.get("usage_project", "")
+limit = int(os.environ.get("usage_limit", "10"))
+context_lines = int(os.environ.get("usage_context", "1"))
+
+try:
+    pattern = re.compile(query, re.IGNORECASE)
+except re.error as e:
+    print(f"Invalid regex: {e}", file=sys.stderr)
+    sys.exit(1)
+
+sessions_dir = parse.discover_sessions_dir()
+if not os.path.isdir(sessions_dir):
+    print(f"No sessions directory at {sessions_dir}", file=sys.stderr)
+    sys.exit(1)
+
+# Collect session files sorted by mtime
+files = []
+for project_dir in os.listdir(sessions_dir):
+    project_path = os.path.join(sessions_dir, project_dir)
+    if not os.path.isdir(project_path):
+        continue
+    if project_filter and project_filter not in project_dir:
+        continue
+    for fname in os.listdir(project_path):
+        if not fname.endswith(".jsonl") or fname.startswith("agent-"):
+            continue
+        filepath = os.path.join(project_path, fname)
+        mtime = os.path.getmtime(filepath)
+        files.append((mtime, filepath))
+
+files.sort(key=lambda x: -x[0])
+
+match_count = 0
+for mtime, filepath in files:
+    if match_count >= limit:
+        break
+
+    session = parse.load(filepath)
+    meta = session.metadata()
+    session_matches = []
+
+    for entry in session.entries:
+        etype = entry.get("type", "")
+        if etype not in ("user", "assistant"):
+            continue
+
+        role = etype
+        ts = entry.get("timestamp", "")
+
+        # Extract all text content
+        msg = entry.get("message", {})
+        content = msg.get("content", "")
+        texts = []
+        if isinstance(content, str):
+            texts.append(content)
+        elif isinstance(content, list):
+            for block in content:
+                if not isinstance(block, dict):
+                    continue
+                if block.get("type") == "text":
+                    texts.append(block.get("text", ""))
+                elif block.get("type") == "tool_use":
+                    inp = block.get("input", {})
+                    for v in inp.values():
+                        if isinstance(v, str):
+                            texts.append(v)
+                elif block.get("type") == "tool_result":
+                    tc = block.get("content", "")
+                    if isinstance(tc, str):
+                        texts.append(tc)
+
+        for text in texts:
+            if not pattern.search(text):
+                continue
+            lines = text.split("\n")
+            for i, line in enumerate(lines):
+                if pattern.search(line):
+                    start = max(0, i - context_lines)
+                    end = min(len(lines), i + context_lines + 1)
+                    snippet = "\n".join(lines[start:end])
+                    session_matches.append({
+                        "role": role,
+                        "ts": ts[:19] if ts else "?",
+                        "snippet": snippet,
+                    })
+                    break  # one match per text block
+
+    if session_matches:
+        sid = meta["session_id"][:8]
+        slug = meta["slug"] or "—"
+        project = meta["project"]
+        print(f"── {project} ── {sid} ({slug}) ──")
+        for m in session_matches[:5]:
+            print(f"  [{m['role']}] {m['ts']}")
+            for sline in m["snippet"].split("\n"):
+                print(f"    {sline[:120]}")
+            print()
+        match_count += 1
+
+if match_count == 0:
+    print(f'No matches for "{query}"')
