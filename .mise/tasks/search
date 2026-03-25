@@ -10,7 +10,7 @@ import os
 import re
 import sys
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "lib"))
+sys.path.insert(0, os.environ["MISE_CONFIG_ROOT"] + "/lib")
 import parse
 
 query = os.environ.get("usage_query", "")

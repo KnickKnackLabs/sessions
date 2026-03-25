@@ -1,3 +1,7 @@
+[settings]
+quiet = true
+task_output = "interleave"
+
 [tools]
 usage = "latest"
 bats = "1.13.0"

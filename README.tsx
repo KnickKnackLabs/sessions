@@ -54,7 +54,7 @@ const readme = (
           <Cell>Description</Cell>
         </TableHead>
         <TableRow>
-          <Cell><Code>sessions ls</Code></Cell>
+          <Cell><Code>sessions list</Code></Cell>
           <Cell>List recent sessions with ID, project, model, date, and message count</Cell>
         </TableRow>
         <TableRow>
@@ -86,27 +86,27 @@ const readme = (
 
     <Section title="Examples">
       <Paragraph><Bold>List your 10 most recent sessions:</Bold></Paragraph>
-      <CodeBlock lang="bash">{`mise run ls -- --limit 10`}</CodeBlock>
+      <CodeBlock lang="bash">{`mise run list --limit 10`}</CodeBlock>
 
       <Paragraph><Bold>See the last 5 messages of a session (prefix match on ID):</Bold></Paragraph>
-      <CodeBlock lang="bash">{`mise run tail -- b94b7b8a --limit 5 --no-tools`}</CodeBlock>
+      <CodeBlock lang="bash">{`mise run tail b94b7b8a --limit 5 --no-tools`}</CodeBlock>
 
       <Paragraph><Bold>Search for "sccache" across all sessions:</Bold></Paragraph>
-      <CodeBlock lang="bash">{`mise run search -- "sccache"`}</CodeBlock>
+      <CodeBlock lang="bash">{`mise run search "sccache"`}</CodeBlock>
 
       <Paragraph><Bold>Inspect a session's metadata:</Bold></Paragraph>
-      <CodeBlock lang="bash">{`mise run inspect -- b94b7b8a`}</CodeBlock>
+      <CodeBlock lang="bash">{`mise run inspect b94b7b8a`}</CodeBlock>
 
       <Paragraph><Bold>Export a session as markdown:</Bold></Paragraph>
-      <CodeBlock lang="bash">{`mise run export -- b94b7b8a --format markdown --output ~/exports`}</CodeBlock>
+      <CodeBlock lang="bash">{`mise run export b94b7b8a --format markdown --output ~/exports`}</CodeBlock>
 
       <Paragraph><Bold>Export and import (transfer to another machine):</Bold></Paragraph>
       <CodeBlock lang="bash">{[
         `# On source machine:`,
-        `mise run export -- b94b7b8a --format bundle --output ~/transfer`,
+        `mise run export b94b7b8a --format bundle --output ~/transfer`,
         ``,
         `# Copy ~/transfer/b94b7b8a-.../ to target machine, then:`,
-        `mise run import -- ~/transfer/b94b7b8a-.../`,
+        `mise run import ~/transfer/b94b7b8a-.../`,
       ].join("\n")}</CodeBlock>
     </Section>
 
@@ -151,7 +151,7 @@ const readme = (
       <CodeBlock lang="text">{[
         `sessions/`,
         `├── .mise/tasks/`,
-        `│   ├── ls          # List sessions`,
+        `│   ├── list        # List sessions`,
         `│   ├── show        # Pretty-print transcript`,
         `│   ├── tail        # Last N messages`,
         `│   ├── inspect     # Forensic metadata`,
@@ -163,7 +163,7 @@ const readme = (
         `│   └── parse.py    # Shared JSONL parser`,
         `├── test/`,
         `│   ├── helpers.bash`,
-        `│   ├── ls.bats`,
+        `│   ├── list.bats`,
         `│   ├── show.bats`,
         `│   ├── tail.bats`,
         `│   ├── inspect.bats`,

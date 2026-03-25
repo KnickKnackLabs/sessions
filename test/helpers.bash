@@ -1,11 +1,20 @@
 # Shared test helpers for sessions BATS tests
 #
 # Provides:
+#   - sessions() wrapper that calls tasks through mise
 #   - CLAUDE_DIR override for test isolation
 #   - Synthetic JSONL generation
 #   - Common setup/teardown
 
-TASKS_DIR="$(cd "$BATS_TEST_DIRNAME/.." && pwd)/.mise/tasks"
+if [ -z "${MISE_CONFIG_ROOT:-}" ]; then
+  echo "MISE_CONFIG_ROOT not set — run tests via: mise run test" >&2
+  exit 1
+fi
+
+sessions() {
+  cd "$MISE_CONFIG_ROOT" && CLAUDE_DIR="$CLAUDE_DIR" mise run -q "$@"
+}
+export -f sessions
 
 # Fixed UUIDs for reproducible tests
 SESSION_1="aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
