@@ -14,10 +14,7 @@ teardown() {
 }
 
 @test "export bundle creates directory with JSONL and metadata" {
-  export usage_session_id="$SESSION_1"
-  export usage_output="$EXPORT_DIR"
-  export usage_format="bundle"
-  run python3 "$TASKS_DIR/export"
+  run sessions export "$SESSION_1" --output "$EXPORT_DIR" --format bundle
   [ "$status" -eq 0 ]
   [ -d "$EXPORT_DIR/$SESSION_1" ]
   [ -f "$EXPORT_DIR/$SESSION_1/$SESSION_1.jsonl" ]
@@ -25,11 +22,7 @@ teardown() {
 }
 
 @test "export bundle metadata is valid JSON with required fields" {
-  export usage_session_id="$SESSION_1"
-  export usage_output="$EXPORT_DIR"
-  export usage_format="bundle"
-  run python3 "$TASKS_DIR/export"
-  [ "$status" -eq 0 ]
+  sessions export "$SESSION_1" --output "$EXPORT_DIR" --format bundle
   python3 -c "
 import json
 with open('$EXPORT_DIR/$SESSION_1/metadata.json') as f:
@@ -42,10 +35,7 @@ assert 'source_machine' in m
 }
 
 @test "export markdown creates .md file" {
-  export usage_session_id="$SESSION_1"
-  export usage_output="$EXPORT_DIR"
-  export usage_format="markdown"
-  run python3 "$TASKS_DIR/export"
+  run sessions export "$SESSION_1" --output "$EXPORT_DIR" --format markdown
   [ "$status" -eq 0 ]
   [ -f "$EXPORT_DIR/$SESSION_1.md" ]
   grep -q "hello, can you help me?" "$EXPORT_DIR/$SESSION_1.md"
@@ -53,10 +43,7 @@ assert 'source_machine' in m
 }
 
 @test "export jsonl creates a copy" {
-  export usage_session_id="$SESSION_1"
-  export usage_output="$EXPORT_DIR"
-  export usage_format="jsonl"
-  run python3 "$TASKS_DIR/export"
+  run sessions export "$SESSION_1" --output "$EXPORT_DIR" --format jsonl
   [ "$status" -eq 0 ]
   [ -f "$EXPORT_DIR/$SESSION_1.jsonl" ]
   # Verify same content
@@ -64,10 +51,7 @@ assert 'source_machine' in m
 }
 
 @test "export errors on unknown format" {
-  export usage_session_id="$SESSION_1"
-  export usage_output="$EXPORT_DIR"
-  export usage_format="xml"
-  run python3 "$TASKS_DIR/export"
+  run sessions export "$SESSION_1" --output "$EXPORT_DIR" --format xml
   [ "$status" -eq 1 ]
   echo "$output" | grep -q "Unknown format"
 }
