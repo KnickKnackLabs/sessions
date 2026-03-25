@@ -38,41 +38,41 @@ cd sessions && mise trust && mise install
 **List your 10 most recent sessions:**
 
 ```bash
-mise run list -- --limit 10
+mise run list --limit 10
 ```
 
 **See the last 5 messages of a session (prefix match on ID):**
 
 ```bash
-mise run tail -- b94b7b8a --limit 5 --no-tools
+mise run tail b94b7b8a --limit 5 --no-tools
 ```
 
 **Search for "sccache" across all sessions:**
 
 ```bash
-mise run search -- "sccache"
+mise run search "sccache"
 ```
 
 **Inspect a session's metadata:**
 
 ```bash
-mise run inspect -- b94b7b8a
+mise run inspect b94b7b8a
 ```
 
 **Export a session as markdown:**
 
 ```bash
-mise run export -- b94b7b8a --format markdown --output ~/exports
+mise run export b94b7b8a --format markdown --output ~/exports
 ```
 
 **Export and import (transfer to another machine):**
 
 ```bash
 # On source machine:
-mise run export -- b94b7b8a --format bundle --output ~/transfer
+mise run export b94b7b8a --format bundle --output ~/transfer
 
 # Copy ~/transfer/b94b7b8a-.../ to target machine, then:
-mise run import -- ~/transfer/b94b7b8a-.../
+mise run import ~/transfer/b94b7b8a-.../
 ```
 
 ## How it works
