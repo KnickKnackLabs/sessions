@@ -25,7 +25,7 @@ cd sessions && mise trust && mise install
 
 | Command | Description |
 | --- | --- |
-| `sessions ls` | List recent sessions with ID, project, model, date, and message count |
+| `sessions list` | List recent sessions with ID, project, model, date, and message count |
 | `sessions show <id>` | Pretty-print a full session transcript with role markers and timestamps |
 | `sessions tail <id>` | Show the last N messages — quick "where was I?" for resuming |
 | `sessions inspect <id>` | Forensic metadata: duration, model, tools used, context snapshots, compaction status |
@@ -38,7 +38,7 @@ cd sessions && mise trust && mise install
 **List your 10 most recent sessions:**
 
 ```bash
-mise run ls -- --limit 10
+mise run list -- --limit 10
 ```
 
 **See the last 5 messages of a session (prefix match on ID):**
@@ -100,7 +100,7 @@ Long term, both repos should converge on a shared interface with pluggable provi
 ```text
 sessions/
 ├── .mise/tasks/
-│   ├── ls          # List sessions
+│   ├── list        # List sessions
 │   ├── show        # Pretty-print transcript
 │   ├── tail        # Last N messages
 │   ├── inspect     # Forensic metadata
@@ -112,7 +112,7 @@ sessions/
 │   └── parse.py    # Shared JSONL parser
 ├── test/
 │   ├── helpers.bash
-│   ├── ls.bats
+│   ├── list.bats
 │   ├── show.bats
 │   ├── tail.bats
 │   ├── inspect.bats

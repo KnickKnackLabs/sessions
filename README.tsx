@@ -54,7 +54,7 @@ const readme = (
           <Cell>Description</Cell>
         </TableHead>
         <TableRow>
-          <Cell><Code>sessions ls</Code></Cell>
+          <Cell><Code>sessions list</Code></Cell>
           <Cell>List recent sessions with ID, project, model, date, and message count</Cell>
         </TableRow>
         <TableRow>
@@ -86,7 +86,7 @@ const readme = (
 
     <Section title="Examples">
       <Paragraph><Bold>List your 10 most recent sessions:</Bold></Paragraph>
-      <CodeBlock lang="bash">{`mise run ls -- --limit 10`}</CodeBlock>
+      <CodeBlock lang="bash">{`mise run list -- --limit 10`}</CodeBlock>
 
       <Paragraph><Bold>See the last 5 messages of a session (prefix match on ID):</Bold></Paragraph>
       <CodeBlock lang="bash">{`mise run tail -- b94b7b8a --limit 5 --no-tools`}</CodeBlock>
@@ -151,7 +151,7 @@ const readme = (
       <CodeBlock lang="text">{[
         `sessions/`,
         `├── .mise/tasks/`,
-        `│   ├── ls          # List sessions`,
+        `│   ├── list        # List sessions`,
         `│   ├── show        # Pretty-print transcript`,
         `│   ├── tail        # Last N messages`,
         `│   ├── inspect     # Forensic metadata`,
@@ -163,7 +163,7 @@ const readme = (
         `│   └── parse.py    # Shared JSONL parser`,
         `├── test/`,
         `│   ├── helpers.bash`,
-        `│   ├── ls.bats`,
+        `│   ├── list.bats`,
         `│   ├── show.bats`,
         `│   ├── tail.bats`,
         `│   ├── inspect.bats`,
