@@ -5,11 +5,11 @@ load helpers
 setup() { setup_test_sessions; }
 teardown() { teardown_test_sessions; }
 
-@test "inspect shows session metadata" {
+@test "inspect shows session ID" {
   run sessions inspect "$SESSION_1"
   [ "$status" -eq 0 ]
-  echo "$output" | grep -q "Session:"
-  echo "$output" | grep -q "$SESSION_1"
+  # ID appears as parenthetical in title line
+  echo "$output" | grep -q "${SESSION_1:0:8}"
 }
 
 @test "inspect shows model" {
@@ -21,7 +21,8 @@ teardown() { teardown_test_sessions; }
 @test "inspect shows duration" {
   run sessions inspect "$SESSION_1"
   [ "$status" -eq 0 ]
-  echo "$output" | grep -q "Duration:"
+  # Duration appears in the Timing section
+  echo "$output" | grep -q "Duration"
   echo "$output" | grep -q "30m"
 }
 
@@ -34,7 +35,7 @@ teardown() { teardown_test_sessions; }
 @test "inspect shows compaction status" {
   run sessions inspect "$SESSION_1"
   [ "$status" -eq 0 ]
-  echo "$output" | grep -q "Compacted:.*No"
+  echo "$output" | grep -q "Compacted.*No"
 }
 
 @test "inspect --json outputs valid JSON" {
@@ -57,5 +58,6 @@ assert 'Bash' in data['tools']
 @test "inspect shows file size" {
   run sessions inspect "$SESSION_1"
   [ "$status" -eq 0 ]
-  echo "$output" | grep -q "File size:"
+  # File size appears in subtitle as KB or MB
+  echo "$output" | grep -qE "(KB|MB)"
 }
