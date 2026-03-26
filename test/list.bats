@@ -52,7 +52,8 @@ assert all('model' in s for s in data)
   [ "$status" -eq 0 ]
   # Session 1 has 4 user + 4 assistant = 8 messages total
   # (queue-operation entries are not counted)
-  echo "$output" | grep "${SESSION_1:0:8}" | grep -qE "[[:space:]]+8$"
+  # Rich table adds trailing padding, so match with surrounding whitespace
+  echo "$output" | grep "${SESSION_1:0:8}" | grep -qE "[[:space:]]+8[[:space:]]*$"
 }
 
 @test "list shows model name" {
