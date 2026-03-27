@@ -1,6 +1,8 @@
 #!/usr/bin/env -S uv run --script
 #MISE description="Read a session transcript (replaces show + tail)"
 #USAGE arg "<session_id>" help="Session ID (prefix match supported)"
+#USAGE flag "--from <n>" help="Start at message N (1-indexed, negative counts from end)"
+#USAGE flag "--to <n>" help="End at message N (inclusive, negative counts from end)"
 #USAGE flag "--last <n>" help="Show only the last N messages"
 #USAGE flag "--tools" help="Include tool_use/tool_result blocks (hidden by default)"
 #USAGE flag "--user-only" help="Show only user messages"
@@ -35,6 +37,10 @@ if not session_id:
     print("Usage: sessions read <session_id>", file=sys.stderr)
     sys.exit(1)
 
+from_n = os.environ.get("usage_from", "")
+from_n = int(from_n) if from_n else None
+to_n = os.environ.get("usage_to", "")
+to_n = int(to_n) if to_n else None
 last_n = os.environ.get("usage_last", "")
 last_n = int(last_n) if last_n else None
 include_tools = os.environ.get("usage_tools", "") == "true"
@@ -90,11 +96,33 @@ for idx, role, ts, text in messages:
             continue
         filtered.append((idx, role, ts, cleaned))
 
-# --- Apply --last ---
+# --- Apply windowing (--from, --to, --last) ---
 
 total_count = len(filtered)
-if last_n is not None:
-    filtered = filtered[-last_n:]
+
+def resolve_index(n, total):
+    """Convert 1-indexed (or negative) to 0-indexed. Clamp to bounds."""
+    if n > 0:
+        return min(n - 1, total)  # 1-indexed → 0-indexed
+    else:
+        return max(total + n, 0)  # negative → offset from end
+
+if last_n is not None and from_n is None and to_n is None:
+    # --last N: shorthand for the tail
+    start = max(total_count - last_n, 0)
+    end = total_count
+elif from_n is not None or to_n is not None:
+    start = resolve_index(from_n, total_count) if from_n is not None else 0
+    end = resolve_index(to_n, total_count) + 1 if to_n is not None else total_count
+    # Clamp
+    start = max(0, min(start, total_count))
+    end = max(start, min(end, total_count))
+else:
+    start = 0
+    end = total_count
+
+windowed = start != 0 or end != total_count
+filtered = filtered[start:end]
 
 # --- JSON output ---
 
@@ -139,8 +167,11 @@ console.print()
 console.print(title)
 console.print(subtitle)
 
-if last_n is not None and last_n < total_count:
-    console.print(Text(f"showing last {len(filtered)} of {total_count}", style=STYLE_DIM))
+if windowed and filtered:
+    # Show 1-indexed positions for humans
+    window_start = start + 1
+    window_end = start + len(filtered)
+    console.print(Text(f"messages {window_start}–{window_end} of {total_count}", style=STYLE_DIM))
 
 console.rule(style="dim")
 console.print()

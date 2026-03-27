@@ -63,7 +63,7 @@ teardown() { teardown_test_sessions; }
 @test "read --last limits to last N messages" {
   run sessions read "$SESSION_1" --last 2
   [ "$status" -eq 0 ]
-  echo "$output" | grep -q "showing last 2"
+  echo "$output" | grep -q "messages.*of"
   # Should have the final messages, not the first
   echo "$output" | grep -q "wrap up\|sccache config looks good"
 }
@@ -71,9 +71,48 @@ teardown() { teardown_test_sessions; }
 @test "read --last larger than message count shows all" {
   run sessions read "$SESSION_1" --last 100
   [ "$status" -eq 0 ]
-  # Should not show "showing last" when limit exceeds total
-  ! echo "$output" | grep -q "showing last"
+  # Should not show window indicator when limit exceeds total
+  ! echo "$output" | grep -q "messages.*of"
   echo "$output" | grep -q "hello.*help"
+}
+
+@test "read --from --to shows a window" {
+  run sessions read "$SESSION_1" --from 2 --to 3
+  [ "$status" -eq 0 ]
+  echo "$output" | grep -q "messages 2.3 of"
+  # Message 2 is "Of course! What do you need help with?"
+  echo "$output" | grep -q "Of course"
+}
+
+@test "read --from without --to shows from N to end" {
+  run sessions read "$SESSION_1" --from 4
+  [ "$status" -eq 0 ]
+  echo "$output" | grep -q "messages 4."
+  # Should include the last message ("wrap up") but not the first ("hello")
+  echo "$output" | grep -q "wrap up"
+  ! echo "$output" | grep -q "hello.*help"
+}
+
+@test "read --to without --from shows from start to N" {
+  run sessions read "$SESSION_1" --to 2
+  [ "$status" -eq 0 ]
+  echo "$output" | grep -q "messages 1.2 of"
+  echo "$output" | grep -q "hello.*help"
+  echo "$output" | grep -q "Of course"
+  ! echo "$output" | grep -q "wrap up"
+}
+
+@test "read negative --from counts from end" {
+  run sessions read "$SESSION_1" --from -2
+  [ "$status" -eq 0 ]
+  # Should show last 2 messages
+  echo "$output" | grep -q "wrap up\|sccache config looks good"
+}
+
+@test "read negative --from --to counts from end" {
+  run sessions read "$SESSION_1" --from -3 --to -2
+  [ "$status" -eq 0 ]
+  echo "$output" | grep -q "messages.*of"
 }
 
 @test "read --json outputs valid JSON" {
