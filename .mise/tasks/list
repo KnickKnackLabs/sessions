@@ -1,15 +1,21 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
 #MISE description="List recent sessions with metadata"
 #USAGE flag "--limit <n>" default="20" help="Max sessions to show (default: 20)"
 #USAGE flag "--project <filter>" help="Filter by project directory (substring match)"
 #USAGE flag "--all" help="Include subagent sessions (excluded by default)"
 #USAGE flag "--json" help="Output as JSON"
+# /// script
+# requires-python = ">=3.10"
+# dependencies = ["rich"]
+# ///
 
+import json
 import os
 import sys
 
 sys.path.insert(0, os.environ["MISE_CONFIG_ROOT"] + "/lib")
 import parse
+from format import console, format_duration, format_model, format_relative, make_table
 
 limit = int(os.environ.get("usage_limit", "20"))
 project_filter = os.environ.get("usage_project", "")
@@ -42,8 +48,6 @@ for project_dir in os.listdir(sessions_dir):
 # Sort by mtime descending
 files.sort(key=lambda x: -x[0])
 
-import json
-
 results = []
 count = 0
 for mtime, filepath in files:
@@ -52,6 +56,11 @@ for mtime, filepath in files:
     try:
         session = parse.load(filepath)
         meta = session.metadata()
+        # Skip empty/stub sessions — no real assistant interaction
+        if not include_agents:
+            msgs = meta["user_messages"] + meta["assistant_messages"]
+            if msgs == 0 or meta["model"] == "unknown":
+                continue
         results.append(meta)
         count += 1
     except Exception:
@@ -64,14 +73,20 @@ else:
         print("No sessions found.")
         sys.exit(0)
 
-    # Table output
-    print(f"  {'ID':10s} {'Slug':20s} {'Project':24s} {'Date':12s} {'Model':20s} {'Msgs':>6s}")
-    print(f"  {'─'*10} {'─'*20} {'─'*24} {'─'*12} {'─'*20} {'─'*6}")
+    table = make_table()
+    table.add_column("ID", style="cyan", no_wrap=True)
+    table.add_column("Duration", no_wrap=True)
+    table.add_column("Active", no_wrap=True)
+    table.add_column("Model", style="dim", no_wrap=True)
+    table.add_column("Msgs", justify="right", min_width=4)
+
     for m in results:
-        sid = m["session_id"][:8]
-        slug = (m["slug"] or "—")[:20]
-        project = m["project"][:24]
-        date = m["first_timestamp"][:10] if m["first_timestamp"] else "?"
-        model = m["model"][:20]
-        msgs = m["user_messages"] + m["assistant_messages"]
-        print(f"  {sid:10s} {slug:20s} {project:24s} {date:12s} {model:20s} {msgs:6d}")
+        table.add_row(
+            m["session_id"][:8],
+            format_duration(m["first_timestamp"], m["last_timestamp"]),
+            format_relative(m["last_timestamp"]),
+            format_model(m["model"]),
+            str(m["user_messages"] + m["assistant_messages"]),
+        )
+
+    console.print(table)

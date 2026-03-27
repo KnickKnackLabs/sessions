@@ -1,7 +1,11 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
 #MISE description="Show forensic metadata for a session (model, context, duration, compaction)"
 #USAGE arg "<session_id>" help="Session ID (prefix match supported)"
 #USAGE flag "--json" help="Output as JSON"
+# /// script
+# requires-python = ">=3.10"
+# dependencies = ["rich"]
+# ///
 
 import json
 import os
@@ -10,6 +14,14 @@ from datetime import datetime
 
 sys.path.insert(0, os.environ["MISE_CONFIG_ROOT"] + "/lib")
 import parse
+from format import (
+    STYLE_DIM,
+    STYLE_ID,
+    STYLE_TOOL,
+    console,
+    format_date,
+    format_duration,
+)
 
 session_id = os.environ.get("usage_session_id", "")
 if not session_id:
@@ -22,25 +34,11 @@ filepath = parse.find_session(session_id)
 session = parse.load(filepath)
 meta = session.metadata()
 
-# Extended analysis
+# --- Extended analysis ---
+
 file_size = os.path.getsize(filepath)
 
-# Duration
-duration_str = "?"
-if meta["first_timestamp"] and meta["last_timestamp"]:
-    try:
-        fmt = "%Y-%m-%dT%H:%M:%S"
-        t1 = datetime.strptime(meta["first_timestamp"][:19], fmt)
-        t2 = datetime.strptime(meta["last_timestamp"][:19], fmt)
-        delta = t2 - t1
-        hours, remainder = divmod(int(delta.total_seconds()), 3600)
-        minutes, seconds = divmod(remainder, 60)
-        if hours > 0:
-            duration_str = f"{hours}h {minutes}m"
-        else:
-            duration_str = f"{minutes}m {seconds}s"
-    except Exception:
-        pass
+duration_str = format_duration(meta["first_timestamp"], meta["last_timestamp"])
 
 # Models used
 models = {}
@@ -67,7 +65,7 @@ subagent_count = 0
 if os.path.isdir(subagent_dir):
     subagent_count = len([f for f in os.listdir(subagent_dir) if f.endswith(".jsonl")])
 
-# Context usage from user messages (look for /context command output)
+# Context usage from user messages
 context_snapshots = []
 for e in session.entries:
     if e.get("type") != "user":
@@ -75,17 +73,18 @@ for e in session.entries:
     msg = e.get("message", {})
     content = msg.get("content", "")
     if isinstance(content, str) and "Context Usage" in content and "Tokens:" in content:
-        # Parse "**Tokens:** 132.6k / 200.0k (66%)"
         for line in content.split("\n"):
             if "Tokens:" in line and "/" in line:
                 context_snapshots.append(line.strip().replace("**", ""))
 
-# Check for compaction/summary evidence
-has_summary = False
+# Entry types
+entry_types = {}
 for e in session.entries:
-    if e.get("type") == "summary":
-        has_summary = True
-        break
+    t = e.get("type", "unknown")
+    entry_types[t] = entry_types.get(t, 0) + 1
+
+# Compaction
+has_summary = "summary" in entry_types
 
 result = {
     **meta,
@@ -93,6 +92,7 @@ result = {
     "duration": duration_str,
     "models": models,
     "tools": tools,
+    "entry_types": entry_types,
     "subagent_sessions": subagent_count,
     "context_snapshots": context_snapshots,
     "has_compaction": has_summary,
@@ -100,40 +100,130 @@ result = {
 
 if output_json:
     print(json.dumps(result, indent=2))
+    sys.exit(0)
+
+# --- Rich output ---
+
+from rich.bar import Bar
+from rich.table import Table
+from rich.text import Text
+
+# Title: slug or truncated ID
+title = meta["slug"] or meta["session_id"][:12]
+title_text = Text(title, style="bold")
+title_text.append(f"  ({meta['session_id'][:8]})", style=STYLE_ID)
+console.print()
+console.print(title_text)
+
+# Subtitle: project + file size
+size_kb = file_size / 1024
+size_str = f"{size_kb:.1f} KB" if size_kb < 1024 else f"{size_kb / 1024:.1f} MB"
+console.print(Text(f"{meta['project']}  ·  {size_str}", style=STYLE_DIM))
+
+# --- Timing ---
+console.print()
+console.rule("Timing", style="dim")
+console.print()
+
+kv = Table(box=None, show_header=False, padding=(0, 2), expand=False)
+kv.add_column("key", style="dim", min_width=10)
+kv.add_column("val")
+kv.add_row("Started", format_date(meta["first_timestamp"]))
+kv.add_row("Ended", format_date(meta["last_timestamp"]))
+kv.add_row("Duration", duration_str)
+console.print(kv)
+
+# --- Conversation ---
+console.print()
+console.rule("Conversation", style="dim")
+console.print()
+
+total_msgs = meta["user_messages"] + meta["assistant_messages"]
+
+kv2 = Table(box=None, show_header=False, padding=(0, 2), expand=False)
+kv2.add_column("key", style="dim", min_width=10)
+kv2.add_column("val")
+kv2.add_row("Messages", f"{total_msgs} ({meta['user_messages']} user, {meta['assistant_messages']} assistant)")
+
+# Entry type breakdown — show non-message types sorted by frequency
+# Friendly names for internal entry types
+TYPE_LABELS = {
+    "user": "user",
+    "assistant": "assistant",
+    "progress": "progress",
+    "queue-operation": "queue-op",
+    "file-history-snapshot": "file-snapshot",
+    "last-prompt": "last-prompt",
+    "system": "system",
+    "summary": "summary",
+}
+other_types = {k: v for k, v in entry_types.items() if k not in ("user", "assistant")}
+if other_types:
+    sorted_types = sorted(other_types.items(), key=lambda x: -x[1])
+    parts = [f"{v} {TYPE_LABELS.get(k, k)}" for k, v in sorted_types]
+    kv2.add_row("Entries", Text.from_markup(
+        f"{meta['total_entries']} total  [dim]({' · '.join(parts)})[/dim]"
+    ))
+
+kv2.add_row("Compacted", "Yes" if has_summary else "No")
+
+# Models — inline if one real model, expanded if multiple
+real_models = {k: v for k, v in models.items() if k != "<synthetic>"}
+synthetic_count = models.get("<synthetic>", 0)
+
+if len(real_models) == 1:
+    model_name, model_count = next(iter(real_models.items()))
+    model_str = model_name
+    if synthetic_count:
+        model_str += f"  [dim](+{synthetic_count} system-generated)[/dim]"
+    kv2.add_row("Model", Text.from_markup(model_str))
+elif len(real_models) > 1:
+    parts = [f"{name} ({count})" for name, count in sorted(real_models.items(), key=lambda x: -x[1])]
+    if synthetic_count:
+        parts.append(f"[dim]system-generated ({synthetic_count})[/dim]")
+    kv2.add_row("Models", Text.from_markup("  ·  ".join(parts)))
 else:
-    print(f"Session:    {meta['session_id']}")
-    if meta["slug"]:
-        print(f"Slug:       {meta['slug']}")
-    print(f"Project:    {meta['project']}")
-    print(f"File:       {filepath}")
-    print(f"File size:  {file_size / 1024:.1f} KB")
-    print()
-    print(f"Started:    {meta['first_timestamp']}")
-    print(f"Ended:      {meta['last_timestamp']}")
-    print(f"Duration:   {duration_str}")
-    print()
-    print(f"Entries:    {meta['total_entries']} total ({meta['user_messages']} user, {meta['assistant_messages']} assistant)")
-    print(f"Compacted:  {'Yes' if has_summary else 'No'}")
-    print()
+    if synthetic_count:
+        kv2.add_row("Model", Text("system-generated only", style="dim"))
 
-    print("Models:")
-    for m, c in sorted(models.items(), key=lambda x: -x[1]):
-        label = "(synthetic)" if m == "<synthetic>" else m
-        print(f"  {label:30s} {c:4d} messages")
-    print()
+if subagent_count:
+    kv2.add_row("Subagents", f"{subagent_count} sessions")
 
-    if tools:
-        print("Tools used:")
-        for t, c in sorted(tools.items(), key=lambda x: -x[1]):
-            print(f"  {t:30s} {c:4d} calls")
-        print()
+console.print(kv2)
 
-    if subagent_count:
-        print(f"Subagents:  {subagent_count} sessions")
-        print()
+# --- Tools ---
+if tools:
+    console.print()
+    console.rule("Tools", style="dim")
+    console.print()
 
-    if context_snapshots:
-        print("Context snapshots:")
-        for snap in context_snapshots:
-            print(f"  {snap}")
-        print()
+    sorted_tools = sorted(tools.items(), key=lambda x: -x[1])
+    max_count = sorted_tools[0][1] if sorted_tools else 1
+
+    tool_table = Table(box=None, show_header=False, padding=(0, 2), expand=False)
+    tool_table.add_column("name", min_width=20)
+    tool_table.add_column("bar", min_width=20)
+    tool_table.add_column("count", justify="right", style="bold", min_width=4)
+
+    for name, count in sorted_tools:
+        bar = Text()
+        filled = int((count / max_count) * 16)
+        bar.append("█" * filled, style="cyan")
+        bar.append("░" * (16 - filled), style="dim")
+        tool_table.add_row(
+            Text(name, style=STYLE_TOOL.replace("italic", "").strip()),
+            bar,
+            str(count),
+        )
+
+    console.print(tool_table)
+
+# --- Context ---
+if context_snapshots:
+    console.print()
+    console.rule("Context", style="dim")
+    console.print()
+    for snap in context_snapshots:
+        console.print(f"  {snap}", style="dim")
+
+console.print()

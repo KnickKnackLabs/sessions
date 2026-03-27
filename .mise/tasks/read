@@ -1,0 +1,208 @@
+#!/usr/bin/env -S uv run --script
+#MISE description="Read a session transcript (replaces show + tail)"
+#USAGE arg "<session_id>" help="Session ID (prefix match supported)"
+#USAGE flag "--from <n>" help="Start at message N (1-indexed, negative counts from end)"
+#USAGE flag "--to <n>" help="End at message N (inclusive, negative counts from end)"
+#USAGE flag "--last <n>" help="Show only the last N messages"
+#USAGE flag "--tools" help="Include tool_use/tool_result blocks (hidden by default)"
+#USAGE flag "--user-only" help="Show only user messages"
+#USAGE flag "--json" help="Output as JSON"
+# /// script
+# requires-python = ">=3.10"
+# dependencies = ["rich"]
+# ///
+
+import json
+import os
+import sys
+
+sys.path.insert(0, os.environ["MISE_CONFIG_ROOT"] + "/lib")
+import parse
+from format import (
+    STYLE_DIM,
+    STYLE_ID,
+    STYLE_ROLE_ASSISTANT,
+    STYLE_ROLE_USER,
+    STYLE_TOOL,
+    console,
+    format_duration,
+    format_model,
+    format_time,
+)
+
+from rich.text import Text
+
+session_id = os.environ.get("usage_session_id", "")
+if not session_id:
+    print("Usage: sessions read <session_id>", file=sys.stderr)
+    sys.exit(1)
+
+from_n = os.environ.get("usage_from", "")
+from_n = int(from_n) if from_n else None
+to_n = os.environ.get("usage_to", "")
+to_n = int(to_n) if to_n else None
+last_n = os.environ.get("usage_last", "")
+last_n = int(last_n) if last_n else None
+include_tools = os.environ.get("usage_tools", "") == "true"
+user_only = os.environ.get("usage_user_only", "") == "true"
+output_json = os.environ.get("usage_json", "") == "true"
+
+filepath = parse.find_session(session_id)
+session = parse.load(filepath)
+meta = session.metadata()
+messages = session.text_messages()
+
+
+def is_tool_line(line: str) -> bool:
+    """Check if a line is a tool_use or tool_result marker."""
+    stripped = line.strip()
+    return stripped.startswith("[tool_use:") or stripped.startswith("[tool_result:")
+
+
+def filter_message(text: str) -> str:
+    """Strip tool lines from message text. Returns empty string if nothing left."""
+    lines = text.split("\n")
+    lines = [l for l in lines if not is_tool_line(l)]
+    return "\n".join(lines).strip()
+
+
+def split_message(text: str) -> tuple[list[str], list[str]]:
+    """Split message text into (content_lines, tool_lines)."""
+    content = []
+    tools = []
+    for line in text.split("\n"):
+        if is_tool_line(line):
+            tools.append(line.strip())
+        else:
+            content.append(line)
+    return content, tools
+
+
+# --- Filter messages ---
+
+filtered = []
+for idx, role, ts, text in messages:
+    if user_only and role != "user":
+        continue
+
+    if include_tools:
+        # Keep everything, we'll style tool lines differently
+        if not text.strip():
+            continue
+        filtered.append((idx, role, ts, text))
+    else:
+        cleaned = filter_message(text)
+        if not cleaned:
+            continue
+        filtered.append((idx, role, ts, cleaned))
+
+# --- Apply windowing (--from, --to, --last) ---
+
+total_count = len(filtered)
+
+def resolve_index(n, total):
+    """Convert 1-indexed (or negative) to 0-indexed. Clamp to bounds."""
+    if n > 0:
+        return min(n - 1, total)  # 1-indexed → 0-indexed
+    else:
+        return max(total + n, 0)  # negative → offset from end
+
+if last_n is not None and from_n is None and to_n is None:
+    # --last N: shorthand for the tail
+    start = max(total_count - last_n, 0)
+    end = total_count
+elif from_n is not None or to_n is not None:
+    start = resolve_index(from_n, total_count) if from_n is not None else 0
+    end = resolve_index(to_n, total_count) + 1 if to_n is not None else total_count
+    # Clamp
+    start = max(0, min(start, total_count))
+    end = max(start, min(end, total_count))
+else:
+    start = 0
+    end = total_count
+
+windowed = start != 0 or end != total_count
+filtered = filtered[start:end]
+
+# --- JSON output ---
+
+if output_json:
+    out = []
+    for idx, role, ts, text in filtered:
+        out.append({
+            "index": idx,
+            "role": role,
+            "timestamp": ts,
+            "text": text,
+        })
+    result = {
+        "session_id": meta["session_id"],
+        "project": meta["project"],
+        "model": meta["model"],
+        "messages": out,
+    }
+    print(json.dumps(result, indent=2))
+    sys.exit(0)
+
+# --- Rich output ---
+
+if not filtered:
+    console.print("No messages to show.", style=STYLE_DIM)
+    sys.exit(0)
+
+# Header
+total_msgs = meta["user_messages"] + meta["assistant_messages"]
+duration = format_duration(meta["first_timestamp"], meta["last_timestamp"])
+model = format_model(meta["model"])
+
+title = Text()
+title.append(meta["session_id"][:8], style=STYLE_ID)
+title.append(f"  {meta['project']}", style=STYLE_DIM)
+
+subtitle = Text()
+subtitle.append(model, style=STYLE_DIM)
+subtitle.append(f"  ·  {duration}  ·  {total_msgs} messages", style=STYLE_DIM)
+
+console.print()
+console.print(title)
+console.print(subtitle)
+
+if windowed and filtered:
+    # Show 1-indexed positions for humans
+    window_start = start + 1
+    window_end = start + len(filtered)
+    console.print(Text(f"messages {window_start}–{window_end} of {total_count}", style=STYLE_DIM))
+
+console.rule(style="dim")
+console.print()
+
+# Messages
+for i, (idx, role, ts, text) in enumerate(filtered):
+    time_str = format_time(ts)
+
+    # Role header
+    header = Text()
+    if role == "user":
+        header.append("👤 ", style=STYLE_ROLE_USER)
+        header.append("User", style=f"bold {STYLE_ROLE_USER}")
+    else:
+        header.append("🤖 ", style=STYLE_ROLE_ASSISTANT)
+        header.append("Assistant", style=f"bold {STYLE_ROLE_ASSISTANT}")
+    header.append(f"  {time_str}", style=STYLE_DIM)
+
+    console.print(header)
+
+    # Content
+    if include_tools:
+        content_lines, tool_lines = split_message(text)
+        content_text = "\n".join(content_lines).strip()
+        if content_text:
+            console.print(content_text, soft_wrap=True)
+        for tl in tool_lines:
+            console.print(Text(tl, style=STYLE_TOOL))
+    else:
+        console.print(text, soft_wrap=True)
+
+    # Blank line between messages (not after the last one)
+    if i < len(filtered) - 1:
+        console.print()

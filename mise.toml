@@ -4,4 +4,5 @@ task_output = "interleave"
 
 [tools]
 usage = "latest"
+uv = "latest"
 bats = "1.13.0"
