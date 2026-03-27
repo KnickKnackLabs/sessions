@@ -1,9 +1,18 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
 #MISE description="Full-text search across session transcripts"
 #USAGE arg "<query>" help="Search query (regex supported)"
-#USAGE flag "--project <filter>" help="Filter by project directory (substring match)"
-#USAGE flag "--limit <n>" default="10" help="Max sessions to search (default: 10)"
-#USAGE flag "--context <n>" default="1" help="Lines of context around matches (default: 1)"
+#USAGE flag "--limit <n>" default="50" help="Max matches to show (default: 50)"
+#USAGE flag "--context <n>" default="0" help="Lines of context around matches (default: 0)"
+#USAGE flag "--session <id>" help="Filter to a specific session (prefix match)"
+#USAGE flag "--sort <field>" default="time" help="Sort by: time (default), session"
+#USAGE flag "--after <date>" help="Only matches after this date (YYYY-MM-DD)"
+#USAGE flag "--before <date>" help="Only matches before this date (YYYY-MM-DD)"
+#USAGE flag "--tools" help="Include matches in tool inputs/outputs (excluded by default)"
+#USAGE flag "--json" help="Output as JSON"
+# /// script
+# requires-python = ">=3.10"
+# dependencies = ["rich"]
+# ///
 
 import json
 import os
@@ -12,15 +21,32 @@ import sys
 
 sys.path.insert(0, os.environ["MISE_CONFIG_ROOT"] + "/lib")
 import parse
+from format import (
+    STYLE_DIM,
+    STYLE_ID,
+    STYLE_MATCH,
+    STYLE_ROLE_ASSISTANT,
+    STYLE_ROLE_USER,
+    console,
+    format_time,
+    make_table,
+)
+
+from rich.text import Text
 
 query = os.environ.get("usage_query", "")
 if not query:
     print("Usage: sessions search <query>", file=sys.stderr)
     sys.exit(1)
 
-project_filter = os.environ.get("usage_project", "")
-limit = int(os.environ.get("usage_limit", "10"))
-context_lines = int(os.environ.get("usage_context", "1"))
+limit = int(os.environ.get("usage_limit", "50"))
+context_lines = int(os.environ.get("usage_context", "0"))
+session_filter = os.environ.get("usage_session", "")
+sort_field = os.environ.get("usage_sort", "time")
+after_date = os.environ.get("usage_after", "")
+before_date = os.environ.get("usage_before", "")
+include_tools = os.environ.get("usage_tools", "") == "true"
+output_json = os.environ.get("usage_json", "") == "true"
 
 try:
     pattern = re.compile(query, re.IGNORECASE)
@@ -33,41 +59,55 @@ if not os.path.isdir(sessions_dir):
     print(f"No sessions directory at {sessions_dir}", file=sys.stderr)
     sys.exit(1)
 
-# Collect session files sorted by mtime
-files = []
-for project_dir in os.listdir(sessions_dir):
-    project_path = os.path.join(sessions_dir, project_dir)
-    if not os.path.isdir(project_path):
-        continue
-    if project_filter and project_filter not in project_dir:
-        continue
-    for fname in os.listdir(project_path):
-        if not fname.endswith(".jsonl") or fname.startswith("agent-"):
-            continue
-        filepath = os.path.join(project_path, fname)
-        mtime = os.path.getmtime(filepath)
-        files.append((mtime, filepath))
+# highlight_regex is case-sensitive by default; embed (?i) to match our search
+highlight_pattern = "(?i)" + query
 
-files.sort(key=lambda x: -x[0])
 
-match_count = 0
-for mtime, filepath in files:
-    if match_count >= limit:
-        break
+def snippet_around_match(text, window=40):
+    """Extract a window around the first match, with ellipsis."""
+    m = pattern.search(text)
+    if not m:
+        return text[:80]
 
-    session = parse.load(filepath)
-    meta = session.metadata()
-    session_matches = []
+    start = max(0, m.start() - window)
+    end = min(len(text), m.end() + window)
 
-    for entry in session.entries:
+    parts = []
+    if start > 0:
+        parts.append("...")
+    parts.append(text[start:end])
+    if end < len(text):
+        parts.append("...")
+
+    return "".join(parts)
+
+
+def make_snippet(raw_snippet, max_len=60):
+    """Turn a raw snippet into a dim Text with the match term un-dimmed."""
+    # Collapse to single line
+    line = " ".join(raw_snippet.split())
+    if len(line) > max_len:
+        line = snippet_around_match(line, window=max_len // 2 - 5)
+    return line
+
+
+def extract_matches(session):
+    """Extract matching entries from a session, tracking entry index."""
+    sid = session.session_id
+    matches = []
+
+    # Track message index (counting only user/assistant entries)
+    msg_index = 0
+    for entry_index, entry in enumerate(session.entries):
         etype = entry.get("type", "")
         if etype not in ("user", "assistant"):
             continue
 
+        msg_index += 1
         role = etype
         ts = entry.get("timestamp", "")
 
-        # Extract all text content
+        # Extract text content (skip tool inputs/outputs unless --tools)
         msg = entry.get("message", {})
         content = msg.get("content", "")
         texts = []
@@ -79,12 +119,12 @@ for mtime, filepath in files:
                     continue
                 if block.get("type") == "text":
                     texts.append(block.get("text", ""))
-                elif block.get("type") == "tool_use":
+                elif include_tools and block.get("type") == "tool_use":
                     inp = block.get("input", {})
                     for v in inp.values():
                         if isinstance(v, str):
                             texts.append(v)
-                elif block.get("type") == "tool_result":
+                elif include_tools and block.get("type") == "tool_result":
                     tc = block.get("content", "")
                     if isinstance(tc, str):
                         texts.append(tc)
@@ -98,24 +138,101 @@ for mtime, filepath in files:
                     start = max(0, i - context_lines)
                     end = min(len(lines), i + context_lines + 1)
                     snippet = "\n".join(lines[start:end])
-                    session_matches.append({
+                    matches.append({
+                        "session_id": sid,
                         "role": role,
-                        "ts": ts[:19] if ts else "?",
+                        "ts": ts[:19] if ts else "",
+                        "msg": msg_index,
                         "snippet": snippet,
                     })
                     break  # one match per text block
 
-    if session_matches:
-        sid = meta["session_id"][:8]
-        slug = meta["slug"] or "—"
-        project = meta["project"]
-        print(f"── {project} ── {sid} ({slug}) ──")
-        for m in session_matches[:5]:
-            print(f"  [{m['role']}] {m['ts']}")
-            for sline in m["snippet"].split("\n"):
-                print(f"    {sline[:120]}")
-            print()
-        match_count += 1
+    return matches
 
-if match_count == 0:
-    print(f'No matches for "{query}"')
+
+# --- Collect all matches across all sessions ---
+
+all_files = []
+for dir_name in os.listdir(sessions_dir):
+    dir_path = os.path.join(sessions_dir, dir_name)
+    if not os.path.isdir(dir_path):
+        continue
+    for fname in os.listdir(dir_path):
+        if not fname.endswith(".jsonl") or fname.startswith("agent-"):
+            continue
+        filepath = os.path.join(dir_path, fname)
+        all_files.append(filepath)
+
+all_matches = []
+for filepath in all_files:
+    session = parse.load(filepath)
+
+    # Filter by session ID if specified
+    if session_filter and not session.session_id.startswith(session_filter):
+        continue
+
+    all_matches.extend(extract_matches(session))
+
+# Filter by date range
+if after_date:
+    all_matches = [m for m in all_matches if m["ts"][:10] >= after_date]
+if before_date:
+    all_matches = [m for m in all_matches if m["ts"][:10] <= before_date]
+
+# Sort
+if sort_field == "session":
+    all_matches.sort(key=lambda m: m["session_id"])
+else:
+    # Default: chronological (oldest first)
+    all_matches.sort(key=lambda m: m["ts"])
+
+# Apply limit
+all_matches = all_matches[:limit]
+
+# --- JSON output ---
+if output_json:
+    print(json.dumps(all_matches, indent=2))
+    sys.exit(0)
+
+# --- Rich table output ---
+if not all_matches:
+    console.print(f'No matches for "{query}"')
+    sys.exit(0)
+
+table = make_table(show_header=True, padding=(0, 2))
+table.add_column("Role", no_wrap=True)
+table.add_column("Date", style=STYLE_DIM, no_wrap=True)
+table.add_column("Time", style=STYLE_DIM, no_wrap=True)
+table.add_column("Session", style=STYLE_ID, no_wrap=True)
+table.add_column("Msg", justify="right", no_wrap=True)
+table.add_column("Match", style=STYLE_DIM)
+
+for m in all_matches:
+    # Date: "Mar 14"
+    date_str = ""
+    if m["ts"] and len(m["ts"]) >= 10:
+        try:
+            from datetime import datetime
+            dt = datetime.strptime(m["ts"][:10], "%Y-%m-%d")
+            date_str = dt.strftime("%b %d")
+        except ValueError:
+            date_str = m["ts"][:10]
+
+    time_str = format_time(m["ts"])
+    role_label = "user" if m["role"] == "user" else "asst"
+    role_style = STYLE_ROLE_USER if m["role"] == "user" else STYLE_ROLE_ASSISTANT
+    snippet = make_snippet(m["snippet"])
+
+    table.add_row(
+        Text(role_label, style=role_style),
+        date_str,
+        time_str,
+        m["session_id"][:8],
+        str(m["msg"]),
+        snippet,
+    )
+
+console.print(table)
+
+match_word = "match" if len(all_matches) == 1 else "matches"
+console.print(Text(f"\n{len(all_matches)} {match_word}", style=STYLE_DIM))
