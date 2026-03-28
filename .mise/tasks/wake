@@ -209,8 +209,7 @@ if [ -n "$MESSAGE" ]; then
 fi
 
 # Launch from the session's working directory so the agent gets the right CLAUDE.md
-cd "$SESSION_CWD"
-shell run "$SHELL_NAME" "${HARNESS_CMD[@]}"
+shell run "$SHELL_NAME" --cwd "$SESSION_CWD" "${HARNESS_CMD[@]}"
 
 echo "$FULL_SESSION_ID"
 echo "Woke session in shell '$SHELL_NAME'" >&2
