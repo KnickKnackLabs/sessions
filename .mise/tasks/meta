@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #MISE description="Show session metadata (header fields)"
-#USAGE arg "<session_id>" help="Session ID (prefix match supported)"
+#USAGE arg "<session_id>" help="Session ID or name"
 #USAGE flag "--field <field>" help="Extract a specific field (jq path, e.g. .cwd or .meta.agent.name)"
 #USAGE flag "--json" help="Output raw JSON (default is pretty-printed)"
 
@@ -11,7 +11,7 @@ FIELD="${usage_field:-}"
 JSON="${usage_json:-false}"
 
 if [ -z "$SESSION_ID" ]; then
-  echo "Error: session ID required" >&2
+  echo "Error: session ID or name required" >&2
   echo "Usage: sessions meta <session_id> [--field .cwd]" >&2
   exit 1
 fi
@@ -20,45 +20,8 @@ command -v jq >/dev/null 2>&1 || { echo "Error: jq is required" >&2; exit 1; }
 
 # --- Find session file ---
 
-PI_DIR="${PI_DIR:-$HOME/.pi}"
-SESSIONS_DIR="$PI_DIR/agent/sessions"
-
-if [ ! -d "$SESSIONS_DIR" ]; then
-  echo "Error: No sessions directory at $SESSIONS_DIR" >&2
-  exit 1
-fi
-
-SESSION_FILE=""
-MATCHES=()
-for PROJECT in "$SESSIONS_DIR"/*/; do
-  for JSONL in "$PROJECT"*.jsonl; do
-    [ -f "$JSONL" ] || continue
-    BASENAME=$(basename "$JSONL" .jsonl)
-    if [[ "$BASENAME" == *_* ]]; then
-      UUID_PART="${BASENAME##*_}"
-    else
-      UUID_PART="$BASENAME"
-    fi
-    if [[ "$UUID_PART" == "$SESSION_ID"* ]]; then
-      MATCHES+=("$JSONL")
-    fi
-  done
-done
-
-case ${#MATCHES[@]} in
-  0)
-    echo "Error: No session matching '$SESSION_ID'" >&2
-    exit 1
-    ;;
-  1)
-    SESSION_FILE="${MATCHES[0]}"
-    ;;
-  *)
-    echo "Error: Ambiguous session ID '$SESSION_ID', matches:" >&2
-    printf '  %s\n' "${MATCHES[@]}" >&2
-    exit 1
-    ;;
-esac
+source "$MISE_CONFIG_ROOT/lib/find.sh"
+SESSION_FILE=$(find_session_file "$SESSION_ID") || exit 1
 
 # --- Extract header ---
 

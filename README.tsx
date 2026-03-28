@@ -46,18 +46,18 @@ const libLines = libFiles.reduce(
 // ── Visual hook ──────────────────────────────────────────────
 
 const lifecycle = [
-  "  $ sessions new ~/project --meta agent.name=ikma --context \"PR review\"",
-  "  e96bd43a",
+  "$ sessions new review/pr-50 --cwd ~/agents/ikma/den --meta agent.name=ikma",
+  "e96bd43a",
   "",
-  "  $ sessions wake e96bd43a --name ikma-scout --message \"review PR #50\"",
-  "  Woke session in shell 'ikma-scout'",
+  "$ sessions wake review/pr-50 --name ikma-scout --message \"review PR #50\"",
+  "Woke session in shell 'ikma-scout'",
   "",
-  "  $ sessions read e96bd43a --last 3",
-  "  ┃ assistant  Found 3 issues in error handling.",
-  "  ┃ assistant  Posted review to #scout-report.",
+  "$ sessions read review/pr-50 --last 3",
+  "┃ assistant  Found 3 issues in error handling.",
+  "┃ assistant  Posted review to #scout-report.",
   "",
-  "  $ sessions list --filter session.meta.agent.name=ikma",
-  "    e96bd43a   12m   3m ago   claude-sonnet-4   8",
+  "$ sessions list --filter session.meta.agent.name=ikma",
+  "  e96bd43a  review/pr-50   12m   3m ago   claude-sonnet-4   8",
 ].join("\n");
 
 // ── Spawning stack ───────────────────────────────────────────
@@ -95,8 +95,6 @@ const filterExamples = [
 const readme = (
   <>
     <Center>
-      <Raw>{`<pre>\n${lifecycle}\n</pre>\n\n`}</Raw>
-
       <Heading level={1}>sessions</Heading>
 
       <Paragraph>
@@ -119,6 +117,8 @@ const readme = (
       </Badges>
     </Center>
 
+    <CodeBlock>{lifecycle}</CodeBlock>
+
     <LineBreak />
 
     <Section title="Quick start">
@@ -128,8 +128,8 @@ shiv install sessions
 # List recent sessions
 sessions list
 
-# Read a transcript (prefix match on ID)
-sessions read e96bd43a
+# Read a transcript (by name or ID prefix)
+sessions read review/pr-50
 
 # Search across all sessions
 sessions search "error handling"
@@ -155,21 +155,21 @@ sessions inspect e96bd43a`}</CodeBlock>
         {" entries you can filter on. The full conversation history carries forward, so the agent sees everything that happened before."}
       </Paragraph>
 
-      <CodeBlock lang="bash">{`# Create a session with metadata and context
-sessions new ~/project \\
+      <CodeBlock lang="bash">{`# Create a named session with metadata and context
+sessions new review/pr-50 --cwd ~/agents/ikma/den \\
   --meta agent.name=ikma \\
   --meta purpose=review \\
   --context "Background: this PR refactors the auth module"
 
-# Wake an agent into it
-sessions wake e96bd43a --name ikma-scout --message "Review PR #50"
+# Wake an agent into it (by name)
+sessions wake review/pr-50 --name ikma-scout --message "Review PR #50"
 
 # Watch what it does
-sessions read e96bd43a --last 5
+sessions read review/pr-50 --last 5
 shell status ikma-scout
 
 # Something went wrong? Wake the same session again.
-sessions wake e96bd43a --name ikma-fix --message "You missed the edge case in line 42"`}</CodeBlock>
+sessions wake review/pr-50 --name ikma-fix --message "You missed the edge case in line 42"`}</CodeBlock>
 
       <Paragraph>
         {"The spawning stack uses "}
@@ -192,19 +192,19 @@ sessions wake e96bd43a --name ikma-fix --message "You missed the edge case in li
       </Paragraph>
 
       <CodeBlock lang="bash">{`# Dotted paths — simple key=value, auto-nested
-sessions new ~/project \\
+sessions new scout-run --cwd ~/agents/ikma/den \\
   --meta agent.name=ikma \\
   --meta agent.email=ikma@ricon.family \\
   --meta purpose=scout
 
 # jq expressions — full jq syntax, supports $ENV
-sessions new ~/project \\
+sessions new ci-check --cwd $(shiv which den) \\
   --meta '{agent: {name: $ENV.GIT_AUTHOR_NAME}}' \\
   --meta purpose=review
 
 # Read it back
-sessions meta e96bd43a                      # full header
-sessions meta e96bd43a --field .meta.agent  # specific field`}</CodeBlock>
+sessions meta scout-run                      # by name
+sessions meta e96bd43a --field .meta.agent   # by ID prefix`}</CodeBlock>
 
       <Paragraph>
         {"Wake events carry their own metadata, separate from the session header. This records who woke the session and why — useful for tracing agent-to-agent handoffs:"}

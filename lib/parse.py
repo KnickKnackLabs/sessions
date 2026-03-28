@@ -45,6 +45,14 @@ class Session:
         return parts[-1] if len(parts) == 2 else basename
 
     @property
+    def name(self) -> str:
+        """Get session name from the session header, or empty string."""
+        for e in self.entries:
+            if e.get("type") == "session":
+                return e.get("name", "")
+        return ""
+
+    @property
     def slug(self) -> str:
         """Pi sessions don't have slugs."""
         return ""
@@ -123,6 +131,7 @@ class Session:
                 assistant_count += 1
         result = {
             "session_id": self.session_id,
+            "name": self.name,
             "slug": self.slug,
             "project": self.project,
             "model": self.model,
@@ -428,14 +437,16 @@ def discover_sessions_dir() -> str:
     return os.path.join(pi_dir, "agent", "sessions")
 
 
-def find_session(session_id: str) -> str:
-    """Find a session JSONL file by ID (prefix match supported). Returns filepath or exits."""
+def find_session(query: str) -> str:
+    """Find a session JSONL file by ID prefix or name. Returns filepath or exits."""
     sessions_dir = discover_sessions_dir()
     if not os.path.isdir(sessions_dir):
         print(f"Error: No sessions directory at {sessions_dir}", file=sys.stderr)
         sys.exit(1)
 
-    matches = []
+    id_matches = []
+    name_matches = []
+
     for project_dir in os.listdir(sessions_dir):
         project_path = os.path.join(sessions_dir, project_dir)
         if not os.path.isdir(project_path):
@@ -443,16 +454,34 @@ def find_session(session_id: str) -> str:
         for fname in os.listdir(project_path):
             if not fname.endswith(".jsonl"):
                 continue
-            # Pi filenames: <timestamp>_<uuid>.jsonl — match against UUID part
+            filepath = os.path.join(project_path, fname)
+
+            # Match against UUID part of filename
             uuid_part = fname.rsplit("_", 1)[-1].replace(".jsonl", "") if "_" in fname else fname.replace(".jsonl", "")
-            if uuid_part.startswith(session_id) or fname.startswith(session_id):
-                matches.append(os.path.join(project_path, fname))
+            if uuid_part.startswith(query) or fname.startswith(query):
+                id_matches.append(filepath)
+                continue
+
+            # Match against session name in header
+            try:
+                with open(filepath) as f:
+                    first_line = f.readline().strip()
+                    if first_line:
+                        header = json.loads(first_line)
+                        name = header.get("name", "")
+                        if name and name == query:
+                            name_matches.append(filepath)
+            except (json.JSONDecodeError, OSError):
+                continue
+
+    # ID matches take priority; fall back to name matches
+    matches = id_matches if id_matches else name_matches
 
     if not matches:
-        print(f"Error: No session matching '{session_id}'", file=sys.stderr)
+        print(f"Error: No session matching '{query}'", file=sys.stderr)
         sys.exit(1)
     if len(matches) > 1:
-        print(f"Error: Ambiguous session ID '{session_id}', matches:", file=sys.stderr)
+        print(f"Error: Ambiguous query '{query}', matches:", file=sys.stderr)
         for m in matches:
             print(f"  {os.path.basename(m)}", file=sys.stderr)
         sys.exit(1)

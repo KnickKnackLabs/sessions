@@ -2,7 +2,7 @@
 #MISE description="Copy a pi session (with injected copy notice)"
 #USAGE flag "--context <context>" help="Optional context for why the fork was created"
 #USAGE flag "--name <name>" help="Optional label for the fork"
-#USAGE arg "<session_id>" help="Session ID to fork (prefix match supported)"
+#USAGE arg "<session_id>" help="Session ID or name to copy"
 
 set -euo pipefail
 shopt -s nullglob
@@ -17,50 +17,11 @@ if [ -z "${SESSION_ID:-}" ]; then
   exit 1
 fi
 
-PI_DIR="${PI_DIR:-$HOME/.pi}"
-SESSIONS_DIR="$PI_DIR/agent/sessions"
-
 command -v jq >/dev/null 2>&1 || { echo "Error: jq is required" >&2; exit 1; }
 command -v uuidgen >/dev/null 2>&1 || { echo "Error: uuidgen is required" >&2; exit 1; }
 
-if [ ! -d "$SESSIONS_DIR" ]; then
-  echo "Error: No pi sessions directory at $SESSIONS_DIR" >&2
-  exit 1
-fi
-
-# --- Discovery (prefix match on UUID part of filename) ---
-
-MATCHES=()
-SOURCE_FILE=""
-for PROJECT in "$SESSIONS_DIR"/*/; do
-  for JSONL in "$PROJECT"*.jsonl; do
-    BASENAME=$(basename "$JSONL" .jsonl)
-    # Pi filenames: <timestamp>_<uuid> — extract UUID part
-    if [[ "$BASENAME" == *_* ]]; then
-      UUID_PART="${BASENAME##*_}"
-    else
-      UUID_PART="$BASENAME"
-    fi
-    if [[ "$UUID_PART" == "$SESSION_ID"* ]]; then
-      MATCHES+=("$JSONL")
-    fi
-  done
-done
-
-case ${#MATCHES[@]} in
-  0)
-    echo "Error: No session matching '$SESSION_ID'" >&2
-    exit 1
-    ;;
-  1)
-    SOURCE_FILE="${MATCHES[0]}"
-    ;;
-  *)
-    echo "Error: Ambiguous session ID '$SESSION_ID', matches:" >&2
-    printf '  %s\n' "${MATCHES[@]}" >&2
-    exit 1
-    ;;
-esac
+source "$MISE_CONFIG_ROOT/lib/find.sh"
+SOURCE_FILE=$(find_session_file "$SESSION_ID") || exit 1
 
 PROJECT_DIR=$(dirname "$SOURCE_FILE")/
 

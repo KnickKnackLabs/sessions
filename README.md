@@ -1,20 +1,5 @@
 <div align="center">
 
-<pre>
-  $ sessions new ~/project --meta agent.name=ikma --context "PR review"
-  e96bd43a
-
-  $ sessions wake e96bd43a --name ikma-scout --message "review PR #50"
-  Woke session in shell 'ikma-scout'
-
-  $ sessions read e96bd43a --last 3
-  ┃ assistant  Found 3 issues in error handling.
-  ┃ assistant  Posted review to #scout-report.
-
-  $ sessions list --filter session.meta.agent.name=ikma
-    e96bd43a   12m   3m ago   claude-sonnet-4   8
-</pre>
-
 # sessions
 
 **CLI tooling for pi agent session transcripts.**
@@ -23,11 +8,26 @@ Create sessions with structured metadata, wake agents into them,
 observe transcripts in real time, and query your history.
 
 ![lang: bash + python](https://img.shields.io/badge/lang-bash%20%2B%20python-4EAA25?style=flat&logo=gnubash&logoColor=white)
-[![tests: 132 passing](https://img.shields.io/badge/tests-132%20passing-brightgreen?style=flat)](test/)
+[![tests: 139 passing](https://img.shields.io/badge/tests-139%20passing-brightgreen?style=flat)](test/)
 ![commands: 10](https://img.shields.io/badge/commands-10-blue?style=flat)
 ![license: MIT](https://img.shields.io/badge/license-MIT-blue?style=flat)
 
 </div>
+
+```
+$ sessions new review/pr-50 --cwd ~/agents/ikma/den --meta agent.name=ikma
+e96bd43a
+
+$ sessions wake review/pr-50 --name ikma-scout --message "review PR #50"
+Woke session in shell 'ikma-scout'
+
+$ sessions read review/pr-50 --last 3
+┃ assistant  Found 3 issues in error handling.
+┃ assistant  Posted review to #scout-report.
+
+$ sessions list --filter session.meta.agent.name=ikma
+  e96bd43a  review/pr-50   12m   3m ago   claude-sonnet-4   8
+```
 
 <br />
 
@@ -40,8 +40,8 @@ shiv install sessions
 # List recent sessions
 sessions list
 
-# Read a transcript (prefix match on ID)
-sessions read e96bd43a
+# Read a transcript (by name or ID prefix)
+sessions read review/pr-50
 
 # Search across all sessions
 sessions search "error handling"
@@ -67,21 +67,21 @@ Sessions aren't just transcript files agents leave behind — they're managed ar
 Each wake event is a first-class entry in the session file — timestamped, attributed, with its own metadata. A session that's been woken three times has three `wake` entries you can filter on. The full conversation history carries forward, so the agent sees everything that happened before.
 
 ```bash
-# Create a session with metadata and context
-sessions new ~/project \
+# Create a named session with metadata and context
+sessions new review/pr-50 --cwd ~/agents/ikma/den \
   --meta agent.name=ikma \
   --meta purpose=review \
   --context "Background: this PR refactors the auth module"
 
-# Wake an agent into it
-sessions wake e96bd43a --name ikma-scout --message "Review PR #50"
+# Wake an agent into it (by name)
+sessions wake review/pr-50 --name ikma-scout --message "Review PR #50"
 
 # Watch what it does
-sessions read e96bd43a --last 5
+sessions read review/pr-50 --last 5
 shell status ikma-scout
 
 # Something went wrong? Wake the same session again.
-sessions wake e96bd43a --name ikma-fix --message "You missed the edge case in line 42"
+sessions wake review/pr-50 --name ikma-fix --message "You missed the edge case in line 42"
 ```
 
 The spawning stack uses [shell](https://github.com/KnickKnackLabs/shell) for persistent zmx sessions and `shimmer agent --headless` for identity. Sessions stays decoupled from both — it reads `$AGENT_HARNESS_HEADLESS` and doesn't know or care what the harness is.
@@ -92,19 +92,19 @@ Every session carries structured metadata in its JSONL header. Set it at creatio
 
 ```bash
 # Dotted paths — simple key=value, auto-nested
-sessions new ~/project \
+sessions new scout-run --cwd ~/agents/ikma/den \
   --meta agent.name=ikma \
   --meta agent.email=ikma@ricon.family \
   --meta purpose=scout
 
 # jq expressions — full jq syntax, supports $ENV
-sessions new ~/project \
+sessions new ci-check --cwd $(shiv which den) \
   --meta '{agent: {name: $ENV.GIT_AUTHOR_NAME}}' \
   --meta purpose=review
 
 # Read it back
-sessions meta e96bd43a                      # full header
-sessions meta e96bd43a --field .meta.agent  # specific field
+sessions meta scout-run                      # by name
+sessions meta e96bd43a --field .meta.agent   # by ID prefix
 ```
 
 Wake events carry their own metadata, separate from the session header. This records who woke the session and why — useful for tracing agent-to-agent handoffs:
@@ -164,7 +164,7 @@ cd sessions && mise trust && mise install
 mise run test
 ```
 
-**132 tests** across 10 suites, using [BATS 1.13.0](https://github.com/bats-core/bats-core). Tasks are bash scripts (session creation, wake, metadata) and Python scripts with [Rich](https://github.com/Textualize/rich) output (list, read, inspect, search). The JSONL parsing library is 605 lines of Python in `lib/`.
+**139 tests** across 10 suites, using [BATS 1.13.0](https://github.com/bats-core/bats-core). Tasks are bash scripts (session creation, wake, metadata) and Python scripts with [Rich](https://github.com/Textualize/rich) output (list, read, inspect, search). The JSONL parsing library is 634 lines of Python in `lib/`.
 
 <details>
 <summary><b>Project structure</b></summary>
@@ -186,7 +186,7 @@ sessions/
 │   ├── parse.py     # JSONL parser, session model, filter engine
 │   └── format.py    # Rich formatting helpers
 └── test/
-    └── *.bats       # 132 tests
+    └── *.bats       # 139 tests
 ```
 
 </details>

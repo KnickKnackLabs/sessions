@@ -29,7 +29,7 @@ teardown() { teardown_test_sessions; }
 
 @test "meta --field extracts nested fields" {
   # Create a session with meta
-  run sessions new "$BATS_TMPDIR/test-project" --meta "agent.name=ikma"
+  run sessions new --meta "agent.name=ikma"
   [ "$status" -eq 0 ]
   ID=$(echo "$output" | head -1)
 
@@ -53,7 +53,7 @@ teardown() { teardown_test_sessions; }
 # --- sessions new --meta (dotted paths) ---
 
 @test "new --meta sets a flat key" {
-  run sessions new "$BATS_TMPDIR/test-project" --meta "purpose=scout"
+  run sessions new --meta "purpose=scout"
   [ "$status" -eq 0 ]
   ID=$(echo "$output" | head -1)
 
@@ -63,7 +63,7 @@ teardown() { teardown_test_sessions; }
 }
 
 @test "new --meta sets a dotted nested key" {
-  run sessions new "$BATS_TMPDIR/test-project" --meta "agent.name=ikma"
+  run sessions new --meta "agent.name=ikma"
   [ "$status" -eq 0 ]
   ID=$(echo "$output" | head -1)
 
@@ -72,7 +72,7 @@ teardown() { teardown_test_sessions; }
 }
 
 @test "new --meta supports multiple dotted keys" {
-  run sessions new "$BATS_TMPDIR/test-project" \
+  run sessions new \
     --meta "agent.name=ikma" \
     --meta "agent.email=ikma@ricon.family" \
     --meta "purpose=test"
@@ -86,7 +86,7 @@ teardown() { teardown_test_sessions; }
 }
 
 @test "new --meta supports deeply nested keys" {
-  run sessions new "$BATS_TMPDIR/test-project" --meta "a.b.c.d=deep"
+  run sessions new --meta "a.b.c.d=deep"
   [ "$status" -eq 0 ]
   ID=$(echo "$output" | head -1)
 
@@ -96,7 +96,7 @@ teardown() { teardown_test_sessions; }
 }
 
 @test "new --meta values can contain spaces" {
-  run sessions new "$BATS_TMPDIR/test-project" --meta "label=hello world"
+  run sessions new --meta "label=hello world"
   [ "$status" -eq 0 ]
   ID=$(echo "$output" | head -1)
 
@@ -106,7 +106,7 @@ teardown() { teardown_test_sessions; }
 }
 
 @test "new --meta errors on missing equals sign" {
-  run sessions new "$BATS_TMPDIR/test-project" --meta "noequalssign"
+  run sessions new --meta "noequalssign"
   [ "$status" -eq 1 ]
   echo "$output" | grep -qi "invalid"
 }
@@ -114,7 +114,7 @@ teardown() { teardown_test_sessions; }
 # --- sessions new --meta (jq expressions) ---
 
 @test "new --meta accepts a jq expression" {
-  run sessions new "$BATS_TMPDIR/test-project" --meta '{purpose: "review"}'
+  run sessions new --meta '{purpose: "review"}'
   [ "$status" -eq 0 ]
   ID=$(echo "$output" | head -1)
 
@@ -124,7 +124,7 @@ teardown() { teardown_test_sessions; }
 }
 
 @test "new --meta jq expression with nested object" {
-  run sessions new "$BATS_TMPDIR/test-project" \
+  run sessions new \
     --meta '{agent: {name: "ikma", email: "ikma@ricon.family"}}'
   [ "$status" -eq 0 ]
   ID=$(echo "$output" | head -1)
@@ -136,7 +136,7 @@ teardown() { teardown_test_sessions; }
 
 @test "new --meta jq expression reads env vars" {
   export TEST_AGENT_NAME="from-env"
-  run sessions new "$BATS_TMPDIR/test-project" \
+  run sessions new \
     --meta '{agent: {name: $ENV.TEST_AGENT_NAME}}'
   [ "$status" -eq 0 ]
   ID=$(echo "$output" | head -1)
@@ -147,7 +147,7 @@ teardown() { teardown_test_sessions; }
 }
 
 @test "new --meta jq expression errors on invalid syntax" {
-  run sessions new "$BATS_TMPDIR/test-project" --meta '{bad json???}'
+  run sessions new --meta '{bad json???}'
   [ "$status" -eq 1 ]
   echo "$output" | grep -qi "invalid jq"
 }
@@ -155,7 +155,7 @@ teardown() { teardown_test_sessions; }
 # --- mixing formats ---
 
 @test "new --meta merges dotted paths and jq expressions" {
-  run sessions new "$BATS_TMPDIR/test-project" \
+  run sessions new \
     --meta '{agent: {name: "ikma"}}' \
     --meta "purpose=scout"
   [ "$status" -eq 0 ]
@@ -167,7 +167,7 @@ teardown() { teardown_test_sessions; }
 }
 
 @test "new --meta merges nested dotted paths with jq expression" {
-  run sessions new "$BATS_TMPDIR/test-project" \
+  run sessions new \
     --meta "agent.name=ikma" \
     --meta "agent.email=ikma@ricon.family" \
     --meta '{purpose: "smoke-test"}'
@@ -183,7 +183,7 @@ teardown() { teardown_test_sessions; }
 # --- no meta ---
 
 @test "new without --meta produces no meta field" {
-  run sessions new "$BATS_TMPDIR/test-project"
+  run sessions new
   [ "$status" -eq 0 ]
   ID=$(echo "$output" | head -1)
 

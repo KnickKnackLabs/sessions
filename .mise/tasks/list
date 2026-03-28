@@ -80,20 +80,28 @@ else:
         print("No sessions found.")
         sys.exit(0)
 
+    # Show name column only if any session has a name
+    any_named = any(m.get("name") for m in results)
+
     table = make_table()
     table.add_column("ID", style="cyan", no_wrap=True)
+    if any_named:
+        table.add_column("Name", style="green", no_wrap=True)
     table.add_column("Duration", no_wrap=True)
     table.add_column("Active", no_wrap=True)
     table.add_column("Model", style="dim", no_wrap=True)
     table.add_column("Msgs", justify="right", min_width=4)
 
     for m in results:
-        table.add_row(
-            m["session_id"][:8],
+        row = [m["session_id"][:8]]
+        if any_named:
+            row.append(m.get("name") or "")
+        row.extend([
             format_duration(m["first_timestamp"], m["last_timestamp"]),
             format_relative(m["last_timestamp"]),
             format_model(m["model"]),
             str(m["user_messages"] + m["assistant_messages"]),
-        )
+        ])
+        table.add_row(*row)
 
     console.print(table)

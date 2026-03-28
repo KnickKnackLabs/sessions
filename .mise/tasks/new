@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 #MISE description="Create a new pi session with optional injected context"
-#USAGE arg "<project>" help="Project directory path (will be encoded as pi session dir)"
+#USAGE arg "[name]" help="Session name (human-readable label, also used for lookup)"
+#USAGE flag "--cwd <cwd>" help="Working directory for the session (default: current directory)"
 #USAGE flag "--context <context>" help="Initial context message to inject"
 #USAGE flag "--context-file <context_file>" help="File containing initial context message"
 #USAGE flag "--model <model>" default="claude-sonnet-4-20250514" help="Model to set (default: claude-sonnet-4-20250514)"
@@ -8,17 +9,23 @@
 
 set -euo pipefail
 
-PROJECT="${usage_project:-}"
+NAME="${usage_name:-}"
+CWD="${usage_cwd:-}"
 CONTEXT="${usage_context:-}"
 CONTEXT_FILE="${usage_context_file:-}"
 MODEL="${usage_model:-claude-sonnet-4-20250514}"
 META_RAW="${usage_meta:-}"
 
-if [ -z "$PROJECT" ]; then
-  echo "Error: project path required" >&2
-  echo "Usage: sessions new <project> [--context '...'] [--context-file <path>]" >&2
-  exit 1
+# Default cwd to current directory
+if [ -z "$CWD" ]; then
+  CWD="."
 fi
+
+# Resolve cwd to absolute path
+CWD_ABS=$(cd "$CWD" 2>/dev/null && pwd) || {
+  echo "Error: --cwd directory not found: $CWD" >&2
+  exit 1
+}
 
 # Resolve context from file if provided
 if [ -n "$CONTEXT_FILE" ]; then
@@ -35,10 +42,9 @@ command -v uuidgen >/dev/null 2>&1 || { echo "Error: uuidgen is required" >&2; e
 PI_DIR="${PI_DIR:-$HOME/.pi}"
 SESSIONS_DIR="$PI_DIR/agent/sessions"
 
-# --- Encode project path as pi directory name ---
+# --- Encode cwd as pi directory name ---
 # Pi uses double-dash bookends: /Users/foo/bar -> --Users-foo-bar--
-PROJECT_ABS=$(cd "$PROJECT" 2>/dev/null && pwd || echo "$PROJECT")
-ENCODED=$(echo "$PROJECT_ABS" | sed 's|/|-|g')
+ENCODED=$(echo "$CWD_ABS" | sed 's|/|-|g')
 PROJECT_DIR="$SESSIONS_DIR/-${ENCODED}-/"
 mkdir -p "$PROJECT_DIR"
 
@@ -83,34 +89,27 @@ if [ -n "$META_RAW" ]; then
   done < <(printf '%s' "$META_RAW" | xargs printf '%s\n')
 fi
 
-# Session header
-if [ "$META_JSON" = "{}" ]; then
-  jq -nc \
-    --arg id "$SESSION_ID" \
-    --arg ts "$NOW_ISO" \
-    --arg cwd "$PROJECT_ABS" \
-    '{
-      type: "session",
-      version: 3,
-      id: $id,
-      timestamp: $ts,
-      cwd: $cwd
-    }' > "$SESSION_FILE"
-else
-  jq -nc \
-    --arg id "$SESSION_ID" \
-    --arg ts "$NOW_ISO" \
-    --arg cwd "$PROJECT_ABS" \
-    --argjson meta "$META_JSON" \
-    '{
-      type: "session",
-      version: 3,
-      id: $id,
-      timestamp: $ts,
-      cwd: $cwd,
-      meta: $meta
-    }' > "$SESSION_FILE"
+# --- Session header ---
+# Build with jq, conditionally including name and meta fields.
+
+HEADER_ARGS=(
+  --arg id "$SESSION_ID"
+  --arg ts "$NOW_ISO"
+  --arg cwd "$CWD_ABS"
+)
+HEADER_EXPR='{type: "session", version: 3, id: $id, timestamp: $ts, cwd: $cwd}'
+
+if [ -n "$NAME" ]; then
+  HEADER_ARGS+=(--arg name "$NAME")
+  HEADER_EXPR="$HEADER_EXPR + {name: \$name}"
 fi
+
+if [ "$META_JSON" != "{}" ]; then
+  HEADER_ARGS+=(--argjson meta "$META_JSON")
+  HEADER_EXPR="$HEADER_EXPR + {meta: \$meta}"
+fi
+
+jq -nc "${HEADER_ARGS[@]}" "$HEADER_EXPR" > "$SESSION_FILE"
 
 # Model change entry
 MC_ID=$(uuidgen | tr '[:upper:]' '[:lower:]' | cut -c1-8)
@@ -150,8 +149,12 @@ fi
 # --- Output ---
 
 echo "$SESSION_ID"
-echo "Created session in $(basename "$PROJECT_DIR")" >&2
-echo "File: $(basename "$SESSION_FILE")" >&2
+if [ -n "$NAME" ]; then
+  echo "Created session '$NAME'" >&2
+else
+  echo "Created session ${SESSION_ID:0:8}" >&2
+fi
+echo "cwd: $CWD_ABS" >&2
 if [ -n "$CONTEXT" ]; then
   echo "Context: $(echo "$CONTEXT" | head -1 | cut -c1-80)..." >&2
 fi

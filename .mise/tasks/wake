@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #MISE description="Wake an agent into a session via zmx"
-#USAGE arg "<session_id>" help="Session ID to wake into (prefix match supported)"
+#USAGE arg "<session_id>" help="Session ID or name to wake into"
 #USAGE flag "--context <context>" help="Inject a context message into the session file before launching"
 #USAGE flag "--context-file <context_file>" help="File containing context message to inject"
 #USAGE flag "--name <name>" help="Shell session name — becomes CHAT_IDENTITY (default: session ID prefix)"
@@ -17,7 +17,7 @@ SHELL_NAME="${usage_name:-}"
 MESSAGE="${usage_message:-}"
 
 if [ -z "$SESSION_ID" ]; then
-  echo "Error: session ID required" >&2
+  echo "Error: session ID or name required" >&2
   echo "Usage: sessions wake <session_id> [--name <shell-name>] [--message '...']" >&2
   exit 1
 fi
@@ -43,45 +43,8 @@ read -ra HARNESS_PARTS <<< "$HARNESS_HEADLESS"
 
 # --- Find session file (for context injection and validation) ---
 
-PI_DIR="${PI_DIR:-$HOME/.pi}"
-SESSIONS_DIR="$PI_DIR/agent/sessions"
-
-if [ ! -d "$SESSIONS_DIR" ]; then
-  echo "Error: No pi sessions directory at $SESSIONS_DIR" >&2
-  exit 1
-fi
-
-SESSION_FILE=""
-MATCHES=()
-for PROJECT in "$SESSIONS_DIR"/*/; do
-  for JSONL in "$PROJECT"*.jsonl; do
-    [ -f "$JSONL" ] || continue
-    BASENAME=$(basename "$JSONL" .jsonl)
-    if [[ "$BASENAME" == *_* ]]; then
-      UUID_PART="${BASENAME##*_}"
-    else
-      UUID_PART="$BASENAME"
-    fi
-    if [[ "$UUID_PART" == "$SESSION_ID"* ]]; then
-      MATCHES+=("$JSONL")
-    fi
-  done
-done
-
-case ${#MATCHES[@]} in
-  0)
-    echo "Error: No session matching '$SESSION_ID'" >&2
-    exit 1
-    ;;
-  1)
-    SESSION_FILE="${MATCHES[0]}"
-    ;;
-  *)
-    echo "Error: Ambiguous session ID '$SESSION_ID', matches:" >&2
-    printf '  %s\n' "${MATCHES[@]}" >&2
-    exit 1
-    ;;
-esac
+source "$MISE_CONFIG_ROOT/lib/find.sh"
+SESSION_FILE=$(find_session_file "$SESSION_ID") || exit 1
 
 FULL_SESSION_ID=$(head -1 "$SESSION_FILE" | jq -r '.id // empty')
 if [ -z "$FULL_SESSION_ID" ]; then
