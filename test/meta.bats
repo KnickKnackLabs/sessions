@@ -166,6 +166,20 @@ teardown() { teardown_test_sessions; }
   echo "$output" | jq -e '.meta.purpose == "scout"'
 }
 
+@test "new --meta merges nested dotted paths with jq expression" {
+  run sessions new "$BATS_TMPDIR/test-project" \
+    --meta "agent.name=ikma" \
+    --meta "agent.email=ikma@ricon.family" \
+    --meta '{purpose: "smoke-test"}'
+  [ "$status" -eq 0 ]
+  ID=$(echo "$output" | head -1)
+
+  run sessions meta "$ID"
+  echo "$output" | jq -e '.meta.agent.name == "ikma"'
+  echo "$output" | jq -e '.meta.agent.email == "ikma@ricon.family"'
+  echo "$output" | jq -e '.meta.purpose == "smoke-test"'
+}
+
 # --- no meta ---
 
 @test "new without --meta produces no meta field" {
