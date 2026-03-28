@@ -1,0 +1,136 @@
+#!/usr/bin/env bash
+#MISE description="Wake an agent into a session via zmx"
+#USAGE arg "<session_id>" help="Session ID to wake into (prefix match supported)"
+#USAGE flag "--context <context>" help="Inject a context message before launching"
+#USAGE flag "--context-file <context_file>" help="File containing context message to inject"
+#USAGE flag "--name <name>" help="zmx session name (default: session ID prefix)"
+#USAGE flag "--message <message>" help="Initial message to pass to the agent"
+
+set -euo pipefail
+
+SESSION_ID="${usage_session_id:-}"
+CONTEXT="${usage_context:-}"
+CONTEXT_FILE="${usage_context_file:-}"
+ZMX_NAME="${usage_name:-}"
+MESSAGE="${usage_message:-}"
+
+if [ -z "$SESSION_ID" ]; then
+  echo "Error: session ID required" >&2
+  echo "Usage: sessions wake <session_id> [--context '...'] [--message '...']" >&2
+  exit 1
+fi
+
+# --- Dependencies ---
+
+if ! command -v zmx >/dev/null 2>&1; then
+  echo "Error: zmx is required (https://zmx.sh)" >&2
+  exit 1
+fi
+
+command -v jq >/dev/null 2>&1 || { echo "Error: jq is required" >&2; exit 1; }
+
+AGENT_HARNESS="${AGENT_HARNESS:-pi}"
+if ! command -v "$AGENT_HARNESS" >/dev/null 2>&1; then
+  echo "Error: agent harness '$AGENT_HARNESS' not found" >&2
+  exit 1
+fi
+
+# --- Find session file (for context injection and validation) ---
+
+PI_DIR="${PI_DIR:-$HOME/.pi}"
+SESSIONS_DIR="$PI_DIR/agent/sessions"
+
+if [ ! -d "$SESSIONS_DIR" ]; then
+  echo "Error: No pi sessions directory at $SESSIONS_DIR" >&2
+  exit 1
+fi
+
+SESSION_FILE=""
+MATCHES=()
+for PROJECT in "$SESSIONS_DIR"/*/; do
+  for JSONL in "$PROJECT"*.jsonl; do
+    [ -f "$JSONL" ] || continue
+    BASENAME=$(basename "$JSONL" .jsonl)
+    if [[ "$BASENAME" == *_* ]]; then
+      UUID_PART="${BASENAME##*_}"
+    else
+      UUID_PART="$BASENAME"
+    fi
+    if [[ "$UUID_PART" == "$SESSION_ID"* ]]; then
+      MATCHES+=("$JSONL")
+    fi
+  done
+done
+
+case ${#MATCHES[@]} in
+  0)
+    echo "Error: No session matching '$SESSION_ID'" >&2
+    exit 1
+    ;;
+  1)
+    SESSION_FILE="${MATCHES[0]}"
+    ;;
+  *)
+    echo "Error: Ambiguous session ID '$SESSION_ID', matches:" >&2
+    printf '  %s\n' "${MATCHES[@]}" >&2
+    exit 1
+    ;;
+esac
+
+FULL_SESSION_ID=$(head -1 "$SESSION_FILE" | jq -r '.id // empty')
+if [ -z "$FULL_SESSION_ID" ]; then
+  FULL_SESSION_ID="$SESSION_ID"
+fi
+
+# --- Resolve context from file ---
+
+if [ -n "$CONTEXT_FILE" ]; then
+  if [ ! -f "$CONTEXT_FILE" ]; then
+    echo "Error: context file not found: $CONTEXT_FILE" >&2
+    exit 1
+  fi
+  CONTEXT=$(cat "$CONTEXT_FILE")
+fi
+
+# --- Inject context if provided ---
+
+if [ -n "$CONTEXT" ]; then
+  LAST_ID=$(tail -1 "$SESSION_FILE" | jq -r '.id // empty')
+  MSG_ID=$(uuidgen | tr '[:upper:]' '[:lower:]' | cut -c1-8)
+  NOW_ISO=$(date -u +"%Y-%m-%dT%H:%M:%S.000Z")
+
+  jq -nc \
+    --arg id "$MSG_ID" \
+    --arg parent_id "$LAST_ID" \
+    --arg ts "$NOW_ISO" \
+    --arg content "$CONTEXT" \
+    '{
+      type: "message",
+      id: $id,
+      parentId: $parent_id,
+      timestamp: $ts,
+      message: {
+        role: "user",
+        content: [{ type: "text", text: $content }]
+      }
+    }' >> "$SESSION_FILE"
+fi
+
+# --- Launch via zmx ---
+
+if [ -z "$ZMX_NAME" ]; then
+  ZMX_NAME="${FULL_SESSION_ID:0:8}"
+fi
+
+# Pi accepts --session with a file path or partial UUID
+HARNESS_CMD=("$AGENT_HARNESS" "--session" "$SESSION_FILE")
+if [ -n "$MESSAGE" ]; then
+  HARNESS_CMD+=("$MESSAGE")
+fi
+
+zmx run "$ZMX_NAME" "${HARNESS_CMD[@]}" 2>/dev/null
+
+echo "$FULL_SESSION_ID"
+echo "Woke session in zmx pane '$ZMX_NAME'" >&2
+echo "Attach: zmx attach $ZMX_NAME" >&2
+echo "Monitor: sessions read ${FULL_SESSION_ID:0:8} --last 10" >&2
