@@ -120,18 +120,28 @@ if [ -n "$CONTEXT" ]; then
     }' >> "$SESSION_FILE"
 fi
 
+# --- Resolve working directory from session ---
+
+SESSION_CWD=$(head -1 "$SESSION_FILE" | jq -r '.cwd // empty')
+if [ -z "$SESSION_CWD" ] || [ ! -d "$SESSION_CWD" ]; then
+  echo "Warning: session cwd '$SESSION_CWD' not found, using current directory" >&2
+  SESSION_CWD="."
+fi
+
 # --- Launch via shell ---
 
 if [ -z "$SHELL_NAME" ]; then
   SHELL_NAME="${FULL_SESSION_ID:0:8}"
 fi
 
-# Build the harness command: headless harness + session file + message
+# Build the harness command: cd to session's project dir, then run headless harness
 HARNESS_CMD=("${HARNESS_PARTS[@]}" "--session" "$SESSION_FILE")
 if [ -n "$MESSAGE" ]; then
   HARNESS_CMD+=("$MESSAGE")
 fi
 
+# Launch from the session's working directory so the agent gets the right CLAUDE.md
+cd "$SESSION_CWD"
 shell run "$SHELL_NAME" "${HARNESS_CMD[@]}"
 
 echo "$FULL_SESSION_ID"
