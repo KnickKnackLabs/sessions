@@ -27,13 +27,13 @@ teardown() {
 }
 
 @test "wake errors on nonexistent session" {
-  run sessions wake "deadbeef"
+  AGENT_HARNESS_HEADLESS="echo" run sessions wake "deadbeef"
   [ "$status" -eq 1 ]
   echo "$output" | grep -qi "no session"
 }
 
 @test "wake errors when context file missing" {
-  run sessions wake "$SESSION_1" --context-file "/tmp/nonexistent-$$"
+  AGENT_HARNESS_HEADLESS="echo" run sessions wake "$SESSION_1" --context-file "/tmp/nonexistent-$$"
   [ "$status" -eq 1 ]
   echo "$output" | grep -q "not found"
 }
@@ -41,7 +41,7 @@ teardown() {
 @test "wake launches session via shell" {
   command -v shell >/dev/null 2>&1 || skip "shell not installed"
   # Use a unique name to avoid collisions
-  AGENT_HARNESS="echo" run sessions wake "${SESSION_1:0:8}" --name "wake-test-$$"
+  AGENT_HARNESS_HEADLESS="echo" run sessions wake "${SESSION_1:0:8}" --name "wake-test-$$"
   [ "$status" -eq 0 ]
   echo "$output" | grep -q "$SESSION_1"
   echo "$output" | grep -q "shell"
@@ -50,7 +50,7 @@ teardown() {
 
 @test "wake injects context before launching" {
   command -v shell >/dev/null 2>&1 || skip "shell not installed"
-  AGENT_HARNESS="echo" run sessions wake "$SESSION_1" --context "Review PR #42" --name "wake-ctx-$$"
+  AGENT_HARNESS_HEADLESS="echo" run sessions wake "$SESSION_1" --context "Review PR #42" --name "wake-ctx-$$"
   [ "$status" -eq 0 ]
   src_file=$(find "$PROJECT_DIR" -name "*${SESSION_1}.jsonl")
   # Context should be the second-to-last entry (last is whatever zmx injected timing-wise)
@@ -59,8 +59,8 @@ teardown() {
 
 @test "wake shows attach and monitor instructions" {
   command -v shell >/dev/null 2>&1 || skip "shell not installed"
-  AGENT_HARNESS="echo" run sessions wake "$SESSION_1" --name "wake-instr-$$"
+  AGENT_HARNESS_HEADLESS="echo" run sessions wake "$SESSION_1" --name "wake-instr-$$"
   [ "$status" -eq 0 ]
-  echo "$output" | grep -q "Attach:"
   echo "$output" | grep -q "Monitor:"
+  echo "$output" | grep -q "Status:"
 }
