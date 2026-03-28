@@ -10,8 +10,8 @@ setup() {
   # Export session 1 as a bundle to use for import tests
   sessions export "$SESSION_1" --output "$EXPORT_DIR" --format bundle
 
-  # Remove original so we can test import
-  rm -f "${PROJECT_DIR}${SESSION_1}.jsonl"
+  # Remove original so we can test import (pi filename has timestamp prefix)
+  rm -f "${PROJECT_DIR}"*"${SESSION_1}.jsonl"
 }
 
 teardown() {
@@ -22,6 +22,7 @@ teardown() {
 @test "import bundle restores session" {
   run sessions import "$EXPORT_DIR/$SESSION_1"
   [ "$status" -eq 0 ]
+  # Import writes as {session_id}.jsonl (no timestamp prefix)
   [ -f "${PROJECT_DIR}${SESSION_1}.jsonl" ]
 }
 
@@ -32,7 +33,7 @@ teardown() {
 }
 
 @test "import errors when session already exists" {
-  # Re-create the original
+  # Re-create the original (import writes without timestamp prefix)
   echo '{}' > "${PROJECT_DIR}${SESSION_1}.jsonl"
   run sessions import "$EXPORT_DIR/$SESSION_1"
   [ "$status" -eq 1 ]
@@ -46,7 +47,7 @@ teardown() {
 }
 
 @test "import standalone JSONL with --project works" {
-  run sessions import "$EXPORT_DIR/$SESSION_1/$SESSION_1.jsonl" --project "-test-project"
+  run sessions import "$EXPORT_DIR/$SESSION_1/$SESSION_1.jsonl" --project "--test-project--"
   [ "$status" -eq 0 ]
   [ -f "${PROJECT_DIR}${SESSION_1}.jsonl" ]
 }

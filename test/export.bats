@@ -46,8 +46,9 @@ assert 'source_machine' in m
   run sessions export "$SESSION_1" --output "$EXPORT_DIR" --format jsonl
   [ "$status" -eq 0 ]
   [ -f "$EXPORT_DIR/$SESSION_1.jsonl" ]
-  # Verify same content
-  diff "${PROJECT_DIR}${SESSION_1}.jsonl" "$EXPORT_DIR/$SESSION_1.jsonl"
+  # Verify same content — find the source file (pi filename has timestamp prefix)
+  src=$(find "$PROJECT_DIR" -name "*${SESSION_1}.jsonl")
+  diff "$src" "$EXPORT_DIR/$SESSION_1.jsonl"
 }
 
 @test "export errors on unknown format" {

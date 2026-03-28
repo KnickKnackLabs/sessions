@@ -49,8 +49,8 @@ teardown() { teardown_test_sessions; }
 @test "read --tools shows tool blocks" {
   run sessions read "$SESSION_1" --tools
   [ "$status" -eq 0 ]
-  echo "$output" | grep -q "\[tool_use:.*Bash"
-  echo "$output" | grep -q "\[tool_result:"
+  echo "$output" | grep -q "\[tool_use:.*bash"
+  echo "$output" | grep -q "\[tool_result:.*bash"
 }
 
 @test "read --user-only shows only user messages" {

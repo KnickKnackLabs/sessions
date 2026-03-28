@@ -1,20 +1,22 @@
 """
 Shared JSONL session parser for the sessions tooling.
 
+Parses pi's session log format (~/.pi/agent/sessions/).
+
 Usage:
     import parse
     session = parse.load(filepath)
     # session.entries       — all raw JSONL dicts
-    # session.messages      — user/assistant entries only
+    # session.messages      — user/assistant message entries only
     # session.metadata()    — dict with id, project, model, timestamps, counts, etc.
     # session.text_messages() — list of (index, role, timestamp, text) tuples
 """
 
 import json
 import os
+import re
 import sys
 from dataclasses import dataclass, field
-from typing import Any
 
 
 @dataclass
@@ -24,29 +26,39 @@ class Session:
 
     @property
     def messages(self) -> list:
-        return [e for e in self.entries if e.get("type") in ("user", "assistant")]
+        """Return message entries with user or assistant role."""
+        return [
+            e for e in self.entries
+            if e.get("type") == "message"
+            and e.get("message", {}).get("role") in ("user", "assistant")
+        ]
 
     @property
     def session_id(self) -> str:
+        """Get session ID from the session header entry, or derive from filename."""
         for e in self.entries:
-            sid = e.get("sessionId", "")
-            if sid:
-                return sid
-        return os.path.basename(self.filepath).replace(".jsonl", "")
+            if e.get("type") == "session":
+                return e.get("id", "")
+        # Fallback: extract UUID from pi filename (timestamp_uuid.jsonl)
+        basename = os.path.basename(self.filepath).replace(".jsonl", "")
+        parts = basename.rsplit("_", 1)
+        return parts[-1] if len(parts) == 2 else basename
 
     @property
     def slug(self) -> str:
-        for e in self.entries:
-            s = e.get("slug", "")
-            if s:
-                return s
+        """Pi sessions don't have slugs."""
         return ""
 
     @property
     def project(self) -> str:
-        """Decode the project directory name into a readable path."""
+        """Decode the project directory name into a readable path.
+
+        Pi encodes paths with double-dash bookends: --Users-foo-bar--
+        """
         dirname = os.path.basename(os.path.dirname(self.filepath))
-        # Claude Code encodes paths: /Users/foo/bar -> -Users-foo-bar
+        # Strip double-dash bookends
+        if dirname.startswith("--") and dirname.endswith("--"):
+            dirname = dirname[2:-2]
         readable = dirname.replace("-", "/")
         if readable.startswith("/"):
             readable = readable[1:]
@@ -58,11 +70,20 @@ class Session:
 
     @property
     def model(self) -> str:
+        """Get model from first model_change entry or first assistant message."""
         for e in self.entries:
-            if e.get("type") == "assistant":
-                m = e.get("message", {}).get("model", "")
-                if m and m != "<synthetic>":
+            if e.get("type") == "model_change":
+                m = e.get("modelId", "")
+                if m:
                     return m
+        # Fallback: check assistant messages
+        for e in self.entries:
+            if e.get("type") == "message":
+                msg = e.get("message", {})
+                if msg.get("role") == "assistant":
+                    m = msg.get("model", "")
+                    if m:
+                        return m
         return "unknown"
 
     @property
@@ -82,8 +103,16 @@ class Session:
         return ""
 
     def metadata(self) -> dict:
-        user_count = sum(1 for e in self.entries if e.get("type") == "user")
-        assistant_count = sum(1 for e in self.entries if e.get("type") == "assistant")
+        user_count = 0
+        assistant_count = 0
+        for e in self.entries:
+            if e.get("type") != "message":
+                continue
+            role = e.get("message", {}).get("role", "")
+            if role == "user":
+                user_count += 1
+            elif role == "assistant":
+                assistant_count += 1
         return {
             "session_id": self.session_id,
             "slug": self.slug,
@@ -104,66 +133,99 @@ class Session:
         """
         results = []
         for i, entry in enumerate(self.entries):
-            etype = entry.get("type", "")
-            if etype not in ("user", "assistant"):
+            if entry.get("type") != "message":
                 continue
 
-            role = etype
-            ts = entry.get("timestamp", "")
             msg = entry.get("message", {})
-            content = msg.get("content", "")
+            role = msg.get("role", "")
+            ts = entry.get("timestamp", "")
 
-            parts = []
-            if isinstance(content, str):
-                parts.append(content)
-            elif isinstance(content, list):
-                for block in content:
-                    if not isinstance(block, dict):
-                        continue
-                    btype = block.get("type", "")
-                    if btype == "text":
-                        parts.append(block.get("text", ""))
-                    elif btype == "tool_use":
-                        name = block.get("name", "?")
-                        inp = block.get("input", {})
-                        # Show command for Bash, file_path for Read/Edit, pattern for Grep
-                        detail = ""
-                        if "command" in inp:
-                            cmd = inp["command"]
-                            detail = f" $ {cmd[:80]}" if len(cmd) <= 80 else f" $ {cmd[:77]}..."
-                        elif "file_path" in inp:
-                            detail = f" {inp['file_path']}"
-                        elif "pattern" in inp:
-                            detail = f" /{inp['pattern']}/"
-                        parts.append(f"[tool_use: {name}{detail}]")
-                    elif btype == "tool_result":
-                        tc = block.get("content", "")
-                        if isinstance(tc, str):
-                            preview = tc[:100].replace("\n", " ")
-                            parts.append(f"[tool_result: {preview}]")
-                        elif isinstance(tc, list):
-                            # Content array (e.g. text blocks inside tool_result)
-                            for sub in tc:
-                                if isinstance(sub, dict) and sub.get("type") == "text":
-                                    preview = sub.get("text", "")[:100].replace("\n", " ")
-                                    parts.append(f"[tool_result: {preview}]")
-                                    break
-                            else:
-                                parts.append("[tool_result]")
-                        else:
-                            parts.append("[tool_result]")
+            if role == "user":
+                parts = self._extract_text_content(msg)
+                text = "\n".join(parts) if parts else "(empty)"
+                results.append((i, "user", ts, text))
 
-            text = "\n".join(parts) if parts else "(empty)"
+            elif role == "assistant":
+                parts = self._extract_assistant_content(msg)
+                text = "\n".join(parts) if parts else "(empty)"
+                results.append((i, "assistant", ts, text))
 
-            # Skip synthetic "No response requested." entries unless they're the only content
-            if text.strip() == "No response requested." and role == "assistant":
-                model = msg.get("model", "")
-                if model == "<synthetic>":
-                    continue
-
-            results.append((i, role, ts, text))
+            elif role == "toolResult":
+                # Tool results are separate entries in pi format
+                tool_name = msg.get("toolName", "?")
+                content = msg.get("content", [])
+                preview = self._extract_tool_result_preview(content)
+                text = f"[tool_result: {tool_name}: {preview}]" if preview else f"[tool_result: {tool_name}]"
+                results.append((i, "user", ts, text))
 
         return results
+
+    def _extract_text_content(self, msg: dict) -> list:
+        """Extract text from a user message's content."""
+        content = msg.get("content", "")
+        parts = []
+        if isinstance(content, str):
+            parts.append(content)
+        elif isinstance(content, list):
+            for block in content:
+                if not isinstance(block, dict):
+                    continue
+                if block.get("type") == "text":
+                    parts.append(block.get("text", ""))
+        return parts
+
+    def _extract_assistant_content(self, msg: dict) -> list:
+        """Extract text and tool call summaries from an assistant message."""
+        content = msg.get("content", [])
+        parts = []
+        if isinstance(content, str):
+            parts.append(content)
+            return parts
+        if not isinstance(content, list):
+            return parts
+
+        for block in content:
+            if not isinstance(block, dict):
+                continue
+            btype = block.get("type", "")
+
+            if btype == "text":
+                parts.append(block.get("text", ""))
+
+            elif btype == "toolCall":
+                name = block.get("name", "?")
+                args = block.get("arguments", {})
+                detail = self._format_tool_detail(name, args)
+                parts.append(f"[tool_use: {name}{detail}]")
+
+            elif btype == "thinking":
+                # Skip thinking blocks in output — they're internal reasoning
+                pass
+
+        return parts
+
+    def _format_tool_detail(self, name: str, args: dict) -> str:
+        """Format tool call arguments into a brief summary."""
+        if "command" in args:
+            cmd = args["command"]
+            return f" $ {cmd[:80]}" if len(cmd) <= 80 else f" $ {cmd[:77]}..."
+        elif "path" in args:
+            return f" {args['path']}"
+        elif "file_path" in args:
+            return f" {args['file_path']}"
+        elif "pattern" in args:
+            return f" /{args['pattern']}/"
+        return ""
+
+    def _extract_tool_result_preview(self, content) -> str:
+        """Extract a short preview from tool result content."""
+        if isinstance(content, str):
+            return content[:100].replace("\n", " ")
+        elif isinstance(content, list):
+            for block in content:
+                if isinstance(block, dict) and block.get("type") == "text":
+                    return block.get("text", "")[:100].replace("\n", " ")
+        return ""
 
 
 def load(filepath: str) -> Session:
@@ -182,9 +244,9 @@ def load(filepath: str) -> Session:
 
 
 def discover_sessions_dir() -> str:
-    """Find the sessions directory. Respects CLAUDE_DIR env var for testing."""
-    claude_dir = os.environ.get("CLAUDE_DIR", os.path.expanduser("~/.claude"))
-    return os.path.join(claude_dir, "projects")
+    """Find the pi sessions directory. Respects PI_DIR env var for testing."""
+    pi_dir = os.environ.get("PI_DIR", os.path.expanduser("~/.pi"))
+    return os.path.join(pi_dir, "agent", "sessions")
 
 
 def find_session(session_id: str) -> str:
@@ -200,7 +262,11 @@ def find_session(session_id: str) -> str:
         if not os.path.isdir(project_path):
             continue
         for fname in os.listdir(project_path):
-            if fname.endswith(".jsonl") and fname.startswith(session_id):
+            if not fname.endswith(".jsonl"):
+                continue
+            # Pi filenames: <timestamp>_<uuid>.jsonl — match against UUID part
+            uuid_part = fname.rsplit("_", 1)[-1].replace(".jsonl", "") if "_" in fname else fname.replace(".jsonl", "")
+            if uuid_part.startswith(session_id) or fname.startswith(session_id):
                 matches.append(os.path.join(project_path, fname))
 
     if not matches:

@@ -29,7 +29,7 @@ teardown() { teardown_test_sessions; }
 @test "inspect shows tool usage" {
   run sessions inspect "$SESSION_1"
   [ "$status" -eq 0 ]
-  echo "$output" | grep -q "Bash"
+  echo "$output" | grep -q "bash"
 }
 
 @test "inspect shows compaction status" {
@@ -51,7 +51,7 @@ teardown() { teardown_test_sessions; }
 import json, sys
 data = json.load(sys.stdin)
 assert 'tools' in data
-assert 'Bash' in data['tools']
+assert 'bash' in data['tools']
 "
 }
 

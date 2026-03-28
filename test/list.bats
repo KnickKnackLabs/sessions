@@ -50,10 +50,10 @@ assert all('model' in s for s in data)
 @test "list shows message counts" {
   run sessions list
   [ "$status" -eq 0 ]
-  # Session 1 has 4 user + 4 assistant = 8 messages total
-  # (queue-operation entries are not counted)
+  # Session 1 has 3 user + 3 assistant = 6 messages
+  # (toolResult entries are not counted as user/assistant)
   # Rich table adds trailing padding, so match with surrounding whitespace
-  echo "$output" | grep "${SESSION_1:0:8}" | grep -qE "[[:space:]]+8[[:space:]]*$"
+  echo "$output" | grep "${SESSION_1:0:8}" | grep -qE "[[:space:]]+6[[:space:]]*$"
 }
 
 @test "list shows model name" {
@@ -77,7 +77,7 @@ assert all('model' in s for s in data)
 }
 
 @test "list errors when sessions dir missing" {
-  rm -rf "$CLAUDE_DIR"
+  rm -rf "$PI_DIR"
   run sessions list
   [ "$status" -eq 1 ]
   echo "$output" | grep -qi "no sessions"

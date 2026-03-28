@@ -43,21 +43,31 @@ duration_str = format_duration(meta["first_timestamp"], meta["last_timestamp"])
 # Models used
 models = {}
 for e in session.entries:
-    if e.get("type") == "assistant":
-        m = e.get("message", {}).get("model", "")
-        if m:
-            models[m] = models.get(m, 0) + 1
+    if e.get("type") == "message":
+        msg = e.get("message", {})
+        if msg.get("role") == "assistant":
+            m = msg.get("model", "")
+            if m:
+                models[m] = models.get(m, 0) + 1
 
 # Tools used
 tools = {}
 for e in session.entries:
+    if e.get("type") != "message":
+        continue
     msg = e.get("message", {})
+    # Count toolCall blocks in assistant messages
     content = msg.get("content", [])
     if isinstance(content, list):
         for block in content:
-            if isinstance(block, dict) and block.get("type") == "tool_use":
+            if isinstance(block, dict) and block.get("type") == "toolCall":
                 name = block.get("name", "?")
                 tools[name] = tools.get(name, 0) + 1
+    # Also count from toolResult entries (tool name is on the entry)
+    if msg.get("role") == "toolResult":
+        name = msg.get("toolName", "?")
+        # Don't double-count — toolCall already counted it
+        pass
 
 # Subagent sessions
 subagent_dir = filepath.replace(".jsonl", "")
@@ -68,12 +78,19 @@ if os.path.isdir(subagent_dir):
 # Context usage from user messages
 context_snapshots = []
 for e in session.entries:
-    if e.get("type") != "user":
+    if e.get("type") != "message":
         continue
     msg = e.get("message", {})
+    if msg.get("role") != "user":
+        continue
     content = msg.get("content", "")
-    if isinstance(content, str) and "Context Usage" in content and "Tokens:" in content:
-        for line in content.split("\n"):
+    text = ""
+    if isinstance(content, str):
+        text = content
+    elif isinstance(content, list):
+        text = " ".join(b.get("text", "") for b in content if isinstance(b, dict) and b.get("type") == "text")
+    if "Context Usage" in text and "Tokens:" in text:
+        for line in text.split("\n"):
             if "Tokens:" in line and "/" in line:
                 context_snapshots.append(line.strip().replace("**", ""))
 

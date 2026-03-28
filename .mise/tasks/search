@@ -96,19 +96,33 @@ def extract_matches(session):
     sid = session.session_id
     matches = []
 
-    # Track message index (counting only user/assistant entries)
+    # Track message index (counting only user/assistant message entries)
     msg_index = 0
     for entry_index, entry in enumerate(session.entries):
-        etype = entry.get("type", "")
-        if etype not in ("user", "assistant"):
+        if entry.get("type") != "message":
             continue
 
-        msg_index += 1
-        role = etype
+        msg = entry.get("message", {})
+        role = msg.get("role", "")
+
+        # Map roles: user/assistant are direct, toolResult maps to "user"
+        if role == "user":
+            msg_index += 1
+            display_role = "user"
+        elif role == "assistant":
+            msg_index += 1
+            display_role = "assistant"
+        elif role == "toolResult":
+            if not include_tools:
+                continue
+            msg_index += 1
+            display_role = "user"
+        else:
+            continue
+
         ts = entry.get("timestamp", "")
 
         # Extract text content (skip tool inputs/outputs unless --tools)
-        msg = entry.get("message", {})
         content = msg.get("content", "")
         texts = []
         if isinstance(content, str):
@@ -119,15 +133,21 @@ def extract_matches(session):
                     continue
                 if block.get("type") == "text":
                     texts.append(block.get("text", ""))
-                elif include_tools and block.get("type") == "tool_use":
-                    inp = block.get("input", {})
-                    for v in inp.values():
+                elif include_tools and block.get("type") == "toolCall":
+                    args = block.get("arguments", {})
+                    for v in args.values():
                         if isinstance(v, str):
                             texts.append(v)
-                elif include_tools and block.get("type") == "tool_result":
-                    tc = block.get("content", "")
-                    if isinstance(tc, str):
-                        texts.append(tc)
+
+        # For toolResult entries, extract content
+        if role == "toolResult" and include_tools:
+            tc = msg.get("content", "")
+            if isinstance(tc, str):
+                texts.append(tc)
+            elif isinstance(tc, list):
+                for block in tc:
+                    if isinstance(block, dict) and block.get("type") == "text":
+                        texts.append(block.get("text", ""))
 
         for text in texts:
             if not pattern.search(text):
@@ -140,7 +160,7 @@ def extract_matches(session):
                     snippet = "\n".join(lines[start:end])
                     matches.append({
                         "session_id": sid,
-                        "role": role,
+                        "role": display_role,
                         "ts": ts[:19] if ts else "",
                         "msg": msg_index,
                         "snippet": snippet,
