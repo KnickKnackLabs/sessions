@@ -2,6 +2,7 @@
 #MISE description="List recent sessions with metadata"
 #USAGE flag "--limit <n>" default="20" help="Max sessions to show (default: 20)"
 #USAGE flag "--project <filter>" help="Filter by project directory (substring match)"
+#USAGE flag "--filter <filter>" var=#true help="Filter sessions (type.meta.key=value, supports indexing e.g. wake[0].meta.by=ikma)"
 #USAGE flag "--all" help="Include subagent sessions (excluded by default)"
 #USAGE flag "--json" help="Output as JSON"
 # /// script
@@ -19,8 +20,11 @@ from format import console, format_duration, format_model, format_relative, make
 
 limit = int(os.environ.get("usage_limit", "20"))
 project_filter = os.environ.get("usage_project", "")
+filter_raw = os.environ.get("usage_filter", "")
 include_agents = os.environ.get("usage_all", "") == "true"
 output_json = os.environ.get("usage_json", "") == "true"
+
+filters = parse.parse_filters(filter_raw) if filter_raw else []
 
 sessions_dir = parse.discover_sessions_dir()
 if not os.path.isdir(sessions_dir):
@@ -55,6 +59,9 @@ for mtime, filepath in files:
         break
     try:
         session = parse.load(filepath)
+        # Skip if filters don't match
+        if filters and not parse.session_matches_filters(session, filters):
+            continue
         meta = session.metadata()
         # Skip empty/stub sessions — no real assistant interaction
         if not include_agents:

@@ -5,11 +5,13 @@
 #USAGE flag "--context-file <context_file>" help="File containing context message to inject"
 #USAGE flag "--name <name>" help="Shell session name — becomes CHAT_IDENTITY (default: session ID prefix)"
 #USAGE flag "--message <message>" help="Message to pass to the agent"
+#USAGE flag "--meta <meta>" var=#true help="Metadata for the wake event (repeatable, dotted paths or jq expressions)"
 
 set -euo pipefail
 
 SESSION_ID="${usage_session_id:-}"
 CONTEXT="${usage_context:-}"
+WAKE_META_RAW="${usage_meta:-}"
 CONTEXT_FILE="${usage_context_file:-}"
 SHELL_NAME="${usage_name:-}"
 MESSAGE="${usage_message:-}"
@@ -96,12 +98,82 @@ if [ -n "$CONTEXT_FILE" ]; then
   CONTEXT=$(cat "$CONTEXT_FILE")
 fi
 
+# --- Inject wake event ---
+
+LAST_ID=$(tail -1 "$SESSION_FILE" | jq -r '.id // empty')
+WAKE_ID=$(uuidgen | tr '[:upper:]' '[:lower:]' | cut -c1-8)
+NOW_ISO=$(date -u +"%Y-%m-%dT%H:%M:%S.000Z")
+
+# Determine shell name early (needed for wake entry)
+if [ -z "$SHELL_NAME" ]; then
+  SHELL_NAME="${FULL_SESSION_ID:0:8}"
+fi
+
+# Build wake meta from --meta flags (same parsing as sessions new)
+WAKE_META="{}"
+if [ -n "$WAKE_META_RAW" ]; then
+  while IFS= read -r entry; do
+    [ -z "$entry" ] && continue
+    if [[ "$entry" == "{"* ]]; then
+      FRAGMENT=$(jq -nc "$entry" 2>&1) || {
+        echo "Error: invalid jq expression in --meta: $entry" >&2
+        exit 1
+      }
+      WAKE_META=$(echo "$WAKE_META" "$FRAGMENT" | jq -s '.[0] * .[1]')
+    elif [[ "$entry" == *"="* ]]; then
+      KEY="${entry%%=*}"
+      VALUE="${entry#*=}"
+      WAKE_META=$(echo "$WAKE_META" | jq --arg v "$VALUE" "setpath(\"$KEY\" | split(\".\"); \$v)")
+    else
+      echo "Error: invalid --meta format '$entry'" >&2
+      exit 1
+    fi
+  done < <(printf '%s' "$WAKE_META_RAW" | xargs printf '%s\n')
+fi
+
+if [ "$WAKE_META" = "{}" ]; then
+  jq -nc \
+    --arg id "$WAKE_ID" \
+    --arg parent_id "$LAST_ID" \
+    --arg ts "$NOW_ISO" \
+    --arg shell_name "$SHELL_NAME" \
+    --arg agent "${GIT_AUTHOR_NAME:-unknown}" \
+    --arg harness "$HARNESS_HEADLESS" \
+    '{
+      type: "wake",
+      id: $id,
+      parentId: $parent_id,
+      timestamp: $ts,
+      shell: $shell_name,
+      agent: $agent,
+      harness: $harness
+    }' >> "$SESSION_FILE"
+else
+  jq -nc \
+    --arg id "$WAKE_ID" \
+    --arg parent_id "$LAST_ID" \
+    --arg ts "$NOW_ISO" \
+    --arg shell_name "$SHELL_NAME" \
+    --arg agent "${GIT_AUTHOR_NAME:-unknown}" \
+    --arg harness "$HARNESS_HEADLESS" \
+    --argjson meta "$WAKE_META" \
+    '{
+      type: "wake",
+      id: $id,
+      parentId: $parent_id,
+      timestamp: $ts,
+      shell: $shell_name,
+      agent: $agent,
+      harness: $harness,
+      meta: $meta
+    }' >> "$SESSION_FILE"
+fi
+
 # --- Inject context into session file if provided ---
 
 if [ -n "$CONTEXT" ]; then
-  LAST_ID=$(tail -1 "$SESSION_FILE" | jq -r '.id // empty')
+  LAST_ID="$WAKE_ID"
   MSG_ID=$(uuidgen | tr '[:upper:]' '[:lower:]' | cut -c1-8)
-  NOW_ISO=$(date -u +"%Y-%m-%dT%H:%M:%S.000Z")
 
   jq -nc \
     --arg id "$MSG_ID" \
@@ -129,10 +201,6 @@ if [ -z "$SESSION_CWD" ] || [ ! -d "$SESSION_CWD" ]; then
 fi
 
 # --- Launch via shell ---
-
-if [ -z "$SHELL_NAME" ]; then
-  SHELL_NAME="${FULL_SESSION_ID:0:8}"
-fi
 
 # Build the harness command: cd to session's project dir, then run headless harness
 HARNESS_CMD=("${HARNESS_PARTS[@]}" "--session" "$SESSION_FILE")

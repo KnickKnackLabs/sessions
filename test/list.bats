@@ -41,7 +41,7 @@ teardown() { teardown_test_sessions; }
   echo "$output" | python3 -c "
 import json, sys
 data = json.load(sys.stdin)
-assert len(data) == 2, f'expected 2 sessions, got {len(data)}'
+assert len(data) >= 3, f'expected at least 3 sessions, got {len(data)}'
 assert all('session_id' in s for s in data)
 assert all('model' in s for s in data)
 "
@@ -74,6 +74,120 @@ assert all('model' in s for s in data)
   run sessions list --all
   [ "$status" -eq 0 ]
   echo "$output" | grep -q "agent-ab"
+}
+
+# --- --filter: session header metadata ---
+
+@test "filter by session.meta matches session header" {
+  run sessions list --filter "session.meta.agent.name=ikma"
+  [ "$status" -eq 0 ]
+  echo "$output" | grep -q "${SESSION_3:0:8}"
+  ! echo "$output" | grep -q "${SESSION_1:0:8}"
+  ! echo "$output" | grep -q "${SESSION_2:0:8}"
+}
+
+@test "filter by session.meta.purpose" {
+  run sessions list --filter "session.meta.purpose=scout-report"
+  [ "$status" -eq 0 ]
+  echo "$output" | grep -q "${SESSION_3:0:8}"
+  ! echo "$output" | grep -q "${SESSION_1:0:8}"
+}
+
+@test "filter with no matches shows no sessions" {
+  run sessions list --filter "session.meta.agent.name=nonexistent"
+  [ "$status" -eq 0 ]
+  echo "$output" | grep -q "No sessions"
+}
+
+@test "filter --json includes meta in output" {
+  run sessions list --filter "session.meta.agent.name=ikma" --json
+  [ "$status" -eq 0 ]
+  echo "$output" | python3 -c "
+import json, sys
+data = json.load(sys.stdin)
+assert len(data) == 1, f'expected 1 session, got {len(data)}'
+assert data[0]['meta']['agent']['name'] == 'ikma'
+"
+}
+
+# --- --filter: wake events (any match) ---
+
+@test "filter by wake.meta matches any wake event" {
+  run sessions list --filter "wake.meta.by.agent.name=ikma"
+  [ "$status" -eq 0 ]
+  echo "$output" | grep -q "${SESSION_4:0:8}"
+  ! echo "$output" | grep -q "${SESSION_1:0:8}"
+}
+
+@test "filter by wake.meta.by.agent.name=brownie" {
+  run sessions list --filter "wake.meta.by.agent.name=brownie"
+  [ "$status" -eq 0 ]
+  echo "$output" | grep -q "${SESSION_4:0:8}"
+  ! echo "$output" | grep -q "${SESSION_3:0:8}"
+}
+
+@test "filter by wake.agent (top-level wake field)" {
+  run sessions list --filter "wake.agent=ikma"
+  [ "$status" -eq 0 ]
+  echo "$output" | grep -q "${SESSION_4:0:8}"
+}
+
+# --- --filter: wake events with indexing ---
+
+@test "filter by wake[0] matches first wake event" {
+  run sessions list --filter "wake[0].meta.by.agent.name=ikma"
+  [ "$status" -eq 0 ]
+  echo "$output" | grep -q "${SESSION_4:0:8}"
+}
+
+@test "filter by wake[0] does not match second wake event" {
+  run sessions list --filter "wake[0].meta.by.agent.name=brownie"
+  [ "$status" -eq 0 ]
+  echo "$output" | grep -q "No sessions"
+}
+
+@test "filter by wake[1] matches second wake event" {
+  run sessions list --filter "wake[1].meta.by.agent.name=brownie"
+  [ "$status" -eq 0 ]
+  echo "$output" | grep -q "${SESSION_4:0:8}"
+}
+
+@test "filter by wake[-1] matches last wake event" {
+  run sessions list --filter "wake[-1].meta.by.agent.name=brownie"
+  [ "$status" -eq 0 ]
+  echo "$output" | grep -q "${SESSION_4:0:8}"
+}
+
+@test "filter by wake[-1] for first waker finds nothing (last waker is brownie)" {
+  run sessions list --filter "wake[-1].meta.by.agent.name=ikma"
+  [ "$status" -eq 0 ]
+  echo "$output" | grep -q "No sessions"
+}
+
+# --- --filter: multiple filters (AND) ---
+
+@test "multiple filters are ANDed" {
+  run sessions list \
+    --filter "wake[0].meta.by.agent.name=ikma" \
+    --filter "wake[1].meta.by.agent.name=brownie"
+  [ "$status" -eq 0 ]
+  echo "$output" | grep -q "${SESSION_4:0:8}"
+}
+
+@test "multiple filters that contradict return no results" {
+  run sessions list \
+    --filter "session.meta.agent.name=ikma" \
+    --filter "session.meta.agent.name=zeke"
+  [ "$status" -eq 0 ]
+  echo "$output" | grep -q "No sessions"
+}
+
+@test "filter across types: session meta + wake meta" {
+  run sessions list \
+    --filter "session.meta.agent.name=zeke" \
+    --filter "wake.meta.by.agent.name=brownie"
+  [ "$status" -eq 0 ]
+  echo "$output" | grep -q "${SESSION_4:0:8}"
 }
 
 @test "list errors when sessions dir missing" {

@@ -50,6 +50,14 @@ class Session:
         return ""
 
     @property
+    def meta(self) -> dict:
+        """Get meta field from the session header, or empty dict."""
+        for e in self.entries:
+            if e.get("type") == "session":
+                return e.get("meta", {})
+        return {}
+
+    @property
     def project(self) -> str:
         """Decode the project directory name into a readable path.
 
@@ -113,7 +121,7 @@ class Session:
                 user_count += 1
             elif role == "assistant":
                 assistant_count += 1
-        return {
+        result = {
             "session_id": self.session_id,
             "slug": self.slug,
             "project": self.project,
@@ -125,6 +133,9 @@ class Session:
             "assistant_messages": assistant_count,
             "filepath": self.filepath,
         }
+        if self.meta:
+            result["meta"] = self.meta
+        return result
 
     def text_messages(self) -> list:
         """
@@ -226,6 +237,174 @@ class Session:
                 if isinstance(block, dict) and block.get("type") == "text":
                     return block.get("text", "")[:100].replace("\n", " ")
         return ""
+
+
+def dict_contains(haystack: dict, needle: dict) -> bool:
+    """Check if haystack contains all keys/values from needle (recursive)."""
+    for key, value in needle.items():
+        if key not in haystack:
+            return False
+        if isinstance(value, dict):
+            if not isinstance(haystack[key], dict):
+                return False
+            if not dict_contains(haystack[key], value):
+                return False
+        elif haystack[key] != value:
+            return False
+    return True
+
+
+def parse_meta_filter(raw: str) -> dict:
+    """Parse a meta filter string into a dict.
+
+    Supports two formats:
+      - Dotted key=value: "agent.name=ikma" → {"agent": {"name": "ikma"}}
+      - JSON object: '{"agent": {"name": "ikma"}}' → as-is
+
+    Returns empty dict on parse failure.
+    """
+    raw = raw.strip()
+    if not raw:
+        return {}
+
+    # JSON object
+    if raw.startswith("{"):
+        try:
+            return json.loads(raw)
+        except json.JSONDecodeError:
+            # Try evaluating via jq for jq-syntax (e.g., unquoted keys)
+            import subprocess
+            try:
+                result = subprocess.run(
+                    ["jq", "-nc", raw],
+                    capture_output=True, text=True, timeout=5,
+                )
+                if result.returncode == 0:
+                    return json.loads(result.stdout.strip())
+            except (subprocess.TimeoutExpired, FileNotFoundError, json.JSONDecodeError):
+                pass
+            return {}
+
+    # Dotted key=value
+    if "=" in raw:
+        key, _, value = raw.partition("=")
+        parts = key.strip().split(".")
+        result = {}
+        current = result
+        for i, part in enumerate(parts):
+            if i == len(parts) - 1:
+                current[part] = value
+            else:
+                current[part] = {}
+                current = current[part]
+        return result
+
+    return {}
+
+
+@dataclass
+class Filter:
+    """A parsed filter expression.
+
+    entry_type: which JSONL entry type to match ('session', 'wake', etc.)
+    index: optional index into entries of that type (0, 1, -1, None=any)
+    path: dotted path within the entry (e.g., 'meta.agent.name')
+    value: expected value
+    """
+    entry_type: str
+    index: object  # int or None
+    path: str
+    value: str
+
+
+def parse_filters(raw: str) -> list:
+    """Parse filter string (from var=#true, space-separated by xargs) into Filter objects.
+
+    Format: type[index].path=value
+    Examples:
+        session.meta.agent.name=ikma
+        wake.meta.by.agent.name=ikma
+        wake[0].meta.by.agent.name=ikma
+        wake[-1].meta.by.agent.name=brownie
+    """
+    import shlex
+    filters = []
+    if not raw.strip():
+        return filters
+
+    # var=#true delivers multiple values as shell-escaped string
+    try:
+        parts = shlex.split(raw)
+    except ValueError:
+        parts = raw.split()
+
+    for part in parts:
+        part = part.strip()
+        if not part or "=" not in part:
+            continue
+
+        lhs, _, value = part.partition("=")
+
+        # Parse entry_type, optional index, and path
+        # e.g., "wake[0].meta.by.agent.name" → type=wake, index=0, path=meta.by.agent.name
+        # e.g., "session.meta.agent.name" → type=session, index=None, path=meta.agent.name
+        index = None
+        if "[" in lhs.split(".")[0]:
+            type_part = lhs.split(".")[0]
+            entry_type = type_part[:type_part.index("[")]
+            idx_str = type_part[type_part.index("[") + 1:type_part.index("]")]
+            try:
+                index = int(idx_str)
+            except ValueError:
+                continue
+            path = ".".join(lhs.split(".")[1:])
+        else:
+            entry_type = lhs.split(".")[0]
+            path = ".".join(lhs.split(".")[1:])
+
+        filters.append(Filter(entry_type=entry_type, index=index, path=path, value=value))
+
+    return filters
+
+
+def _get_nested(d: dict, dotted_path: str):
+    """Get a value from a dict using a dotted path. Returns None if not found."""
+    current = d
+    for key in dotted_path.split("."):
+        if not isinstance(current, dict) or key not in current:
+            return None
+        current = current[key]
+    return current
+
+
+def _entry_matches_filter(entry: dict, f: Filter) -> bool:
+    """Check if a single JSONL entry matches a filter's path=value."""
+    val = _get_nested(entry, f.path)
+    if val is None:
+        return False
+    return str(val) == f.value
+
+
+def session_matches_filters(session: 'Session', filters: list) -> bool:
+    """Check if a session matches ALL filters."""
+    for f in filters:
+        # Collect entries of the specified type
+        typed_entries = [e for e in session.entries if e.get("type") == f.entry_type]
+
+        if f.index is not None:
+            # Index-specific: check one entry
+            try:
+                entry = typed_entries[f.index]
+            except IndexError:
+                return False
+            if not _entry_matches_filter(entry, f):
+                return False
+        else:
+            # Any-match: at least one entry of this type must match
+            if not any(_entry_matches_filter(e, f) for e in typed_entries):
+                return False
+
+    return True
 
 
 def load(filepath: str) -> Session:
