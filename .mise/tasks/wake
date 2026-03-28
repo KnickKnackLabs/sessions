@@ -122,7 +122,7 @@ fi
 
 # --- Resolve working directory from session ---
 
-SESSION_CWD=$(head -1 "$SESSION_FILE" | jq -r '.cwd // empty')
+SESSION_CWD=$(sessions meta "${FULL_SESSION_ID:0:8}" --field .cwd 2>/dev/null) || true
 if [ -z "$SESSION_CWD" ] || [ ! -d "$SESSION_CWD" ]; then
   echo "Warning: session cwd '$SESSION_CWD' not found, using current directory" >&2
   SESSION_CWD="."

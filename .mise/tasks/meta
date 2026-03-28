@@ -1,0 +1,88 @@
+#!/usr/bin/env bash
+#MISE description="Show session metadata (header fields)"
+#USAGE arg "<session_id>" help="Session ID (prefix match supported)"
+#USAGE flag "--field <field>" help="Extract a specific field (jq path, e.g. .cwd or .meta.agent.name)"
+#USAGE flag "--json" help="Output raw JSON (default is pretty-printed)"
+
+set -euo pipefail
+
+SESSION_ID="${usage_session_id:-}"
+FIELD="${usage_field:-}"
+JSON="${usage_json:-false}"
+
+if [ -z "$SESSION_ID" ]; then
+  echo "Error: session ID required" >&2
+  echo "Usage: sessions meta <session_id> [--field .cwd]" >&2
+  exit 1
+fi
+
+command -v jq >/dev/null 2>&1 || { echo "Error: jq is required" >&2; exit 1; }
+
+# --- Find session file ---
+
+PI_DIR="${PI_DIR:-$HOME/.pi}"
+SESSIONS_DIR="$PI_DIR/agent/sessions"
+
+if [ ! -d "$SESSIONS_DIR" ]; then
+  echo "Error: No sessions directory at $SESSIONS_DIR" >&2
+  exit 1
+fi
+
+SESSION_FILE=""
+MATCHES=()
+for PROJECT in "$SESSIONS_DIR"/*/; do
+  for JSONL in "$PROJECT"*.jsonl; do
+    [ -f "$JSONL" ] || continue
+    BASENAME=$(basename "$JSONL" .jsonl)
+    if [[ "$BASENAME" == *_* ]]; then
+      UUID_PART="${BASENAME##*_}"
+    else
+      UUID_PART="$BASENAME"
+    fi
+    if [[ "$UUID_PART" == "$SESSION_ID"* ]]; then
+      MATCHES+=("$JSONL")
+    fi
+  done
+done
+
+case ${#MATCHES[@]} in
+  0)
+    echo "Error: No session matching '$SESSION_ID'" >&2
+    exit 1
+    ;;
+  1)
+    SESSION_FILE="${MATCHES[0]}"
+    ;;
+  *)
+    echo "Error: Ambiguous session ID '$SESSION_ID', matches:" >&2
+    printf '  %s\n' "${MATCHES[@]}" >&2
+    exit 1
+    ;;
+esac
+
+# --- Extract header ---
+
+HEADER=$(head -1 "$SESSION_FILE")
+
+# Validate it's a session header
+HEADER_TYPE=$(echo "$HEADER" | jq -r '.type // empty')
+if [ "$HEADER_TYPE" != "session" ]; then
+  echo "Error: First line is not a session header (type=$HEADER_TYPE)" >&2
+  exit 1
+fi
+
+# --- Output ---
+
+if [ -n "$FIELD" ]; then
+  # Extract a specific field
+  RESULT=$(echo "$HEADER" | jq -r "$FIELD // empty")
+  if [ -z "$RESULT" ]; then
+    echo "Error: Field '$FIELD' not found in session header" >&2
+    exit 1
+  fi
+  echo "$RESULT"
+elif [ "$JSON" = "true" ]; then
+  echo "$HEADER" | jq .
+else
+  echo "$HEADER" | jq .
+fi

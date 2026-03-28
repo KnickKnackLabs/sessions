@@ -4,6 +4,7 @@
 #USAGE flag "--context <context>" help="Initial context message to inject"
 #USAGE flag "--context-file <context_file>" help="File containing initial context message"
 #USAGE flag "--model <model>" default="claude-sonnet-4-20250514" help="Model to set (default: claude-sonnet-4-20250514)"
+#USAGE flag "--meta <meta>" var=#true help="Metadata key=value pairs (repeatable, supports dotted paths e.g. agent.name=ikma)"
 
 set -euo pipefail
 
@@ -11,6 +12,7 @@ PROJECT="${usage_project:-}"
 CONTEXT="${usage_context:-}"
 CONTEXT_FILE="${usage_context_file:-}"
 MODEL="${usage_model:-claude-sonnet-4-20250514}"
+META_RAW="${usage_meta:-}"
 
 if [ -z "$PROJECT" ]; then
   echo "Error: project path required" >&2
@@ -47,18 +49,68 @@ NOW_ISO=$(date -u +"%Y-%m-%dT%H:%M:%S.000Z")
 NOW_FILE=$(echo "$NOW_ISO" | sed 's/:/-/g')
 SESSION_FILE="${PROJECT_DIR}${NOW_FILE}_${SESSION_ID}.jsonl"
 
+# --- Build meta object from --meta flags ---
+#
+# Two formats supported:
+#   --meta "agent.name=ikma"                          (dotted key=value)
+#   --meta '{agent: {name: $ENV.GIT_AUTHOR_NAME}}'    (jq expression)
+#
+# Detected by first character: { = jq expression, otherwise dotted path.
+# Multiple --meta flags are merged left to right.
+
+META_JSON="{}"
+if [ -n "$META_RAW" ]; then
+  while IFS= read -r entry; do
+    [ -z "$entry" ] && continue
+    if [[ "$entry" == "{"* ]]; then
+      # jq expression — evaluate and merge
+      FRAGMENT=$(jq -nc "$entry" 2>&1) || {
+        echo "Error: invalid jq expression in --meta: $entry" >&2
+        echo "  jq said: $FRAGMENT" >&2
+        exit 1
+      }
+      META_JSON=$(echo "$META_JSON" "$FRAGMENT" | jq -s '.[0] * .[1]')
+    elif [[ "$entry" == *"="* ]]; then
+      # dotted key=value
+      KEY="${entry%%=*}"
+      VALUE="${entry#*=}"
+      META_JSON=$(echo "$META_JSON" | jq --arg v "$VALUE" "setpath(\"$KEY\" | split(\".\"); \$v)")
+    else
+      echo "Error: invalid --meta format '$entry'" >&2
+      echo "  Expected key=value (e.g., agent.name=ikma) or jq expression (e.g., '{purpose: \"test\"}')" >&2
+      exit 1
+    fi
+  done < <(printf '%s' "$META_RAW" | xargs printf '%s\n')
+fi
+
 # Session header
-jq -nc \
-  --arg id "$SESSION_ID" \
-  --arg ts "$NOW_ISO" \
-  --arg cwd "$PROJECT_ABS" \
-  '{
-    type: "session",
-    version: 3,
-    id: $id,
-    timestamp: $ts,
-    cwd: $cwd
-  }' > "$SESSION_FILE"
+if [ "$META_JSON" = "{}" ]; then
+  jq -nc \
+    --arg id "$SESSION_ID" \
+    --arg ts "$NOW_ISO" \
+    --arg cwd "$PROJECT_ABS" \
+    '{
+      type: "session",
+      version: 3,
+      id: $id,
+      timestamp: $ts,
+      cwd: $cwd
+    }' > "$SESSION_FILE"
+else
+  jq -nc \
+    --arg id "$SESSION_ID" \
+    --arg ts "$NOW_ISO" \
+    --arg cwd "$PROJECT_ABS" \
+    --argjson meta "$META_JSON" \
+    '{
+      type: "session",
+      version: 3,
+      id: $id,
+      timestamp: $ts,
+      cwd: $cwd,
+      meta: $meta
+    }' > "$SESSION_FILE"
+fi
 
 # Model change entry
 MC_ID=$(uuidgen | tr '[:upper:]' '[:lower:]' | cut -c1-8)
