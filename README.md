@@ -1,130 +1,204 @@
 <div align="center">
 
+<pre>
+  $ sessions new ~/project --meta agent.name=ikma --context "PR review"
+  e96bd43a
+
+  $ sessions wake e96bd43a --name ikma-scout --message "review PR #50"
+  Woke session in shell 'ikma-scout'
+
+  $ sessions read e96bd43a --last 3
+  ┃ assistant  Found 3 issues in error handling.
+  ┃ assistant  Posted review to #scout-report.
+
+  $ sessions list --filter session.meta.agent.name=ikma
+    e96bd43a   12m   3m ago   claude-sonnet-4   8
+</pre>
+
 # sessions
 
-**CLI tooling for working with pi agent session transcripts.**
+**CLI tooling for pi agent session transcripts.**
 
-List, search, inspect, read, and export your conversation history from the terminal.
+Create sessions with structured metadata, wake agents into them,
+observe transcripts in real time, and query your history.
+
+![lang: bash + python](https://img.shields.io/badge/lang-bash%20%2B%20python-4EAA25?style=flat&logo=gnubash&logoColor=white)
+[![tests: 132 passing](https://img.shields.io/badge/tests-132%20passing-brightgreen?style=flat)](test/)
+![commands: 10](https://img.shields.io/badge/commands-10-blue?style=flat)
+![license: MIT](https://img.shields.io/badge/license-MIT-blue?style=flat)
 
 </div>
 
----
+<br />
 
-## What is this?
+## Quick start
 
-[Pi](https://github.com/KnickKnackLabs/pi) stores every agent conversation as a JSONL file on disk. This project provides `mise run` commands that let you query, search, and navigate those transcripts — useful for resuming context, auditing tool usage, reviewing past sessions, or transferring sessions between machines.
+```bash
+# Install
+shiv install sessions
 
-## Install
+# List recent sessions
+sessions list
+
+# Read a transcript (prefix match on ID)
+sessions read e96bd43a
+
+# Search across all sessions
+sessions search "error handling"
+
+# Inspect forensic metadata
+sessions inspect e96bd43a
+```
+
+## Session lifecycle
+
+Sessions aren't just transcript files agents leave behind — they're managed artifacts with structure. A session starts with `new`, gets woken into with `wake`, and every event is recorded in the JSONL stream.
+
+```
+  sessions new              create session with metadata + context
+  sessions wake             wake an agent into it via shell
+    └─ shell run            persistent zmx session
+         └─ shimmer agent   identity + chat attribution
+              └─ pi         harness — processes message, exits
+  sessions read             observe the transcript
+  sessions wake (again)     re-enter with corrections
+```
+
+Each wake event is a first-class entry in the session file — timestamped, attributed, with its own metadata. A session that's been woken three times has three `wake` entries you can filter on. The full conversation history carries forward, so the agent sees everything that happened before.
+
+```bash
+# Create a session with metadata and context
+sessions new ~/project \
+  --meta agent.name=ikma \
+  --meta purpose=review \
+  --context "Background: this PR refactors the auth module"
+
+# Wake an agent into it
+sessions wake e96bd43a --name ikma-scout --message "Review PR #50"
+
+# Watch what it does
+sessions read e96bd43a --last 5
+shell status ikma-scout
+
+# Something went wrong? Wake the same session again.
+sessions wake e96bd43a --name ikma-fix --message "You missed the edge case in line 42"
+```
+
+The spawning stack uses [shell](https://github.com/KnickKnackLabs/shell) for persistent zmx sessions and `shimmer agent --headless` for identity. Sessions stays decoupled from both — it reads `$AGENT_HARNESS_HEADLESS` and doesn't know or care what the harness is.
+
+## Metadata
+
+Every session carries structured metadata in its JSONL header. Set it at creation with `--meta`, read it back with `sessions meta`. Two formats, mixable:
+
+```bash
+# Dotted paths — simple key=value, auto-nested
+sessions new ~/project \
+  --meta agent.name=ikma \
+  --meta agent.email=ikma@ricon.family \
+  --meta purpose=scout
+
+# jq expressions — full jq syntax, supports $ENV
+sessions new ~/project \
+  --meta '{agent: {name: $ENV.GIT_AUTHOR_NAME}}' \
+  --meta purpose=review
+
+# Read it back
+sessions meta e96bd43a                      # full header
+sessions meta e96bd43a --field .meta.agent  # specific field
+```
+
+Wake events carry their own metadata, separate from the session header. This records who woke the session and why — useful for tracing agent-to-agent handoffs:
+
+```bash
+sessions wake e96bd43a \
+  --name ikma-scout \
+  --meta by.agent.name=ikma \
+  --message "check the CI results"
+```
+
+## Filtering
+
+`sessions list --filter` queries across your session history using entry type, dotted paths, and optional indexing. Multiple filters are ANDed together.
+
+```bash
+# Find all sessions created by ikma
+sessions list --filter session.meta.agent.name=ikma
+
+# Find sessions where ikma was the first to wake
+sessions list --filter wake[0].meta.by.agent.name=ikma
+
+# Find sessions where brownie woke last
+sessions list --filter wake[-1].meta.by.agent.name=brownie
+
+# Combine filters (AND logic)
+sessions list \
+  --filter session.meta.agent.name=zeke \
+  --filter wake.meta.by.agent.name=brownie
+```
+
+The filter syntax is `type[index].path=value`. Type is `session`, `wake`, or any JSONL entry type. Index is optional — without it, any entry of that type can match. Negative indices count from the end.
+
+## Reading transcripts
+
+`sessions read` renders session transcripts with windowed navigation. Jump to any part of a conversation without loading the whole thing:
+
+```bash
+sessions read e96bd43a                     # full transcript
+sessions read e96bd43a --last 10           # last 10 messages
+sessions read e96bd43a --from 20 --to 30   # specific window
+sessions read e96bd43a --from -5           # last 5 messages
+sessions read e96bd43a --tools             # include tool calls
+```
+
+For existing sessions you want to work with elsewhere, `copy` duplicates a session with its full conversation history plus a fork notice. The copy gets a new ID and can be woken independently — useful for handing off context between agents.
+
+```bash
+sessions copy e96bd43a --context "continue the review" --name handoff-to-zeke
+```
+
+## Development
 
 ```bash
 git clone https://github.com/KnickKnackLabs/sessions.git
 cd sessions && mise trust && mise install
-```
-
-## Commands
-
-| Command | Description |
-| --- | --- |
-| `sessions list` | List recent sessions with ID, duration, model, and message count |
-| `sessions read <id>` | Read a session transcript with windowed navigation |
-| `sessions inspect <id>` | Forensic metadata: duration, model, tools used, context, compaction |
-| `sessions search <query>` | Full-text regex search across all session transcripts |
-| `sessions export <id>` | Export as a portable bundle (JSONL + metadata), markdown, or plain JSONL |
-| `sessions import <path>` | Import a previously exported session bundle |
-| `sessions fork <id>` | Fork a session (Claude Code format — pi port pending, see [#16](https://github.com/KnickKnackLabs/sessions/issues/16)) |
-
-## Examples
-
-**List your 10 most recent sessions:**
-
-```bash
-mise run list --limit 10
-```
-
-**Read a session transcript (prefix match on ID):**
-
-```bash
-mise run read b94b7b8a
-```
-
-**Read with windowing — jump to any part of a conversation:**
-
-```bash
-mise run read b94b7b8a --from 1 --to 10       # first 10 messages
-mise run read b94b7b8a --from 100 --to 110     # jump to middle
-mise run read b94b7b8a --last 10               # last 10 messages
-mise run read b94b7b8a --from -60 --to -50     # 50 back from end
-```
-
-**Search for "sccache" across all sessions:**
-
-```bash
-mise run search "sccache"
-```
-
-**Inspect a session's metadata:**
-
-```bash
-mise run inspect b94b7b8a
-```
-
-**Export a session as markdown:**
-
-```bash
-mise run export b94b7b8a --format markdown --output ~/exports
-```
-
-**Export and import (transfer to another machine):**
-
-```bash
-# On source machine:
-mise run export b94b7b8a --format bundle --output ~/transfer
-
-# Copy the bundle to the target machine, then:
-mise run import ~/transfer/b94b7b8a-.../
-```
-
-## How it works
-
-Pi session JSONL files live in `~/.pi/agent/sessions/`, organized by project directory. Each file contains one JSON object per line — a session header, model changes, user messages, assistant responses (with tool calls), and tool results.
-
-All commands are Python 3 scripts under `.mise/tasks/` that share a common parser (`lib/parse.py`) and Rich formatting helpers (`lib/format.py`). The `PI_DIR` env var can override the default `~/.pi` path, which the test suite uses for isolated testing.
-
-Output uses [Rich](https://github.com/Textualize/rich) for styled terminal output — tables, colored role labels, search highlighting. Designed for 80-column minimum, degrades gracefully without color.
-
-## Testing
-
-```bash
 mise run test
 ```
 
-Runs the BATS test suite (66 tests) against synthetic JSONL data in pi format. Tests are fully isolated via `PI_DIR` override — no real sessions are read or modified.
+**132 tests** across 10 suites, using [BATS 1.13.0](https://github.com/bats-core/bats-core). Tasks are bash scripts (session creation, wake, metadata) and Python scripts with [Rich](https://github.com/Textualize/rich) output (list, read, inspect, search). The JSONL parsing library is 605 lines of Python in `lib/`.
 
-## Structure
+<details>
+<summary><b>Project structure</b></summary>
 
-```text
+```
 sessions/
 ├── .mise/tasks/
-│   ├── list        # List sessions
-│   ├── read        # Read transcript (windowed navigation)
-│   ├── inspect     # Forensic metadata
-│   ├── search      # Full-text search
-│   ├── export      # Export (bundle/markdown/jsonl)
-│   ├── import      # Import bundle
-│   ├── fork        # Fork a session (Claude Code format, pi port pending)
-│   └── test        # Run BATS tests
+│   ├── new          # Create sessions with metadata + context
+│   ├── wake         # Wake agents into sessions via shell
+│   ├── meta         # Read session header metadata
+│   ├── list         # List + filter sessions (Rich tables)
+│   ├── read         # Windowed transcript reader
+│   ├── search       # Full-text regex across transcripts
+│   ├── inspect      # Forensic metadata (duration, tools, model)
+│   ├── copy         # Duplicate sessions for handoff
+│   ├── export       # Portable bundles (JSONL + metadata)
+│   └── import       # Import exported sessions
 ├── lib/
-│   ├── parse.py    # Shared JSONL parser (pi format)
-│   └── format.py   # Rich formatting helpers
-├── test/
-│   ├── helpers.bash
-│   ├── list.bats
-│   ├── read.bats
-│   ├── inspect.bats
-│   ├── search.bats
-│   ├── export.bats
-│   ├── import.bats
-│   └── fork.bats
-├── mise.toml
-└── LICENSE
+│   ├── parse.py     # JSONL parser, session model, filter engine
+│   └── format.py    # Rich formatting helpers
+└── test/
+    └── *.bats       # 132 tests
 ```
+
+</details>
+
+<br />
+
+<div align="center">
+
+---
+
+<sub>
+Every session is structured data. Query it.<br />
+<br />
+This README was generated from <a href="https://github.com/KnickKnackLabs/readme">README.tsx</a>.
+</sub></div>
