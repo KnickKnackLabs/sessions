@@ -22,8 +22,8 @@ fi
 
 # --- Dependencies ---
 
-if ! command -v zmx >/dev/null 2>&1; then
-  echo "Error: zmx is required (https://zmx.sh)" >&2
+if ! command -v shell >/dev/null 2>&1; then
+  echo "Error: shell is required (shiv install shell)" >&2
   exit 1
 fi
 
@@ -128,9 +128,9 @@ if [ -n "$MESSAGE" ]; then
   HARNESS_CMD+=("$MESSAGE")
 fi
 
-zmx run "$ZMX_NAME" "${HARNESS_CMD[@]}" 2>/dev/null
+shell run "$ZMX_NAME" "${HARNESS_CMD[@]}"
 
 echo "$FULL_SESSION_ID"
-echo "Woke session in zmx pane '$ZMX_NAME'" >&2
-echo "Attach: zmx attach $ZMX_NAME" >&2
+echo "Woke session in shell '$ZMX_NAME'" >&2
+echo "Attach: shell attach $ZMX_NAME" >&2
 echo "Monitor: sessions read ${FULL_SESSION_ID:0:8} --last 10" >&2

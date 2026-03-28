@@ -2,12 +2,27 @@
 
 load helpers
 
-setup() { setup_test_sessions; }
+setup() {
+  setup_test_sessions
+  # Isolate zmx sessions per-test to prevent bats FD hangs.
+  # zmx's forked daemon inherits bats' FDs; without isolation,
+  # teardown can't fully clean up and bats blocks forever.
+  export ZMX_DIR="/tmp/swk-$$"
+  mkdir -p "$ZMX_DIR"
+}
 teardown() {
-  # Clean up any zmx sessions from this test run
-  for name in $(zmx list --short 2>/dev/null); do
-    zmx kill "$name" 2>/dev/null || true
+  # Clean up shell sessions in our isolated dir
+  for name in $(zmx list --short 2>/dev/null || true); do
+    shell kill "$name" 2>/dev/null || true
   done
+  # Kill any lingering zmx processes
+  for pid in $(zmx list 2>/dev/null | tr '\t' '\n' | grep "^pid=" | cut -d= -f2); do
+    local children
+    children=$(pgrep -P "$pid" 2>/dev/null || true)
+    for cpid in $children; do kill "$cpid" 2>/dev/null || true; done
+    kill "$pid" 2>/dev/null || true
+  done
+  rm -rf "${ZMX_DIR:-}"
   teardown_test_sessions
 }
 
@@ -23,18 +38,18 @@ teardown() {
   echo "$output" | grep -q "not found"
 }
 
-@test "wake launches session via zmx" {
-  command -v zmx >/dev/null 2>&1 || skip "zmx not installed"
+@test "wake launches session via shell" {
+  command -v shell >/dev/null 2>&1 || skip "shell not installed"
   # Use a unique name to avoid collisions
   AGENT_HARNESS="echo" run sessions wake "${SESSION_1:0:8}" --name "wake-test-$$"
   [ "$status" -eq 0 ]
   echo "$output" | grep -q "$SESSION_1"
-  echo "$output" | grep -q "zmx pane"
-  zmx list 2>/dev/null | grep -q "wake-test-$$"
+  echo "$output" | grep -q "shell"
+  shell list 2>/dev/null | grep -q "wake-test-$$"
 }
 
 @test "wake injects context before launching" {
-  command -v zmx >/dev/null 2>&1 || skip "zmx not installed"
+  command -v shell >/dev/null 2>&1 || skip "shell not installed"
   AGENT_HARNESS="echo" run sessions wake "$SESSION_1" --context "Review PR #42" --name "wake-ctx-$$"
   [ "$status" -eq 0 ]
   src_file=$(find "$PROJECT_DIR" -name "*${SESSION_1}.jsonl")
@@ -43,7 +58,7 @@ teardown() {
 }
 
 @test "wake shows attach and monitor instructions" {
-  command -v zmx >/dev/null 2>&1 || skip "zmx not installed"
+  command -v shell >/dev/null 2>&1 || skip "shell not installed"
   AGENT_HARNESS="echo" run sessions wake "$SESSION_1" --name "wake-instr-$$"
   [ "$status" -eq 0 ]
   echo "$output" | grep -q "Attach:"
