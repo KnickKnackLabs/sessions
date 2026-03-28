@@ -126,8 +126,8 @@ if [ -z "$SHELL_NAME" ]; then
   SHELL_NAME="${FULL_SESSION_ID:0:8}"
 fi
 
-# Build the harness command: headless harness + message
-HARNESS_CMD=("${HARNESS_PARTS[@]}")
+# Build the harness command: headless harness + session file + message
+HARNESS_CMD=("${HARNESS_PARTS[@]}" "--session" "$SESSION_FILE")
 if [ -n "$MESSAGE" ]; then
   HARNESS_CMD+=("$MESSAGE")
 fi
