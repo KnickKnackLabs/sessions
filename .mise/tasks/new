@@ -1,0 +1,105 @@
+#!/usr/bin/env bash
+#MISE description="Create a new pi session with optional injected context"
+#USAGE arg "<project>" help="Project directory path (will be encoded as pi session dir)"
+#USAGE flag "--context <context>" help="Initial context message to inject"
+#USAGE flag "--context-file <context_file>" help="File containing initial context message"
+#USAGE flag "--model <model>" default="claude-sonnet-4-20250514" help="Model to set (default: claude-sonnet-4-20250514)"
+
+set -euo pipefail
+
+PROJECT="${usage_project:-}"
+CONTEXT="${usage_context:-}"
+CONTEXT_FILE="${usage_context_file:-}"
+MODEL="${usage_model:-claude-sonnet-4-20250514}"
+
+if [ -z "$PROJECT" ]; then
+  echo "Error: project path required" >&2
+  echo "Usage: sessions new <project> [--context '...'] [--context-file <path>]" >&2
+  exit 1
+fi
+
+# Resolve context from file if provided
+if [ -n "$CONTEXT_FILE" ]; then
+  if [ ! -f "$CONTEXT_FILE" ]; then
+    echo "Error: context file not found: $CONTEXT_FILE" >&2
+    exit 1
+  fi
+  CONTEXT=$(cat "$CONTEXT_FILE")
+fi
+
+command -v jq >/dev/null 2>&1 || { echo "Error: jq is required" >&2; exit 1; }
+command -v uuidgen >/dev/null 2>&1 || { echo "Error: uuidgen is required" >&2; exit 1; }
+
+PI_DIR="${PI_DIR:-$HOME/.pi}"
+SESSIONS_DIR="$PI_DIR/agent/sessions"
+
+# --- Encode project path as pi directory name ---
+# Pi uses double-dash bookends: /Users/foo/bar -> --Users-foo-bar--
+PROJECT_ABS=$(cd "$PROJECT" 2>/dev/null && pwd || echo "$PROJECT")
+ENCODED=$(echo "$PROJECT_ABS" | sed 's|/|-|g')
+PROJECT_DIR="$SESSIONS_DIR/-${ENCODED}-/"
+mkdir -p "$PROJECT_DIR"
+
+# --- Generate session ---
+
+SESSION_ID=$(uuidgen | tr '[:upper:]' '[:lower:]')
+NOW_ISO=$(date -u +"%Y-%m-%dT%H:%M:%S.000Z")
+NOW_FILE=$(echo "$NOW_ISO" | sed 's/:/-/g')
+SESSION_FILE="${PROJECT_DIR}${NOW_FILE}_${SESSION_ID}.jsonl"
+
+# Session header
+jq -nc \
+  --arg id "$SESSION_ID" \
+  --arg ts "$NOW_ISO" \
+  --arg cwd "$PROJECT_ABS" \
+  '{
+    type: "session",
+    version: 3,
+    id: $id,
+    timestamp: $ts,
+    cwd: $cwd
+  }' > "$SESSION_FILE"
+
+# Model change entry
+MC_ID=$(uuidgen | tr '[:upper:]' '[:lower:]' | cut -c1-8)
+jq -nc \
+  --arg id "$MC_ID" \
+  --arg ts "$NOW_ISO" \
+  --arg model "$MODEL" \
+  '{
+    type: "model_change",
+    id: $id,
+    parentId: null,
+    timestamp: $ts,
+    provider: "anthropic",
+    modelId: $model
+  }' >> "$SESSION_FILE"
+
+# Inject context as a user message if provided
+if [ -n "$CONTEXT" ]; then
+  MSG_ID=$(uuidgen | tr '[:upper:]' '[:lower:]' | cut -c1-8)
+  jq -nc \
+    --arg id "$MSG_ID" \
+    --arg parent_id "$MC_ID" \
+    --arg ts "$NOW_ISO" \
+    --arg content "$CONTEXT" \
+    '{
+      type: "message",
+      id: $id,
+      parentId: $parent_id,
+      timestamp: $ts,
+      message: {
+        role: "user",
+        content: [{ type: "text", text: $content }]
+      }
+    }' >> "$SESSION_FILE"
+fi
+
+# --- Output ---
+
+echo "$SESSION_ID"
+echo "Created session in $(basename "$PROJECT_DIR")" >&2
+echo "File: $(basename "$SESSION_FILE")" >&2
+if [ -n "$CONTEXT" ]; then
+  echo "Context: $(echo "$CONTEXT" | head -1 | cut -c1-80)..." >&2
+fi

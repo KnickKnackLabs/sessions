@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-#MISE description="Fork a pi session (copy with injected fork notice)"
+#MISE description="Copy a pi session (with injected copy notice)"
 #USAGE flag "--context <context>" help="Optional context for why the fork was created"
 #USAGE flag "--name <name>" help="Optional label for the fork"
 #USAGE arg "<session_id>" help="Session ID to fork (prefix match supported)"
@@ -147,6 +147,6 @@ jq -nc \
 # --- Output ---
 
 echo "$NEW_ID"
-echo "Forked $FULL_SESSION_ID → $NEW_ID" >&2
+echo "Copied $FULL_SESSION_ID → $NEW_ID" >&2
 echo "Source: $(basename "$SOURCE_FILE")" >&2
-echo "Fork:   $(basename "$NEW_FILE")" >&2
+echo "Copy:   $(basename "$NEW_FILE")" >&2
