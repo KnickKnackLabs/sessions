@@ -8,7 +8,7 @@ Create sessions with structured metadata, wake agents into them,
 observe transcripts in real time, and query your history.
 
 ![lang: bash + python](https://img.shields.io/badge/lang-bash%20%2B%20python-4EAA25?style=flat&logo=gnubash&logoColor=white)
-[![tests: 139 passing](https://img.shields.io/badge/tests-139%20passing-brightgreen?style=flat)](test/)
+[![tests: 141 passing](https://img.shields.io/badge/tests-141%20passing-brightgreen?style=flat)](test/)
 ![commands: 10](https://img.shields.io/badge/commands-10-blue?style=flat)
 ![license: MIT](https://img.shields.io/badge/license-MIT-blue?style=flat)
 
@@ -18,8 +18,8 @@ observe transcripts in real time, and query your history.
 $ sessions new review/pr-50 --cwd ~/agents/ikma/den --meta agent.name=ikma
 e96bd43a
 
-$ sessions wake review/pr-50 --name ikma-scout --message "review PR #50"
-Woke session in shell 'ikma-scout'
+$ sessions wake review/pr-50 --message "review PR #50"
+Woke session 'review/pr-50'
 
 $ sessions read review/pr-50 --last 3
 ┃ assistant  Found 3 issues in error handling.
@@ -74,14 +74,13 @@ sessions new review/pr-50 --cwd ~/agents/ikma/den \
   --context "Background: this PR refactors the auth module"
 
 # Wake an agent into it (by name)
-sessions wake review/pr-50 --name ikma-scout --message "Review PR #50"
+sessions wake review/pr-50 --message "Review PR #50"
 
 # Watch what it does
 sessions read review/pr-50 --last 5
-shell status ikma-scout
 
 # Something went wrong? Wake the same session again.
-sessions wake review/pr-50 --name ikma-fix --message "You missed the edge case in line 42"
+sessions wake review/pr-50 --message "You missed the edge case in line 42"
 ```
 
 The spawning stack uses [shell](https://github.com/KnickKnackLabs/shell) for persistent zmx sessions and `shimmer agent --headless` for identity. Sessions stays decoupled from both — it reads `$AGENT_HARNESS_HEADLESS` and doesn't know or care what the harness is.
@@ -110,8 +109,7 @@ sessions meta e96bd43a --field .meta.agent   # by ID prefix
 Wake events carry their own metadata, separate from the session header. This records who woke the session and why — useful for tracing agent-to-agent handoffs:
 
 ```bash
-sessions wake e96bd43a \
-  --name ikma-scout \
+sessions wake review/pr-50 \
   --meta by.agent.name=ikma \
   --message "check the CI results"
 ```
@@ -153,7 +151,7 @@ sessions read e96bd43a --tools             # include tool calls
 For existing sessions you want to work with elsewhere, `copy` duplicates a session with its full conversation history plus a fork notice. The copy gets a new ID and can be woken independently — useful for handing off context between agents.
 
 ```bash
-sessions copy e96bd43a --context "continue the review" --name handoff-to-zeke
+sessions copy e96bd43a --context "continue the review"
 ```
 
 ## Development
@@ -164,7 +162,7 @@ cd sessions && mise trust && mise install
 mise run test
 ```
 
-**139 tests** across 10 suites, using [BATS 1.13.0](https://github.com/bats-core/bats-core). Tasks are bash scripts (session creation, wake, metadata) and Python scripts with [Rich](https://github.com/Textualize/rich) output (list, read, inspect, search). The JSONL parsing library is 634 lines of Python in `lib/`.
+**141 tests** across 10 suites, using [BATS 1.13.0](https://github.com/bats-core/bats-core). Tasks are bash scripts (session creation, wake, metadata) and Python scripts with [Rich](https://github.com/Textualize/rich) output (list, read, inspect, search). The JSONL parsing library is 634 lines of Python in `lib/`.
 
 <details>
 <summary><b>Project structure</b></summary>
@@ -186,7 +184,7 @@ sessions/
 │   ├── parse.py     # JSONL parser, session model, filter engine
 │   └── format.py    # Rich formatting helpers
 └── test/
-    └── *.bats       # 139 tests
+    └── *.bats       # 141 tests
 ```
 
 </details>

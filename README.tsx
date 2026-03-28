@@ -49,8 +49,8 @@ const lifecycle = [
   "$ sessions new review/pr-50 --cwd ~/agents/ikma/den --meta agent.name=ikma",
   "e96bd43a",
   "",
-  "$ sessions wake review/pr-50 --name ikma-scout --message \"review PR #50\"",
-  "Woke session in shell 'ikma-scout'",
+  "$ sessions wake review/pr-50 --message \"review PR #50\"",
+  "Woke session 'review/pr-50'",
   "",
   "$ sessions read review/pr-50 --last 3",
   "┃ assistant  Found 3 issues in error handling.",
@@ -162,14 +162,13 @@ sessions new review/pr-50 --cwd ~/agents/ikma/den \\
   --context "Background: this PR refactors the auth module"
 
 # Wake an agent into it (by name)
-sessions wake review/pr-50 --name ikma-scout --message "Review PR #50"
+sessions wake review/pr-50 --message "Review PR #50"
 
 # Watch what it does
 sessions read review/pr-50 --last 5
-shell status ikma-scout
 
 # Something went wrong? Wake the same session again.
-sessions wake review/pr-50 --name ikma-fix --message "You missed the edge case in line 42"`}</CodeBlock>
+sessions wake review/pr-50 --message "You missed the edge case in line 42"`}</CodeBlock>
 
       <Paragraph>
         {"The spawning stack uses "}
@@ -210,8 +209,7 @@ sessions meta e96bd43a --field .meta.agent   # by ID prefix`}</CodeBlock>
         {"Wake events carry their own metadata, separate from the session header. This records who woke the session and why — useful for tracing agent-to-agent handoffs:"}
       </Paragraph>
 
-      <CodeBlock lang="bash">{`sessions wake e96bd43a \\
-  --name ikma-scout \\
+      <CodeBlock lang="bash">{`sessions wake review/pr-50 \\
   --meta by.agent.name=ikma \\
   --message "check the CI results"`}</CodeBlock>
     </Section>
@@ -253,7 +251,7 @@ sessions read e96bd43a --tools             # include tool calls`}</CodeBlock>
         {" duplicates a session with its full conversation history plus a fork notice. The copy gets a new ID and can be woken independently — useful for handing off context between agents."}
       </Paragraph>
 
-      <CodeBlock lang="bash">{`sessions copy e96bd43a --context "continue the review" --name handoff-to-zeke`}</CodeBlock>
+      <CodeBlock lang="bash">{`sessions copy e96bd43a --context "continue the review"`}</CodeBlock>
     </Section>
 
     <Section title="Development">

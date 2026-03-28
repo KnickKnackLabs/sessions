@@ -3,7 +3,6 @@
 #USAGE arg "<session_id>" help="Session ID or name to wake into"
 #USAGE flag "--context <context>" help="Inject a context message into the session file before launching"
 #USAGE flag "--context-file <context_file>" help="File containing context message to inject"
-#USAGE flag "--name <name>" help="Shell session name — becomes CHAT_IDENTITY (default: session ID prefix)"
 #USAGE flag "--message <message>" help="Message to pass to the agent"
 #USAGE flag "--meta <meta>" var=#true help="Metadata for the wake event (repeatable, dotted paths or jq expressions)"
 
@@ -13,12 +12,11 @@ SESSION_ID="${usage_session_id:-}"
 CONTEXT="${usage_context:-}"
 WAKE_META_RAW="${usage_meta:-}"
 CONTEXT_FILE="${usage_context_file:-}"
-SHELL_NAME="${usage_name:-}"
 MESSAGE="${usage_message:-}"
 
 if [ -z "$SESSION_ID" ]; then
   echo "Error: session ID or name required" >&2
-  echo "Usage: sessions wake <session_id> [--name <shell-name>] [--message '...']" >&2
+  echo "Usage: sessions wake <name-or-id> [--message '...']" >&2
   exit 1
 fi
 
@@ -41,7 +39,7 @@ if [ -z "$HARNESS_HEADLESS" ]; then
 fi
 read -ra HARNESS_PARTS <<< "$HARNESS_HEADLESS"
 
-# --- Find session file (for context injection and validation) ---
+# --- Find session file ---
 
 source "$MISE_CONFIG_ROOT/lib/find.sh"
 SESSION_FILE=$(find_session_file "$SESSION_ID") || exit 1
@@ -49,6 +47,19 @@ SESSION_FILE=$(find_session_file "$SESSION_ID") || exit 1
 FULL_SESSION_ID=$(head -1 "$SESSION_FILE" | jq -r '.id // empty')
 if [ -z "$FULL_SESSION_ID" ]; then
   FULL_SESSION_ID="$SESSION_ID"
+fi
+
+# --- Derive shell name from session name or ID ---
+# The session name is the user-facing identifier; the shell name is
+# an implementation detail. Derive it automatically so the user never
+# has to think about the shell layer.
+
+SESSION_NAME=$(head -1 "$SESSION_FILE" | jq -r '.name // empty')
+if [ -n "$SESSION_NAME" ]; then
+  # Translate characters that zmx can't handle (slashes → dashes)
+  SHELL_NAME=$(echo "$SESSION_NAME" | sed 's|/|-|g; s|[^a-zA-Z0-9._-]|-|g')
+else
+  SHELL_NAME="${FULL_SESSION_ID:0:8}"
 fi
 
 # --- Resolve context from file ---
@@ -66,11 +77,6 @@ fi
 LAST_ID=$(tail -1 "$SESSION_FILE" | jq -r '.id // empty')
 WAKE_ID=$(uuidgen | tr '[:upper:]' '[:lower:]' | cut -c1-8)
 NOW_ISO=$(date -u +"%Y-%m-%dT%H:%M:%S.000Z")
-
-# Determine shell name early (needed for wake entry)
-if [ -z "$SHELL_NAME" ]; then
-  SHELL_NAME="${FULL_SESSION_ID:0:8}"
-fi
 
 # Build wake meta from --meta flags (same parsing as sessions new)
 WAKE_META="{}"
@@ -165,16 +171,17 @@ fi
 
 # --- Launch via shell ---
 
-# Build the harness command: cd to session's project dir, then run headless harness
 HARNESS_CMD=("${HARNESS_PARTS[@]}" "--session" "$SESSION_FILE")
 if [ -n "$MESSAGE" ]; then
   HARNESS_CMD+=("$MESSAGE")
 fi
 
-# Launch from the session's working directory so the agent gets the right CLAUDE.md
 shell run "$SHELL_NAME" --cwd "$SESSION_CWD" "${HARNESS_CMD[@]}"
 
 echo "$FULL_SESSION_ID"
-echo "Woke session in shell '$SHELL_NAME'" >&2
+if [ -n "$SESSION_NAME" ]; then
+  echo "Woke session '$SESSION_NAME'" >&2
+else
+  echo "Woke session ${FULL_SESSION_ID:0:8}" >&2
+fi
 echo "Monitor: sessions read ${FULL_SESSION_ID:0:8} --last 10" >&2
-echo "Status: shell status $SHELL_NAME" >&2

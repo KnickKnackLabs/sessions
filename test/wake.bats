@@ -40,27 +40,50 @@ teardown() {
 
 @test "wake launches session via shell" {
   command -v shell >/dev/null 2>&1 || skip "shell not installed"
-  # Use a unique name to avoid collisions
-  AGENT_HARNESS_HEADLESS="echo" run sessions wake "${SESSION_1:0:8}" --name "wake-test-$$"
+  # Session 1 has no name — shell name derived from UUID prefix
+  AGENT_HARNESS_HEADLESS="echo" run sessions wake "${SESSION_1:0:8}"
   [ "$status" -eq 0 ]
   echo "$output" | grep -q "$SESSION_1"
-  echo "$output" | grep -q "shell"
-  shell list 2>/dev/null | grep -q "wake-test-$$"
+  # Shell session should be named after the UUID prefix
+  shell list 2>/dev/null | grep -q "${SESSION_1:0:8}"
+}
+
+@test "wake derives shell name from session name" {
+  command -v shell >/dev/null 2>&1 || skip "shell not installed"
+  # Create a named session
+  run sessions new "wake-name-test-$$"
+  [ "$status" -eq 0 ]
+  local new_id
+  new_id=$(echo "$output" | head -1)
+
+  AGENT_HARNESS_HEADLESS="echo" run sessions wake "wake-name-test-$$"
+  [ "$status" -eq 0 ]
+  # Shell session should be named after the session name
+  shell list 2>/dev/null | grep -q "wake-name-test-$$"
+}
+
+@test "wake translates slashes in session name for shell" {
+  command -v shell >/dev/null 2>&1 || skip "shell not installed"
+  run sessions new "feature/test-$$"
+  [ "$status" -eq 0 ]
+
+  AGENT_HARNESS_HEADLESS="echo" run sessions wake "feature/test-$$"
+  [ "$status" -eq 0 ]
+  # Slashes become dashes in shell name
+  shell list 2>/dev/null | grep -q "feature-test-$$"
 }
 
 @test "wake injects context before launching" {
   command -v shell >/dev/null 2>&1 || skip "shell not installed"
-  AGENT_HARNESS_HEADLESS="echo" run sessions wake "$SESSION_1" --context "Review PR #42" --name "wake-ctx-$$"
+  AGENT_HARNESS_HEADLESS="echo" run sessions wake "$SESSION_1" --context "Review PR #42"
   [ "$status" -eq 0 ]
   src_file=$(find "$PROJECT_DIR" -name "*${SESSION_1}.jsonl")
-  # Context should be the second-to-last entry (last is whatever zmx injected timing-wise)
   grep -q "PR #42" "$src_file"
 }
 
-@test "wake shows attach and monitor instructions" {
+@test "wake shows monitor instructions" {
   command -v shell >/dev/null 2>&1 || skip "shell not installed"
-  AGENT_HARNESS_HEADLESS="echo" run sessions wake "$SESSION_1" --name "wake-instr-$$"
+  AGENT_HARNESS_HEADLESS="echo" run sessions wake "$SESSION_1"
   [ "$status" -eq 0 ]
   echo "$output" | grep -q "Monitor:"
-  echo "$output" | grep -q "Status:"
 }
