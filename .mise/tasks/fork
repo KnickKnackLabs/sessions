@@ -1,91 +1,118 @@
 #!/usr/bin/env bash
-#MISE description="Fork a Claude Code session"
+#MISE description="Fork a pi session (copy with injected fork notice)"
 #USAGE flag "--context <context>" help="Optional context for why the fork was created"
 #USAGE flag "--name <name>" help="Optional label for the fork"
-#USAGE arg "[session_id]" help="Session ID to fork (default: CLAUDE_CODE_SESSION_ID env var)"
+#USAGE arg "<session_id>" help="Session ID to fork (prefix match supported)"
 
 set -euo pipefail
 shopt -s nullglob
 
-# --- Resolve session ID ---
+# --- Resolve session ID and find source file ---
 
-SESSION_ID="${usage_session_id:-${CLAUDE_CODE_SESSION_ID:-}}"
+SESSION_ID="${usage_session_id:-}"
 
 if [ -z "${SESSION_ID:-}" ]; then
-  echo "Error: No session ID provided and \$CLAUDE_CODE_SESSION_ID is not set" >&2
+  echo "Error: No session ID provided" >&2
+  echo "Usage: sessions fork <session_id> [--context '...'] [--name '...']" >&2
   exit 1
 fi
 
-CLAUDE_DIR="${CLAUDE_DIR:-$HOME/.claude}"
-PROJECTS_DIR="$CLAUDE_DIR/projects"
-
-# --- Validation ---
+PI_DIR="${PI_DIR:-$HOME/.pi}"
+SESSIONS_DIR="$PI_DIR/agent/sessions"
 
 command -v jq >/dev/null 2>&1 || { echo "Error: jq is required" >&2; exit 1; }
 command -v uuidgen >/dev/null 2>&1 || { echo "Error: uuidgen is required" >&2; exit 1; }
 
-if ! [[ "$SESSION_ID" =~ ^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$ ]]; then
-  echo "Error: Invalid session ID format (expected UUID)" >&2
+if [ ! -d "$SESSIONS_DIR" ]; then
+  echo "Error: No pi sessions directory at $SESSIONS_DIR" >&2
   exit 1
 fi
 
-if [ ! -d "$PROJECTS_DIR" ]; then
-  echo "Error: No Claude projects directory at $PROJECTS_DIR" >&2
-  exit 1
-fi
-
-# --- Discovery ---
+# --- Discovery (prefix match on UUID part of filename) ---
 
 MATCHES=()
-for PROJECT in "$PROJECTS_DIR"/*/; do
-  if [ -f "${PROJECT}${SESSION_ID}.jsonl" ]; then
-    MATCHES+=("$PROJECT")
-  fi
+SOURCE_FILE=""
+for PROJECT in "$SESSIONS_DIR"/*/; do
+  for JSONL in "$PROJECT"*.jsonl; do
+    BASENAME=$(basename "$JSONL" .jsonl)
+    # Pi filenames: <timestamp>_<uuid> — extract UUID part
+    if [[ "$BASENAME" == *_* ]]; then
+      UUID_PART="${BASENAME##*_}"
+    else
+      UUID_PART="$BASENAME"
+    fi
+    if [[ "$UUID_PART" == "$SESSION_ID"* ]]; then
+      MATCHES+=("$JSONL")
+    fi
+  done
 done
 
 case ${#MATCHES[@]} in
   0)
-    echo "Error: Session $SESSION_ID not found" >&2
+    echo "Error: No session matching '$SESSION_ID'" >&2
     exit 1
     ;;
   1)
-    PROJECT_DIR="${MATCHES[0]}"
+    SOURCE_FILE="${MATCHES[0]}"
     ;;
   *)
-    echo "Error: Session found in multiple projects (ambiguous):" >&2
+    echo "Error: Ambiguous session ID '$SESSION_ID', matches:" >&2
     printf '  %s\n' "${MATCHES[@]}" >&2
     exit 1
     ;;
 esac
 
+PROJECT_DIR=$(dirname "$SOURCE_FILE")/
+
+# Extract the full session ID from the session header entry
+FULL_SESSION_ID=$(head -1 "$SOURCE_FILE" | jq -r '.id // empty')
+if [ -z "$FULL_SESSION_ID" ]; then
+  echo "Error: Could not read session ID from $SOURCE_FILE" >&2
+  exit 1
+fi
+
 # --- Fork ---
 
 NEW_ID=$(uuidgen | tr '[:upper:]' '[:lower:]')
+NOW_ISO=$(date -u +"%Y-%m-%dT%H:%M:%S.000Z")
+# Pi filename format: <timestamp>_<uuid>.jsonl (timestamp with dashes instead of colons)
+NOW_FILE=$(echo "$NOW_ISO" | sed 's/:/-/g')
+NEW_FILE="${PROJECT_DIR}${NOW_FILE}_${NEW_ID}.jsonl"
 
 # Clean up on failure
 cleanup() {
-  rm -f "${PROJECT_DIR}${NEW_ID}.jsonl"
-  rm -rf "${PROJECT_DIR}${NEW_ID}"
+  rm -f "$NEW_FILE"
 }
 trap cleanup ERR
 
 # Copy session JSONL
-cp -a "${PROJECT_DIR}${SESSION_ID}.jsonl" "${PROJECT_DIR}${NEW_ID}.jsonl"
+cp -a "$SOURCE_FILE" "$NEW_FILE"
 
-# Copy session directory if it exists (subagents, tool-results)
-if [ -d "${PROJECT_DIR}${SESSION_ID}" ]; then
-  cp -a "${PROJECT_DIR}${SESSION_ID}" "${PROJECT_DIR}${NEW_ID}"
-fi
+# --- Rewrite session header with new ID ---
+
+# Replace the first line (session header) with updated id and timestamp
+HEADER=$(head -1 "$NEW_FILE" | jq -c \
+  --arg id "$NEW_ID" \
+  --arg ts "$NOW_ISO" \
+  '.id = $id | .timestamp = $ts')
+
+# Write new header + rest of file
+{
+  echo "$HEADER"
+  tail -n +2 "$NEW_FILE"
+} > "${NEW_FILE}.tmp"
+mv "${NEW_FILE}.tmp" "$NEW_FILE"
 
 # --- Inject fork notification ---
 
-LAST_UUID=$(tail -1 "${PROJECT_DIR}${NEW_ID}.jsonl" | jq -r '.uuid')
-NOTICE_UUID=$(uuidgen | tr '[:upper:]' '[:lower:]')
-NOW_ISO=$(date -u +"%Y-%m-%dT%H:%M:%S.000Z")
+# Get the last entry's id for parentId linking
+LAST_ID=$(tail -1 "$NEW_FILE" | jq -r '.id // empty')
 
-# Build the notice content with real newlines
+NOTICE_ID=$(uuidgen | tr '[:upper:]' '[:lower:]' | cut -c1-8)
+
+# Build the notice content
 CONTENT="[Session Fork Notice]
-This session was forked from ${SESSION_ID} at ${NOW_ISO}."
+This session was forked from ${FULL_SESSION_ID} at ${NOW_ISO}."
 if [ -n "${usage_name:-}" ]; then
   CONTENT="${CONTENT}
 Name: ${usage_name}"
@@ -97,63 +124,29 @@ fi
 CONTENT="${CONTENT}
 The original session continues independently."
 
-# Construct and append the fork notification record
+# Append fork notification in pi message format
 jq -nc \
-  --arg parent_uuid "$LAST_UUID" \
-  --arg uuid "$NOTICE_UUID" \
-  --arg session_id "$NEW_ID" \
-  --arg source_session_id "$SESSION_ID" \
+  --arg id "$NOTICE_ID" \
+  --arg parent_id "$LAST_ID" \
   --arg timestamp "$NOW_ISO" \
   --arg content "$CONTENT" \
+  --arg source_session "$FULL_SESSION_ID" \
   '{
-    type: "user",
-    userType: "external",
-    isSidechain: false,
-    isForkNotification: true,
-    sourceSessionId: $source_session_id,
+    type: "message",
+    id: $id,
+    parentId: $parent_id,
+    timestamp: $timestamp,
     message: {
       role: "user",
-      content: $content
-    },
-    parentUuid: $parent_uuid,
-    uuid: $uuid,
-    sessionId: $session_id,
-    timestamp: $timestamp,
-    version: "sessions-fork-1.0"
-  }' >> "${PROJECT_DIR}${NEW_ID}.jsonl"
-
-# --- Update sessions index ---
-# Disable ERR trap — the fork is valid without an index entry
-trap - ERR
-
-INDEX_FILE="${PROJECT_DIR}sessions-index.json"
-if [ -f "$INDEX_FILE" ]; then
-  SOURCE_ENTRY=$(jq --arg sid "$SESSION_ID" '.entries[] | select(.sessionId == $sid)' "$INDEX_FILE")
-  if [ -n "$SOURCE_ENTRY" ]; then
-    NOW_MTIME="$(date +%s)000"
-    NEW_PATH="${PROJECT_DIR}${NEW_ID}.jsonl"
-
-    jq --arg new_id "$NEW_ID" \
-       --arg new_path "$NEW_PATH" \
-       --arg now "$NOW_ISO" \
-       --argjson mtime "$NOW_MTIME" \
-       --arg orig_id "$SESSION_ID" \
-       '(.entries[] | select(.sessionId == $orig_id)) as $src |
-        .entries += [$src + {
-          sessionId: $new_id,
-          fullPath: $new_path,
-          fileMtime: $mtime,
-          created: $now,
-          modified: $now
-        }]' "$INDEX_FILE" > "${INDEX_FILE}.tmp" \
-      && mv "${INDEX_FILE}.tmp" "$INDEX_FILE"
-  else
-    echo "Note: Source session not in index; fork may not appear in session picker" >&2
-  fi
-fi
+      content: [{ type: "text", text: $content }],
+      isForkNotification: true,
+      sourceSessionId: $source_session
+    }
+  }' >> "$NEW_FILE"
 
 # --- Output ---
 
 echo "$NEW_ID"
-echo "Forked $SESSION_ID → $NEW_ID" >&2
-echo "Resume with: claude --resume $NEW_ID" >&2
+echo "Forked $FULL_SESSION_ID → $NEW_ID" >&2
+echo "Source: $(basename "$SOURCE_FILE")" >&2
+echo "Fork:   $(basename "$NEW_FILE")" >&2

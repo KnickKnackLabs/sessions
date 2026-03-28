@@ -1,309 +1,131 @@
 #!/usr/bin/env bats
 
-# Path to the fork script
-FORK_SCRIPT="$(cd "$BATS_TEST_DIRNAME/.." && pwd)/.mise/tasks/fork"
-
-# Fixed UUIDs for reproducible tests
-SOURCE_SID="aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
-LAST_RECORD_UUID="11111111-2222-3333-4444-555555555555"
+load helpers
 
 setup() {
-  export CLAUDE_DIR="$BATS_TMPDIR/claude-test-$$"
-  export PROJECT_DIR="$CLAUDE_DIR/projects/-test-project/"
-  mkdir -p "$PROJECT_DIR"
-
-  # Create minimal session JSONL (3 records with valid UUID chain)
-  cat > "${PROJECT_DIR}${SOURCE_SID}.jsonl" <<JSONL
-{"type":"system","subtype":"init","uuid":"00000000-0000-0000-0000-000000000001","parentUuid":null,"sessionId":"${SOURCE_SID}","timestamp":"2026-03-14T00:00:00.000Z","tools":["Read","Edit","Bash"]}
-{"type":"user","userType":"external","isSidechain":false,"message":{"role":"user","content":"hello"},"uuid":"00000000-0000-0000-0000-000000000002","parentUuid":"00000000-0000-0000-0000-000000000001","sessionId":"${SOURCE_SID}","timestamp":"2026-03-14T00:00:01.000Z"}
-{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"hi"}]},"uuid":"${LAST_RECORD_UUID}","parentUuid":"00000000-0000-0000-0000-000000000002","sessionId":"${SOURCE_SID}","timestamp":"2026-03-14T00:00:02.000Z"}
-JSONL
-
-  # Create sessions index with the source session
-  cat > "${PROJECT_DIR}sessions-index.json" <<JSON
-{"entries":[{"sessionId":"${SOURCE_SID}","fullPath":"${PROJECT_DIR}${SOURCE_SID}.jsonl","fileMtime":1710374400000,"created":"2026-03-14T00:00:00.000Z","modified":"2026-03-14T00:00:02.000Z","slug":"test-session"}]}
-JSON
-
-  # Unset CLAUDE_CODE_SESSION_ID to avoid leaking from outer env
-  unset CLAUDE_CODE_SESSION_ID
+  setup_test_sessions
 }
 
 teardown() {
-  rm -rf "$CLAUDE_DIR"
+  teardown_test_sessions
 }
 
-# --- Helper to run fork with usage variables pre-set ---
-# The fork script expects mise/usage to set these env vars.
-# In tests we set them directly.
-run_fork() {
-  local session_id="${1:-}"
-  local context="${2:-}"
-  local name="${3:-}"
-
-  export usage_session_id="$session_id"
-  export usage_context="$context"
-  export usage_name="$name"
-
-  run bash "$FORK_SCRIPT"
-}
-
-run_fork_with_env() {
-  local env_sid="$1"
-  local context="${2:-}"
-  local name="${3:-}"
-
-  export CLAUDE_CODE_SESSION_ID="$env_sid"
-  export usage_session_id=""
-  export usage_context="$context"
-  export usage_name="$name"
-
-  run bash "$FORK_SCRIPT"
-}
-
-# --- Core functionality ---
-
-@test "fork creates new JSONL file" {
-  run_fork "$SOURCE_SID"
+@test "fork creates a new session file" {
+  run sessions fork "$SESSION_1"
   [ "$status" -eq 0 ]
-
-  # stdout is the new session ID
-  NEW_ID="$(echo "$output" | head -1)"
-  [ -f "${PROJECT_DIR}${NEW_ID}.jsonl" ]
+  # First line of output is the new session ID
+  new_id=$(echo "$output" | head -1)
+  # Should exist as a file in the project dir
+  found=$(find "$PROJECT_DIR" -name "*${new_id}.jsonl" | wc -l | tr -d ' ')
+  [ "$found" -eq 1 ]
 }
 
-@test "fork creates new session directory if source has one" {
-  # Create a session directory with some content
-  mkdir -p "${PROJECT_DIR}${SOURCE_SID}/subagents"
-  echo "test" > "${PROJECT_DIR}${SOURCE_SID}/subagents/data.txt"
-
-  run_fork "$SOURCE_SID"
+@test "fork output includes new session ID" {
+  run sessions fork "$SESSION_1"
   [ "$status" -eq 0 ]
-
-  NEW_ID="$(echo "$output" | head -1)"
-  [ -d "${PROJECT_DIR}${NEW_ID}" ]
-  [ -f "${PROJECT_DIR}${NEW_ID}/subagents/data.txt" ]
+  # First line is a UUID
+  echo "$output" | head -1 | grep -qE '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
 }
 
-@test "fork does not create session directory if source has none" {
-  run_fork "$SOURCE_SID"
+@test "fork shows source and fork filenames" {
+  run sessions fork "$SESSION_1"
   [ "$status" -eq 0 ]
-
-  NEW_ID="$(echo "$output" | head -1)"
-  [ ! -d "${PROJECT_DIR}${NEW_ID}" ]
+  echo "$output" | grep -q "Forked"
+  echo "$output" | grep -q "Source:"
+  echo "$output" | grep -q "Fork:"
 }
 
-@test "fork outputs new session ID to stdout" {
-  run_fork "$SOURCE_SID"
+@test "fork preserves original session content" {
+  run sessions fork "$SESSION_1"
   [ "$status" -eq 0 ]
-
-  NEW_ID="$(echo "$output" | head -1)"
-  [[ "$NEW_ID" =~ ^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$ ]]
+  new_id=$(echo "$output" | head -1)
+  new_file=$(find "$PROJECT_DIR" -name "*${new_id}.jsonl")
+  # Should contain the original user message
+  grep -q "hello, can you help me" "$new_file"
 }
 
-# --- Fork notification injection ---
-
-@test "fork injects fork notification as last record" {
-  run_fork "$SOURCE_SID"
+@test "fork injects fork notification as last entry" {
+  run sessions fork "$SESSION_1"
   [ "$status" -eq 0 ]
-
-  NEW_ID="$(echo "$output" | head -1)"
-  LAST_TYPE=$(tail -1 "${PROJECT_DIR}${NEW_ID}.jsonl" | jq -r '.type')
-  [ "$LAST_TYPE" = "user" ]
-
-  IS_FORK=$(tail -1 "${PROJECT_DIR}${NEW_ID}.jsonl" | jq -r '.isForkNotification')
-  [ "$IS_FORK" = "true" ]
+  new_id=$(echo "$output" | head -1)
+  new_file=$(find "$PROJECT_DIR" -name "*${new_id}.jsonl")
+  # Last entry should be the fork notification
+  last_entry=$(tail -1 "$new_file")
+  echo "$last_entry" | jq -e '.message.isForkNotification == true'
+  echo "$last_entry" | jq -e '.message.sourceSessionId' | grep -q "$SESSION_1"
 }
 
-@test "fork notification has correct parentUuid chain" {
-  run_fork "$SOURCE_SID"
+@test "fork updates session header with new ID" {
+  run sessions fork "$SESSION_1"
   [ "$status" -eq 0 ]
-
-  NEW_ID="$(echo "$output" | head -1)"
-  PARENT=$(tail -1 "${PROJECT_DIR}${NEW_ID}.jsonl" | jq -r '.parentUuid')
-  [ "$PARENT" = "$LAST_RECORD_UUID" ]
+  new_id=$(echo "$output" | head -1)
+  new_file=$(find "$PROJECT_DIR" -name "*${new_id}.jsonl")
+  # First entry should have the new session ID
+  header_id=$(head -1 "$new_file" | jq -r '.id')
+  [ "$header_id" = "$new_id" ]
 }
 
-@test "fork notification contains sourceSessionId" {
-  run_fork "$SOURCE_SID"
+@test "fork notification includes context when provided" {
+  run sessions fork "$SESSION_1" --context "testing the pooper integration"
   [ "$status" -eq 0 ]
-
-  NEW_ID="$(echo "$output" | head -1)"
-  SOURCE=$(tail -1 "${PROJECT_DIR}${NEW_ID}.jsonl" | jq -r '.sourceSessionId')
-  [ "$SOURCE" = "$SOURCE_SID" ]
+  new_id=$(echo "$output" | head -1)
+  new_file=$(find "$PROJECT_DIR" -name "*${new_id}.jsonl")
+  tail -1 "$new_file" | jq -r '.message.content[0].text' | grep -q "testing the pooper integration"
 }
 
-@test "fork notification has isForkNotification: true" {
-  run_fork "$SOURCE_SID"
+@test "fork notification includes name when provided" {
+  run sessions fork "$SESSION_1" --name "pooper-okwai"
   [ "$status" -eq 0 ]
-
-  NEW_ID="$(echo "$output" | head -1)"
-  FLAG=$(tail -1 "${PROJECT_DIR}${NEW_ID}.jsonl" | jq -r '.isForkNotification')
-  [ "$FLAG" = "true" ]
+  new_id=$(echo "$output" | head -1)
+  new_file=$(find "$PROJECT_DIR" -name "*${new_id}.jsonl")
+  tail -1 "$new_file" | jq -r '.message.content[0].text' | grep -q "pooper-okwai"
 }
 
-@test "fork notification sessionId is the NEW session ID" {
-  run_fork "$SOURCE_SID"
+@test "fork does not modify original session" {
+  # Count lines in original before fork
+  src_file=$(find "$PROJECT_DIR" -name "*${SESSION_1}.jsonl")
+  before=$(wc -l < "$src_file")
+  run sessions fork "$SESSION_1"
   [ "$status" -eq 0 ]
-
-  NEW_ID="$(echo "$output" | head -1)"
-  NOTICE_SID=$(tail -1 "${PROJECT_DIR}${NEW_ID}.jsonl" | jq -r '.sessionId')
-  [ "$NOTICE_SID" = "$NEW_ID" ]
+  after=$(wc -l < "$src_file")
+  [ "$before" -eq "$after" ]
 }
 
-@test "fork notification has version marker" {
-  run_fork "$SOURCE_SID"
+@test "fork notification has valid parentId chain" {
+  run sessions fork "$SESSION_1"
   [ "$status" -eq 0 ]
-
-  NEW_ID="$(echo "$output" | head -1)"
-  VERSION=$(tail -1 "${PROJECT_DIR}${NEW_ID}.jsonl" | jq -r '.version')
-  [ "$VERSION" = "sessions-fork-1.0" ]
+  new_id=$(echo "$output" | head -1)
+  new_file=$(find "$PROJECT_DIR" -name "*${new_id}.jsonl")
+  # The fork notification's parentId should match the previous entry's id
+  second_to_last_id=$(tail -2 "$new_file" | head -1 | jq -r '.id')
+  fork_parent_id=$(tail -1 "$new_file" | jq -r '.parentId')
+  [ "$second_to_last_id" = "$fork_parent_id" ]
 }
 
-@test "fork notification content mentions source session ID" {
-  run_fork "$SOURCE_SID"
+@test "fork supports prefix match on session ID" {
+  run sessions fork "${SESSION_1:0:8}"
   [ "$status" -eq 0 ]
-
-  NEW_ID="$(echo "$output" | head -1)"
-  CONTENT=$(tail -1 "${PROJECT_DIR}${NEW_ID}.jsonl" | jq -r '.message.content')
-  echo "$CONTENT" | grep -q "$SOURCE_SID"
+  echo "$output" | grep -q "Forked"
 }
 
-# --- Flags ---
+@test "fork errors on nonexistent session" {
+  run sessions fork "deadbeef-dead-beef-dead-beefdeadbeef"
+  [ "$status" -eq 1 ]
+  echo "$output" | grep -qi "no session"
+}
 
-@test "fork notification includes --context when provided" {
-  run_fork "$SOURCE_SID" "exploring auth tangent"
+@test "fork errors with no session ID" {
+  run sessions fork
+  [ "$status" -eq 1 ]
+}
+
+@test "fork creates file with pi naming convention" {
+  run sessions fork "$SESSION_1"
   [ "$status" -eq 0 ]
-
-  NEW_ID="$(echo "$output" | head -1)"
-  CONTENT=$(tail -1 "${PROJECT_DIR}${NEW_ID}.jsonl" | jq -r '.message.content')
-  echo "$CONTENT" | grep -q "Context: exploring auth tangent"
-}
-
-@test "fork notification includes --name when provided" {
-  run_fork "$SOURCE_SID" "" "rho-beta"
-  [ "$status" -eq 0 ]
-
-  NEW_ID="$(echo "$output" | head -1)"
-  CONTENT=$(tail -1 "${PROJECT_DIR}${NEW_ID}.jsonl" | jq -r '.message.content')
-  echo "$CONTENT" | grep -q "Name: rho-beta"
-}
-
-@test "fork notification omits name/context lines when not provided" {
-  run_fork "$SOURCE_SID"
-  [ "$status" -eq 0 ]
-
-  NEW_ID="$(echo "$output" | head -1)"
-  CONTENT=$(tail -1 "${PROJECT_DIR}${NEW_ID}.jsonl" | jq -r '.message.content')
-  ! echo "$CONTENT" | grep -q "Name:"
-  ! echo "$CONTENT" | grep -q "Context:"
-}
-
-# --- Sessions index ---
-
-@test "fork updates sessions-index.json" {
-  run_fork "$SOURCE_SID"
-  [ "$status" -eq 0 ]
-
-  NEW_ID="$(echo "$output" | head -1)"
-  ENTRY_COUNT=$(jq '.entries | length' "${PROJECT_DIR}sessions-index.json")
-  [ "$ENTRY_COUNT" -eq 2 ]
-
-  # New entry has the fork's session ID
-  jq -e --arg id "$NEW_ID" '.entries[] | select(.sessionId == $id)' "${PROJECT_DIR}sessions-index.json" >/dev/null
-}
-
-@test "fork preserves source slug in index entry" {
-  run_fork "$SOURCE_SID"
-  [ "$status" -eq 0 ]
-
-  NEW_ID="$(echo "$output" | head -1)"
-  SLUG=$(jq -r --arg id "$NEW_ID" '.entries[] | select(.sessionId == $id) | .slug' "${PROJECT_DIR}sessions-index.json")
-  [ "$SLUG" = "test-session" ]
-}
-
-@test "fork handles missing sessions index gracefully" {
-  rm "${PROJECT_DIR}sessions-index.json"
-
-  run_fork "$SOURCE_SID"
-  [ "$status" -eq 0 ]
-
-  # Should still create the fork, just no index update
-  NEW_ID="$(echo "$output" | head -1)"
-  [ -f "${PROJECT_DIR}${NEW_ID}.jsonl" ]
-}
-
-@test "fork handles session not in index" {
-  # Replace index with empty entries
-  echo '{"entries":[]}' > "${PROJECT_DIR}sessions-index.json"
-
-  run_fork "$SOURCE_SID"
-  [ "$status" -eq 0 ]
-
-  # stderr should contain the note
-  echo "$output" | grep -q "not in index"
-}
-
-# --- Default to CLAUDE_CODE_SESSION_ID ---
-
-@test "fork defaults to CLAUDE_CODE_SESSION_ID env var" {
-  run_fork_with_env "$SOURCE_SID"
-  [ "$status" -eq 0 ]
-
-  NEW_ID="$(echo "$output" | head -1)"
-  [ -f "${PROJECT_DIR}${NEW_ID}.jsonl" ]
-}
-
-# --- Error cases ---
-
-@test "fork fails on invalid UUID format" {
-  run_fork "not-a-uuid"
-  [ "$status" -ne 0 ]
-  echo "$output" | grep -q "Invalid session ID format"
-}
-
-@test "fork fails when session not found" {
-  run_fork "deadbeef-dead-beef-dead-beefdeadbeef"
-  [ "$status" -ne 0 ]
-  echo "$output" | grep -q "not found"
-}
-
-@test "fork fails when no session ID and no env var" {
-  export usage_session_id=""
-  unset CLAUDE_CODE_SESSION_ID
-
-  run bash "$FORK_SCRIPT"
-  [ "$status" -ne 0 ]
-  echo "$output" | grep -q "No session ID"
-}
-
-# --- Cleanup on failure ---
-
-@test "fork cleans up on failure" {
-  # Make the JSONL read-only so the fork notification injection fails
-  cp -a "${PROJECT_DIR}${SOURCE_SID}.jsonl" "${PROJECT_DIR}${SOURCE_SID}.jsonl.bak"
-
-  # Create a fork, then make the target read-only before the jq append
-  # Simpler: remove the source after copy so tail fails on an empty/missing context
-  # Actually: test by making projects dir unwritable after the JSONL copy would happen
-  # This is tricky to test reliably. Let's test that a successful fork doesn't leave tmp files.
-  run_fork "$SOURCE_SID"
-  [ "$status" -eq 0 ]
-
-  # No .tmp files should remain
-  TMP_COUNT=$(find "$PROJECT_DIR" -name "*.tmp" | wc -l | tr -d ' ')
-  [ "$TMP_COUNT" -eq 0 ]
-}
-
-# --- Record count ---
-
-@test "forked JSONL has exactly one more record than source" {
-  SOURCE_COUNT=$(wc -l < "${PROJECT_DIR}${SOURCE_SID}.jsonl" | tr -d ' ')
-
-  run_fork "$SOURCE_SID"
-  [ "$status" -eq 0 ]
-
-  NEW_ID="$(echo "$output" | head -1)"
-  FORK_COUNT=$(wc -l < "${PROJECT_DIR}${NEW_ID}.jsonl" | tr -d ' ')
-
-  [ "$FORK_COUNT" -eq $((SOURCE_COUNT + 1)) ]
+  new_id=$(echo "$output" | head -1)
+  new_file=$(find "$PROJECT_DIR" -name "*${new_id}.jsonl")
+  # Filename should be: <timestamp>_<uuid>.jsonl
+  basename=$(basename "$new_file" .jsonl)
+  # Should contain both a timestamp part and the UUID
+  echo "$basename" | grep -qE '^[0-9]{4}-[0-9]{2}-[0-9]{2}T.*_[0-9a-f]{8}-'
 }
