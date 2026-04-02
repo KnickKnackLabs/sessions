@@ -7,6 +7,7 @@
 #USAGE flag "--model <model>" help="Model to use"
 #USAGE flag "--session <session>" help="Session file for conversation continuity"
 #USAGE flag "--cwd <cwd>" help="Working directory for pi"
+#USAGE flag "--headless" help="Non-interactive mode (appends headless context to system prompt)"
 #USAGE flag "--extensions" help="Enable pi extensions (default: disabled)"
 #USAGE flag "--skills" help="Enable pi skills (default: disabled)"
 #USAGE flag "--prompt-templates" help="Enable pi prompt templates (default: disabled)"
@@ -19,6 +20,7 @@ TIMEOUT="${usage_timeout:-}"
 MODEL="${usage_model:-}"
 SESSION="${usage_session:-}"
 CWD="${usage_cwd:-${CALLER_PWD:-.}}"
+HEADLESS="${usage_headless:-false}"
 # Extensions disabled by default (determinism for CI). Pass --extensions etc. to enable.
 EXTENSIONS="${usage_extensions:-false}"
 SKILLS="${usage_skills:-false}"
@@ -58,6 +60,15 @@ PASSPHRASE_EOF
     echo "" >> "$SYSTEM_PROMPT_FILE"
     echo "## Dispatch Context" >> "$SYSTEM_PROMPT_FILE"
     echo "This session was triggered by: $DISPATCH_CONTEXT" >> "$SYSTEM_PROMPT_FILE"
+  fi
+
+  # Append headless session context
+  if [ "$HEADLESS" = "true" ]; then
+    cat >> "$SYSTEM_PROMPT_FILE" <<'HEADLESS_EOF'
+
+## Session Context
+This is a headless session. No human is present. You are running non-interactively — complete the task and exit.
+HEADLESS_EOF
   fi
 
   trap "rm -f '$SYSTEM_PROMPT_FILE'" EXIT

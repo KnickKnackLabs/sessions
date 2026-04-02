@@ -27,13 +27,13 @@ teardown() {
 }
 
 @test "wake errors on nonexistent session" {
-  AGENT_HARNESS_HEADLESS="echo" run sessions wake "deadbeef"
+  run sessions wake "deadbeef"
   [ "$status" -eq 1 ]
   echo "$output" | grep -qi "no session"
 }
 
 @test "wake errors when context file missing" {
-  AGENT_HARNESS_HEADLESS="echo" run sessions wake "$SESSION_1" --context-file "/tmp/nonexistent-$$"
+  run sessions wake "$SESSION_1" --context-file "/tmp/nonexistent-$$"
   [ "$status" -eq 1 ]
   echo "$output" | grep -q "not found"
 }
@@ -41,7 +41,7 @@ teardown() {
 @test "wake launches session via shell" {
   command -v shell >/dev/null 2>&1 || skip "shell not installed"
   # Session 1 has no name — shell name derived from UUID prefix
-  AGENT_HARNESS_HEADLESS="echo" run sessions wake "${SESSION_1:0:8}"
+  run sessions wake "${SESSION_1:0:8}"
   [ "$status" -eq 0 ]
   echo "$output" | grep -q "$SESSION_1"
   # Shell session should be named after the UUID prefix
@@ -56,7 +56,7 @@ teardown() {
   local new_id
   new_id=$(echo "$output" | head -1)
 
-  AGENT_HARNESS_HEADLESS="echo" run sessions wake "wake-name-test-$$"
+  run sessions wake "wake-name-test-$$"
   [ "$status" -eq 0 ]
   # Shell session should be named after the session name
   shell list 2>/dev/null | grep -q "wake-name-test-$$"
@@ -67,7 +67,7 @@ teardown() {
   run sessions new "feature/test-$$"
   [ "$status" -eq 0 ]
 
-  AGENT_HARNESS_HEADLESS="echo" run sessions wake "feature/test-$$"
+  run sessions wake "feature/test-$$"
   [ "$status" -eq 0 ]
   # Slashes become dashes in shell name
   shell list 2>/dev/null | grep -q "feature-test-$$"
@@ -75,7 +75,7 @@ teardown() {
 
 @test "wake injects context before launching" {
   command -v shell >/dev/null 2>&1 || skip "shell not installed"
-  AGENT_HARNESS_HEADLESS="echo" run sessions wake "$SESSION_1" --context "Review PR #42"
+  run sessions wake "$SESSION_1" --context "Review PR #42"
   [ "$status" -eq 0 ]
   src_file=$(find "$PROJECT_DIR" -name "*${SESSION_1}.jsonl")
   grep -q "PR #42" "$src_file"
@@ -83,7 +83,7 @@ teardown() {
 
 @test "wake shows monitor instructions" {
   command -v shell >/dev/null 2>&1 || skip "shell not installed"
-  AGENT_HARNESS_HEADLESS="echo" run sessions wake "$SESSION_1"
+  run sessions wake "$SESSION_1"
   [ "$status" -eq 0 ]
   echo "$output" | grep -q "Monitor:"
 }

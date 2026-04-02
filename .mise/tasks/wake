@@ -29,15 +29,13 @@ fi
 
 command -v jq >/dev/null 2>&1 || { echo "Error: jq is required" >&2; exit 1; }
 
-# AGENT_HARNESS_HEADLESS is a multi-word command (e.g., "shimmer agent --headless").
-# Split into array for proper argument handling.
-HARNESS_HEADLESS="${AGENT_HARNESS_HEADLESS:-}"
-if [ -z "$HARNESS_HEADLESS" ]; then
-  echo "Error: AGENT_HARNESS_HEADLESS not set" >&2
-  echo "Set it in your shell config, e.g.: export AGENT_HARNESS_HEADLESS='shimmer agent --headless'" >&2
+# sessions run is the execution engine — it calls the Elixir CLI which wraps pi.
+# Identity (AGENT_IDENTITY, GIT_AUTHOR_NAME, etc.) must already be in the environment,
+# typically set by `eval $(shimmer as <agent>)` before the parent agent started.
+if ! command -v sessions >/dev/null 2>&1; then
+  echo "Error: sessions not found on PATH" >&2
   exit 1
 fi
-read -ra HARNESS_PARTS <<< "$HARNESS_HEADLESS"
 
 # --- Find session file ---
 
@@ -93,6 +91,8 @@ if [ -n "$WAKE_META_RAW" ]; then
   done < <(printf '%s' "$WAKE_META_RAW" | xargs printf '%s\n')
 fi
 
+HARNESS_CMD="sessions run --headless"
+
 if [ "$WAKE_META" = "{}" ]; then
   jq -nc \
     --arg id "$WAKE_ID" \
@@ -100,7 +100,7 @@ if [ "$WAKE_META" = "{}" ]; then
     --arg ts "$NOW_ISO" \
     --arg shell_name "$SHELL_NAME" \
     --arg agent "${GIT_AUTHOR_NAME:-unknown}" \
-    --arg harness "$HARNESS_HEADLESS" \
+    --arg harness "$HARNESS_CMD" \
     '{
       type: "wake",
       id: $id,
@@ -117,7 +117,7 @@ else
     --arg ts "$NOW_ISO" \
     --arg shell_name "$SHELL_NAME" \
     --arg agent "${GIT_AUTHOR_NAME:-unknown}" \
-    --arg harness "$HARNESS_HEADLESS" \
+    --arg harness "$HARNESS_CMD" \
     --argjson meta "$WAKE_META" \
     '{
       type: "wake",
@@ -164,12 +164,14 @@ fi
 
 # --- Launch via shell ---
 
-HARNESS_CMD=("${HARNESS_PARTS[@]}" "--session" "$SESSION_FILE")
+# Set CHAT_IDENTITY so headless instances post to chat under the session/shell name
+# rather than the parent agent's name.
+RUN_CMD=(sessions run --headless --session "$SESSION_FILE")
 if [ -n "$MESSAGE" ]; then
-  HARNESS_CMD+=("$MESSAGE")
+  RUN_CMD+=("$MESSAGE")
 fi
 
-shell run "$SHELL_NAME" --cwd "$SESSION_CWD" "${HARNESS_CMD[@]}"
+CHAT_IDENTITY="$SHELL_NAME" shell run "$SHELL_NAME" --cwd "$SESSION_CWD" "${RUN_CMD[@]}"
 
 echo "$FULL_SESSION_ID"
 if [ -n "$SESSION_NAME" ]; then

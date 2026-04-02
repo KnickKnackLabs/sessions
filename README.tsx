@@ -173,11 +173,13 @@ sessions wake review/pr-50 --message "You missed the edge case in line 42"`}</Co
       <Paragraph>
         {"The spawning stack uses "}
         <Link href="https://github.com/KnickKnackLabs/shell">shell</Link>
-        {" for persistent zmx sessions and "}
-        <Code>shimmer agent --headless</Code>
-        {" for identity. Sessions owns execution via its Elixir CLI (timeout, ABORT detection, streaming, usage reporting). For wake, it reads "}
-        <Code>$AGENT_HARNESS_HEADLESS</Code>
-        {" to delegate to the harness."}
+        {" for persistent zmx sessions. "}
+        <Code>sessions wake</Code>
+        {" calls "}
+        <Code>sessions run</Code>
+        {" directly for execution \u2014 identity (AGENT_IDENTITY, etc.) must already be in the environment, typically set upstream via "}
+        <Code>{"eval $(shimmer as <agent>)"}</Code>
+        {"."}
       </Paragraph>
     </Section>
 

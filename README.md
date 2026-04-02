@@ -83,7 +83,7 @@ sessions read review/pr-50 --last 5
 sessions wake review/pr-50 --message "You missed the edge case in line 42"
 ```
 
-The spawning stack uses [shell](https://github.com/KnickKnackLabs/shell) for persistent zmx sessions and `shimmer agent --headless` for identity. Sessions stays decoupled from both — it reads `$AGENT_HARNESS_HEADLESS` and doesn't know or care what the harness is.
+The spawning stack uses [shell](https://github.com/KnickKnackLabs/shell) for persistent zmx sessions. `sessions wake` calls `sessions run` directly for execution — identity (AGENT_IDENTITY, etc.) must already be in the environment, typically set upstream via `eval $(shimmer as <agent>)`.
 
 ## Metadata
 
