@@ -8,25 +8,6 @@ defmodule Cli do
   caller's responsibility.
   """
 
-  use Application
-
-  @impl Application
-  def start(_type, _args) do
-    Task.start(fn ->
-      args = get_argv()
-      exit_code = run(args)
-      System.halt(exit_code)
-    end)
-  end
-
-  defp get_argv do
-    if Code.ensure_loaded?(Burrito.Util.Args) do
-      apply(Burrito.Util.Args, :argv, [])
-    else
-      System.argv()
-    end
-  end
-
   @default_model "claude-opus-4-6"
   @truncate_edit_limit 60
   @truncate_prompt_limit 100
@@ -188,7 +169,8 @@ defmodule Cli do
 
     pi_cmd = ~s(pi -p "$1"#{pi_flags})
 
-    # echo | provides empty stdin for pi's -p (print) mode
+    # echo | pipes empty stdin so pi doesn't block waiting for terminal input.
+    # pi -p (print mode) reads stdin before processing the message.
     shell_script =
       if timeout do
         "echo | timeout #{timeout} #{pi_cmd}"
