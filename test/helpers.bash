@@ -69,10 +69,10 @@ JSONL
   cat > "${PROJECT_DIR}2026-03-17T10-00-00-000Z_${SESSION_4}.jsonl" <<JSONL
 {"type":"session","version":3,"id":"${SESSION_4}","timestamp":"2026-03-17T10:00:00.000Z","cwd":"/test/project","meta":{"agent":{"name":"zeke"},"purpose":"review"}}
 {"type":"model_change","id":"mc1","parentId":null,"timestamp":"2026-03-17T10:00:00.001Z","provider":"anthropic","modelId":"claude-opus-4-6"}
-{"type":"wake","id":"w1","parentId":"mc1","timestamp":"2026-03-17T10:00:01.000Z","shell":"zeke-review","agent":"ikma","harness":"shimmer agent --headless","meta":{"by":{"agent":{"name":"ikma","email":"ikma@ricon.family"}}}}
+{"type":"wake","id":"w1","parentId":"mc1","timestamp":"2026-03-17T10:00:01.000Z","shell":"zeke-review","agent":"ikma","harness":"sessions run --headless","meta":{"by":{"agent":{"name":"ikma","email":"ikma@ricon.family"}}}}
 {"type":"message","id":"u1","parentId":"w1","timestamp":"2026-03-17T10:00:02.000Z","message":{"role":"user","content":[{"type":"text","text":"review the PR"}],"timestamp":1710662402000}}
 {"type":"message","id":"a1","parentId":"u1","timestamp":"2026-03-17T10:00:10.000Z","message":{"role":"assistant","content":[{"type":"text","text":"PR looks good."}],"model":"claude-opus-4-6","provider":"anthropic","stopReason":"stop","timestamp":1710662410000}}
-{"type":"wake","id":"w2","parentId":"a1","timestamp":"2026-03-17T11:00:00.000Z","shell":"zeke-review-2","agent":"brownie","harness":"shimmer agent --headless","meta":{"by":{"agent":{"name":"brownie","email":"brownie@ricon.family"}}}}
+{"type":"wake","id":"w2","parentId":"a1","timestamp":"2026-03-17T11:00:00.000Z","shell":"zeke-review-2","agent":"brownie","harness":"sessions run --headless","meta":{"by":{"agent":{"name":"brownie","email":"brownie@ricon.family"}}}}
 {"type":"message","id":"u2","parentId":"w2","timestamp":"2026-03-17T11:00:01.000Z","message":{"role":"user","content":[{"type":"text","text":"anything else to check?"}],"timestamp":1710666001000}}
 {"type":"message","id":"a2","parentId":"u2","timestamp":"2026-03-17T11:00:05.000Z","message":{"role":"assistant","content":[{"type":"text","text":"All clear."}],"model":"claude-opus-4-6","provider":"anthropic","stopReason":"stop","timestamp":1710666005000}}
 JSONL
