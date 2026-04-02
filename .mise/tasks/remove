@@ -15,6 +15,7 @@ if [ -z "$SESSION_ID" ]; then
 fi
 
 source "$MISE_CONFIG_ROOT/lib/find.sh"
+source "$MISE_CONFIG_ROOT/lib/shell.sh"
 
 HAS_SHELL=false
 if command -v shell >/dev/null 2>&1; then
@@ -40,15 +41,10 @@ fi
 
 # --- Kill zmx shell if running ---
 if [ "$HAS_SHELL" = true ]; then
-  # Derive shell name the same way wake does
-  if [ -n "$SESSION_NAME" ]; then
-    SHELL_NAME=$(echo "$SESSION_NAME" | sed 's|/|-|g; s|[^a-zA-Z0-9._-]|-|g')
-  else
-    SHELL_NAME="${FULL_ID:0:8}"
-  fi
+  SHELL_NAME=$(derive_shell_name "$SESSION_NAME" "$FULL_ID")
 
   SHELL_STATUS=$(shell status "$SHELL_NAME" 2>/dev/null) || true
-  if [ "$SHELL_STATUS" = "running" ] || [ "$SHELL_STATUS" = "unreachable" ]; then
+  if [ "$SHELL_STATUS" = "running" ] || [ "$SHELL_STATUS" = "unreachable" ] || [ "$SHELL_STATUS" = "exited" ]; then
     shell kill "$SHELL_NAME" 2>/dev/null && \
       echo "Killed shell '$SHELL_NAME'" >&2 || \
       echo "Warning: could not kill shell '$SHELL_NAME'" >&2
