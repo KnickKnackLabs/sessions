@@ -62,16 +62,17 @@ PASSPHRASE_EOF
     echo "This session was triggered by: $DISPATCH_CONTEXT" >> "$SYSTEM_PROMPT_FILE"
   fi
 
-  # Append headless session context
-  if [ "$HEADLESS" = "true" ]; then
-    cat >> "$SYSTEM_PROMPT_FILE" <<'HEADLESS_EOF'
+  trap "rm -f '$SYSTEM_PROMPT_FILE'" EXIT
+fi
+
+# Append headless session context (outside the conditional — applies whether
+# the prompt was auto-generated from AGENT_IDENTITY or user-provided via --system-prompt-file)
+if [ "$HEADLESS" = "true" ] && [ -n "$SYSTEM_PROMPT_FILE" ]; then
+  cat >> "$SYSTEM_PROMPT_FILE" <<'HEADLESS_EOF'
 
 ## Session Context
 This is a headless session. No human is present. You are running non-interactively — complete the task and exit.
 HEADLESS_EOF
-  fi
-
-  trap "rm -f '$SYSTEM_PROMPT_FILE'" EXIT
 fi
 
 CLI_DIR="$MISE_CONFIG_ROOT/cli"
