@@ -175,9 +175,9 @@ sessions wake review/pr-50 --message "You missed the edge case in line 42"`}</Co
         <Link href="https://github.com/KnickKnackLabs/shell">shell</Link>
         {" for persistent zmx sessions and "}
         <Code>shimmer agent --headless</Code>
-        {" for identity. Sessions stays decoupled from both — it reads "}
+        {" for identity. Sessions owns execution via its Elixir CLI (timeout, ABORT detection, streaming, usage reporting). For wake, it reads "}
         <Code>$AGENT_HARNESS_HEADLESS</Code>
-        {" and doesn't know or care what the harness is."}
+        {" to delegate to the harness."}
       </Paragraph>
     </Section>
 
@@ -281,8 +281,12 @@ mise run test`}</CodeBlock>
 │   ├── search       # Full-text regex across transcripts
 │   ├── inspect      # Forensic metadata (duration, tools, model)
 │   ├── copy         # Duplicate sessions for handoff
+│   ├── remove       # Remove sessions (kill shell + delete file)
+│   ├── run          # Execute agent sessions (wraps Elixir CLI)
+│   ├── cli/build    # Build Elixir CLI dependencies
 │   ├── export       # Portable bundles (JSONL + metadata)
 │   └── import       # Import exported sessions
+├── cli/             # Elixir execution engine (timeout, ABORT, usage)
 ├── lib/
 │   ├── parse.py     # JSONL parser, session model, filter engine
 │   └── format.py    # Rich formatting helpers

@@ -169,22 +169,26 @@ defmodule Cli do
     qualified_model =
       if String.contains?(model, "/"), do: model, else: "anthropic/#{model}"
 
-    # Build pi flags
+    # Build pi flags. User-controlled strings use positional args to avoid shell injection.
+    # $1=message, $2=model, $3=system_prompt_file, $4=session (if provided)
+    session_flag =
+      if session, do: ~s( --session "$4"), else: " --no-session"
+
     pi_flags =
       [
-        ~s( --append-system-prompt "#{system_prompt_file}"),
+        ~s( --append-system-prompt "$3"),
         ~s( --model "$2"),
         " --mode json",
-        if(session, do: ~s( --session "#{session}"), else: " --no-session"),
+        session_flag,
         if(pi_opts[:extensions], do: "", else: " --no-extensions"),
         if(pi_opts[:skills], do: "", else: " --no-skills"),
         if(pi_opts[:prompt_templates], do: "", else: " --no-prompt-templates")
       ]
       |> Enum.join("")
 
-    # Build the shell command. $1=message, $2=model are positional to avoid injection.
     pi_cmd = ~s(pi -p "$1"#{pi_flags})
 
+    # echo | provides empty stdin for pi's -p (print) mode
     shell_script =
       if timeout do
         "echo | timeout #{timeout} #{pi_cmd}"
@@ -192,7 +196,8 @@ defmodule Cli do
         "echo | #{pi_cmd}"
       end
 
-    args = ["-c", shell_script, "--", message, qualified_model]
+    args = ["-c", shell_script, "--", message, qualified_model, system_prompt_file]
+    args = if session, do: args ++ [session], else: args
 
     port_opts = [:binary, :exit_status, :stderr_to_stdout, {:args, args}]
     port_opts = if cwd, do: [{:cd, cwd} | port_opts], else: port_opts

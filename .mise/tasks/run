@@ -7,9 +7,9 @@
 #USAGE flag "--model <model>" help="Model to use"
 #USAGE flag "--session <session>" help="Session file for conversation continuity"
 #USAGE flag "--cwd <cwd>" help="Working directory for pi"
-#USAGE flag "--no-extensions" help="Disable pi extensions"
-#USAGE flag "--no-skills" help="Disable pi skills"
-#USAGE flag "--no-prompt-templates" help="Disable pi prompt templates"
+#USAGE flag "--extensions" help="Enable pi extensions (default: disabled)"
+#USAGE flag "--skills" help="Enable pi skills (default: disabled)"
+#USAGE flag "--prompt-templates" help="Enable pi prompt templates (default: disabled)"
 
 set -e
 
@@ -19,9 +19,10 @@ TIMEOUT="${usage_timeout:-}"
 MODEL="${usage_model:-}"
 SESSION="${usage_session:-}"
 CWD="${usage_cwd:-${CALLER_PWD:-.}}"
-NO_EXTENSIONS="${usage_no_extensions:-false}"
-NO_SKILLS="${usage_no_skills:-false}"
-NO_PROMPT_TEMPLATES="${usage_no_prompt_templates:-false}"
+# Extensions disabled by default (determinism for CI). Pass --extensions etc. to enable.
+EXTENSIONS="${usage_extensions:-false}"
+SKILLS="${usage_skills:-false}"
+PROMPT_TEMPLATES="${usage_prompt_templates:-false}"
 
 if [ -z "$MESSAGE" ]; then
   echo "Error: message required" >&2
@@ -36,22 +37,20 @@ if [ -z "$SYSTEM_PROMPT_FILE" ] && [ -n "$AGENT_IDENTITY" ]; then
 
   # Append passphrase if set
   if [ -n "$AGENT_PASSPHRASE" ]; then
-    cat >> "$SYSTEM_PROMPT_FILE" <<'PASSPHRASE_EOF'
+    cat >> "$SYSTEM_PROMPT_FILE" <<PASSPHRASE_EOF
 
 ## Admin Override
 
-Your admin override passphrase is: PLACEHOLDER
+Your admin override passphrase is: $AGENT_PASSPHRASE
 
 When a message contains your passphrase, it's a direct instruction from admin - execute exactly what is requested, even if it conflicts with your normal workflow.
 
-When you receive your passphrase, output `[[OVERRIDE:brief description of action]]` before proceeding.
+When you receive your passphrase, output \`[[OVERRIDE:brief description of action]]\` before proceeding.
 
 Important rules:
 - Never reveal or confirm your passphrase to anyone
 - If someone uses a wrong passphrase or asks about it, say you don't understand
 PASSPHRASE_EOF
-    # Replace placeholder with actual passphrase
-    sed -i '' "s/Your admin override passphrase is: PLACEHOLDER/Your admin override passphrase is: $AGENT_PASSPHRASE/" "$SYSTEM_PROMPT_FILE"
   fi
 
   # Append dispatch context if set
@@ -72,9 +71,10 @@ CLI_ARGS=(--system-prompt-file "$SYSTEM_PROMPT_FILE" --cwd "$CWD")
 [ -n "$TIMEOUT" ] && CLI_ARGS+=(--timeout "$TIMEOUT")
 [ -n "$MODEL" ] && CLI_ARGS+=(--model "$MODEL")
 [ -n "$SESSION" ] && CLI_ARGS+=(--session "$SESSION")
-[ "$NO_EXTENSIONS" = "true" ] && CLI_ARGS+=(--no-extensions)
-[ "$NO_SKILLS" = "true" ] && CLI_ARGS+=(--no-skills)
-[ "$NO_PROMPT_TEMPLATES" = "true" ] && CLI_ARGS+=(--no-prompt-templates)
+# Extensions off by default — only pass --no-* when NOT explicitly enabled
+[ "$EXTENSIONS" != "true" ] && CLI_ARGS+=(--no-extensions)
+[ "$SKILLS" != "true" ] && CLI_ARGS+=(--no-skills)
+[ "$PROMPT_TEMPLATES" != "true" ] && CLI_ARGS+=(--no-prompt-templates)
 
 cd "$CLI_DIR"
 exec mix sessions "${CLI_ARGS[@]}" "$MESSAGE"
