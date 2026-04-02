@@ -1,0 +1,56 @@
+#!/usr/bin/env bash
+#MISE description="Remove a session (kill shell if running, delete session file)"
+#USAGE arg "<session_id>" help="Session ID or name to remove"
+#USAGE flag "--force" help="Skip confirmation prompt"
+
+set -euo pipefail
+
+SESSION_ID="${usage_session_id:-}"
+FORCE="${usage_force:-false}"
+
+if [ -z "$SESSION_ID" ]; then
+  echo "Error: session ID or name required" >&2
+  echo "Usage: sessions remove <name-or-id> [--force]" >&2
+  exit 1
+fi
+
+source "$MISE_CONFIG_ROOT/lib/find.sh"
+source "$MISE_CONFIG_ROOT/lib/shell.sh"
+
+HAS_SHELL=false
+if command -v shell >/dev/null 2>&1; then
+  HAS_SHELL=true
+fi
+
+# --- Find session file ---
+SESSION_FILE=$(find_session_file "$SESSION_ID") || exit 1
+
+SESSION_NAME=$(head -1 "$SESSION_FILE" | jq -r '.name // empty')
+FULL_ID=$(head -1 "$SESSION_FILE" | jq -r '.id // empty')
+DISPLAY="${SESSION_NAME:-${FULL_ID:0:8}}"
+
+# --- Confirmation ---
+if [ "$FORCE" != "true" ]; then
+  echo -n "Remove session '$DISPLAY'? [y/N] " >&2
+  read -r confirm
+  if [[ ! "$confirm" =~ ^[Yy] ]]; then
+    echo "Skipped '$DISPLAY'" >&2
+    exit 0
+  fi
+fi
+
+# --- Kill zmx shell if running ---
+if [ "$HAS_SHELL" = true ]; then
+  SHELL_NAME=$(derive_shell_name "$SESSION_NAME" "$FULL_ID")
+
+  SHELL_STATUS=$(shell status "$SHELL_NAME" 2>/dev/null) || true
+  if [ "$SHELL_STATUS" = "running" ] || [ "$SHELL_STATUS" = "unreachable" ] || [ "$SHELL_STATUS" = "exited" ]; then
+    shell kill "$SHELL_NAME" 2>/dev/null && \
+      echo "Killed shell '$SHELL_NAME'" >&2 || \
+      echo "Warning: could not kill shell '$SHELL_NAME'" >&2
+  fi
+fi
+
+# --- Delete session file ---
+rm "$SESSION_FILE"
+echo "Removed session '$DISPLAY'" >&2

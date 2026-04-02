@@ -42,6 +42,7 @@ read -ra HARNESS_PARTS <<< "$HARNESS_HEADLESS"
 # --- Find session file ---
 
 source "$MISE_CONFIG_ROOT/lib/find.sh"
+source "$MISE_CONFIG_ROOT/lib/shell.sh"
 SESSION_FILE=$(find_session_file "$SESSION_ID") || exit 1
 
 FULL_SESSION_ID=$(head -1 "$SESSION_FILE" | jq -r '.id // empty')
@@ -50,17 +51,9 @@ if [ -z "$FULL_SESSION_ID" ]; then
 fi
 
 # --- Derive shell name from session name or ID ---
-# The session name is the user-facing identifier; the shell name is
-# an implementation detail. Derive it automatically so the user never
-# has to think about the shell layer.
 
 SESSION_NAME=$(head -1 "$SESSION_FILE" | jq -r '.name // empty')
-if [ -n "$SESSION_NAME" ]; then
-  # Translate characters that zmx can't handle (slashes → dashes)
-  SHELL_NAME=$(echo "$SESSION_NAME" | sed 's|/|-|g; s|[^a-zA-Z0-9._-]|-|g')
-else
-  SHELL_NAME="${FULL_SESSION_ID:0:8}"
-fi
+SHELL_NAME=$(derive_shell_name "$SESSION_NAME" "$FULL_SESSION_ID")
 
 # --- Resolve context from file ---
 
