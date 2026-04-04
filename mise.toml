@@ -2,9 +2,13 @@
 quiet = true
 task_output = "interleave"
 
+[plugins]
+shiv = "https://github.com/KnickKnackLabs/vfox-shiv"
+
 [tools]
 usage = "latest"
 uv = "latest"
 bats = "1.13.0"
+"shiv:shell" = "0.1.0"                     # Persistent terminal sessions (used by wake)
 erlang = "28.4.1"
 elixir = "1.19.5-otp-27"
