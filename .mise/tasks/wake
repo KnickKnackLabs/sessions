@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
-#MISE description="Wake an agent into a session via zmx"
+#MISE description="Wake an agent into a session"
 #USAGE arg "<session_id>" help="Session ID or name to wake into"
 #USAGE flag "--context <context>" help="Inject a context message into the session file before launching"
 #USAGE flag "--context-file <context_file>" help="File containing context message to inject"
 #USAGE flag "--message <message>" help="Message to pass to the agent"
+#USAGE flag "--headless" help="No human present — agent completes task and exits"
+#USAGE flag "--background" help="Launch in background via shell/zmx (default: foreground, blocks until done)"
 #USAGE flag "--meta <meta>" var=#true help="Metadata for the wake event (repeatable, dotted paths or jq expressions)"
 
 set -euo pipefail
@@ -13,6 +15,8 @@ CONTEXT="${usage_context:-}"
 WAKE_META_RAW="${usage_meta:-}"
 CONTEXT_FILE="${usage_context_file:-}"
 MESSAGE="${usage_message:-}"
+HEADLESS="${usage_headless:-false}"
+BACKGROUND="${usage_background:-false}"
 
 if [ -z "$SESSION_ID" ]; then
   echo "Error: session ID or name required" >&2
@@ -22,16 +26,15 @@ fi
 
 # --- Dependencies ---
 
-if ! command -v shell >/dev/null 2>&1; then
-  echo "Error: shell is required (shiv install shell)" >&2
-  exit 1
+if [ "$BACKGROUND" = "true" ]; then
+  if ! command -v shell >/dev/null 2>&1; then
+    echo "Error: shell is required for --background (shiv install shell)" >&2
+    exit 1
+  fi
 fi
 
 command -v jq >/dev/null 2>&1 || { echo "Error: jq is required" >&2; exit 1; }
 
-# sessions run is the execution engine — it calls the Elixir CLI which wraps pi.
-# Identity (AGENT_IDENTITY, GIT_AUTHOR_NAME, etc.) must already be in the environment,
-# typically set by `eval $(shimmer as <agent>)` before the parent agent started.
 if ! command -v sessions >/dev/null 2>&1; then
   echo "Error: sessions not found on PATH" >&2
   exit 1
@@ -69,7 +72,7 @@ LAST_ID=$(tail -1 "$SESSION_FILE" | jq -r '.id // empty')
 WAKE_ID=$(uuidgen | tr '[:upper:]' '[:lower:]' | cut -c1-8)
 NOW_ISO=$(date -u +"%Y-%m-%dT%H:%M:%S.000Z")
 
-# Build wake meta from --meta flags (same parsing as sessions new)
+# Build wake meta from --meta flags
 WAKE_META="{}"
 if [ -n "$WAKE_META_RAW" ]; then
   while IFS= read -r entry; do
@@ -91,7 +94,8 @@ if [ -n "$WAKE_META_RAW" ]; then
   done < <(printf '%s' "$WAKE_META_RAW" | xargs printf '%s\n')
 fi
 
-HARNESS_CMD="sessions run --headless"
+HARNESS_CMD="sessions run"
+[ "$HEADLESS" = "true" ] && HARNESS_CMD="sessions run --headless"
 
 if [ "$WAKE_META" = "{}" ]; then
   jq -nc \
@@ -162,21 +166,34 @@ if [ -z "$SESSION_CWD" ] || [ ! -d "$SESSION_CWD" ]; then
   SESSION_CWD="."
 fi
 
-# --- Launch via shell ---
+# --- Launch ---
 
-# Set CHAT_IDENTITY so headless instances post to chat under the session/shell name
-# rather than the parent agent's name.
-RUN_CMD=(sessions run --headless --session "$SESSION_FILE")
+RUN_CMD=(sessions run --session "$SESSION_FILE")
+[ "$HEADLESS" = "true" ] && RUN_CMD+=(--headless)
 if [ -n "$MESSAGE" ]; then
   RUN_CMD+=("$MESSAGE")
 fi
 
-CHAT_IDENTITY="$SHELL_NAME" shell run "$SHELL_NAME" --cwd "$SESSION_CWD" "${RUN_CMD[@]}"
+if [ "$BACKGROUND" = "true" ]; then
+  # Background: launch via shell/zmx (fire-and-forget)
+  CHAT_IDENTITY="$SHELL_NAME" shell run "$SHELL_NAME" --cwd "$SESSION_CWD" "${RUN_CMD[@]}"
 
-echo "$FULL_SESSION_ID"
-if [ -n "$SESSION_NAME" ]; then
-  echo "Woke session '$SESSION_NAME'" >&2
+  echo "$FULL_SESSION_ID"
+  if [ -n "$SESSION_NAME" ]; then
+    echo "Woke session '$SESSION_NAME'" >&2
+  else
+    echo "Woke session ${FULL_SESSION_ID:0:8}" >&2
+  fi
+  echo "Monitor: sessions read ${FULL_SESSION_ID:0:8} --last 10" >&2
 else
-  echo "Woke session ${FULL_SESSION_ID:0:8}" >&2
+  # Foreground: call sessions run directly (blocks until done)
+  echo "$FULL_SESSION_ID"
+  if [ -n "$SESSION_NAME" ]; then
+    echo "Woke session '$SESSION_NAME'" >&2
+  else
+    echo "Woke session ${FULL_SESSION_ID:0:8}" >&2
+  fi
+
+  cd "$SESSION_CWD"
+  CHAT_IDENTITY="$SHELL_NAME" exec "${RUN_CMD[@]}"
 fi
-echo "Monitor: sessions read ${FULL_SESSION_ID:0:8} --last 10" >&2
