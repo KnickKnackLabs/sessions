@@ -40,9 +40,9 @@ defmodule Cli.Text do
   end
 
   @typep abort_state :: %{
-           optional(:abort_seen) => boolean(),
-           optional(:recent_text) => String.t(),
-           optional(:had_newline_before_window) => boolean()
+           abort_seen: boolean(),
+           recent_text: String.t(),
+           had_newline_before_window: boolean()
          }
 
   @doc """

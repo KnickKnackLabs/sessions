@@ -501,5 +501,4 @@ defmodule Cli.Harness.Pi.StreamTest do
       end
     end
   end
-
 end

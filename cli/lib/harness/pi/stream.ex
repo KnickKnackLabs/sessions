@@ -15,13 +15,13 @@ defmodule Cli.Harness.Pi.Stream do
   """
 
   @typep stream_state :: %{
-           optional(:tool_input) => String.t(),
-           optional(:usage) => map() | nil,
-           optional(:abort_seen) => boolean(),
-           optional(:recent_text) => String.t(),
-           optional(:flushed_chars) => non_neg_integer(),
-           optional(:had_newline_before_window) => boolean(),
-           optional(:buffer) => String.t()
+           tool_input: String.t(),
+           usage: map() | nil,
+           abort_seen: boolean(),
+           recent_text: String.t(),
+           flushed_chars: non_neg_integer(),
+           had_newline_before_window: boolean(),
+           buffer: String.t()
          }
 
   @doc "Consume one line of pi's JSON stream and return the updated state."
@@ -88,13 +88,12 @@ defmodule Cli.Harness.Pi.Stream do
     end
   end
 
-  @doc """
-  Extract any recoverable text from a partial JSON buffer and write it
-  to stdout. No-op when nothing can be recovered.
-
-  Used by tests and debugging flows that exercise the partial-text path
-  without the full stream loop.
-  """
+  @doc false
+  # Extract any recoverable text from a partial JSON buffer and write it
+  # to stdout; no-op when nothing can be recovered. Not part of the
+  # adapter contract — used only by tests and iex debugging. Production
+  # paths in Cli.Engine inline extract_partial_text + text_beyond_flushed
+  # because they need flushed_chars tracking.
   @spec flush_partial_buffer(String.t()) :: :ok
   def flush_partial_buffer(partial) do
     case extract_partial_text(partial) do
