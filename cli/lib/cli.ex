@@ -225,7 +225,7 @@ defmodule Cli do
 
           partial ->
             extracted = extract_partial_text(partial)
-            new_text = text_beyond_flushed(extracted, state.flushed_chars)
+            new_text = Cli.Text.text_beyond_flushed(extracted, state.flushed_chars)
             if new_text != "", do: IO.write(new_text)
             stream_output(port, %{state | flushed_chars: String.length(extracted)})
         end
@@ -241,10 +241,10 @@ defmodule Cli do
 
       {:error, _} ->
         extracted = extract_partial_text(buffer)
-        new_text = text_beyond_flushed(extracted, state.flushed_chars)
+        new_text = Cli.Text.text_beyond_flushed(extracted, state.flushed_chars)
         if new_text != "", do: IO.write(new_text)
 
-        {abort_seen, recent_text, had_newline} = check_abort_signal(extracted, state)
+        {abort_seen, recent_text, had_newline} = Cli.Text.check_abort_signal(extracted, state)
 
         %{
           state
@@ -291,82 +291,7 @@ defmodule Cli do
 
   @doc false
   @spec process_line(String.t(), map()) :: map()
-  def process_line(line, state) do
-    Cli.Harness.Pi.process_line(line, state,
-      check_abort: &__MODULE__.check_abort_signal/2,
-      text_beyond_flushed: &__MODULE__.text_beyond_flushed/2
-    )
-  end
-
-  # --- Harness-agnostic helpers ---
-
-  @doc """
-  Returns the portion of `text` beyond already-flushed characters.
-
-  ## Examples
-
-      iex> Cli.text_beyond_flushed("hello world", 5)
-      " world"
-
-      iex> Cli.text_beyond_flushed("hello", 5)
-      ""
-
-      iex> Cli.text_beyond_flushed("hello", 0)
-      "hello"
-
-      iex> Cli.text_beyond_flushed("hi", 10)
-      ""
-
-  """
-  @spec text_beyond_flushed(String.t(), non_neg_integer()) :: String.t()
-  def text_beyond_flushed(text, 0), do: text
-
-  def text_beyond_flushed(text, flushed_chars) when is_integer(flushed_chars) do
-    if String.length(text) > flushed_chars do
-      String.slice(text, flushed_chars..-1//1)
-    else
-      ""
-    end
-  end
-
-  @typep abort_state :: %{
-           optional(:abort_seen) => boolean(),
-           optional(:recent_text) => String.t(),
-           optional(:had_newline_before_window) => boolean()
-         }
-
-  @doc """
-  Detect [[ABORT]] signal on its own line, handling chunk boundaries.
-  Returns {abort_seen, recent_text, had_newline_before_window}.
-
-  Harness-agnostic — operates on raw text, not on any specific event
-  schema.
-  """
-  @spec check_abort_signal(String.t(), abort_state()) ::
-          {boolean(), String.t(), boolean()}
-  def check_abort_signal(text, state) do
-    combined = state.recent_text <> text
-    combined_len = String.length(combined)
-
-    trimmed_len = max(0, combined_len - 20)
-    trimmed_portion = String.slice(combined, 0, trimmed_len)
-
-    had_newline_before_window =
-      if String.contains?(trimmed_portion, "\n"),
-        do: true,
-        else: state.had_newline_before_window
-
-    text_to_check =
-      if had_newline_before_window, do: "\n" <> combined, else: combined
-
-    abort_seen =
-      state.abort_seen ||
-        Regex.match?(~r/(?:^|\n)\[\[ABORT\]\](?:\n|$)/, text_to_check)
-
-    recent_text = String.slice(combined, -20, 20)
-
-    {abort_seen, recent_text, had_newline_before_window}
-  end
+  defdelegate process_line(line, state), to: Cli.Harness.Pi
 
   defp print_usage_summary(%{usage: nil}), do: :ok
 

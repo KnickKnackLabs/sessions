@@ -44,7 +44,7 @@ class Session:
 
     @property
     def slug(self) -> str:
-        return _pi.slug(self.entries)
+        return _pi.slug()
 
     @property
     def meta(self) -> dict:
@@ -275,6 +275,11 @@ def load(filepath: str) -> Session:
 #
 # These delegate to the pi harness adapter. Step 2 will turn them into
 # dispatchers that pick an adapter based on context.
+#
+# Used by: .mise/tasks/{export,import,list} (via `parse.find_session` and
+# `parse.discover_sessions_dir`). Do not drop without updating those
+# callers — the shims exist so tasks don't yet need to know about the
+# harness layer.
 
 def discover_sessions_dir() -> str:
     return _pi.sessions_dir()

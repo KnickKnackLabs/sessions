@@ -6,6 +6,10 @@
 # (tests, ad-hoc scripts) that sources `lib/find.sh` keeps working while
 # we migrate to the adapter-aware `lib/harness/*.sh` layout.
 #
+# Used by: .mise/tasks/wake (and anything else that sources this file
+# transitively picks up `lib/harness/pi.sh`). Do not drop until the
+# step 2 dispatcher replaces it.
+#
 # Step 2 (sessions#50) will replace this with a dispatcher that picks
 # the right harness adapter at call time.
 

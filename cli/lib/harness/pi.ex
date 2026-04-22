@@ -108,29 +108,19 @@ defmodule Cli.Harness.Pi do
   Consume one line of pi's JSON stream and return the updated state.
 
   Text deltas are written to stdout as they arrive and fed into the
-  abort detector (handled by the caller via a harness-agnostic
-  function). Tool events print tool names and formatted arguments.
-  `agent_end` events capture usage totals.
-
-  Unknown / malformed / unrelated events pass through untouched.
-
-  The caller is responsible for providing `check_abort_signal/2` and
-  `text_beyond_flushed/2` callbacks. To keep the refactor minimal
-  we accept them as functions on the caller module via optional
-  keyword args — see `Cli.process_line/2`.
+  (harness-agnostic) abort detector in `Cli.Text`. Tool events print
+  tool names and formatted arguments. `agent_end` events capture usage
+  totals. Unknown / malformed / unrelated events pass through untouched.
   """
-  @spec process_line(String.t(), stream_state(), keyword()) :: stream_state()
-  def process_line(line, state, callbacks) do
-    check_abort_fn = Keyword.fetch!(callbacks, :check_abort)
-    text_beyond_fn = Keyword.fetch!(callbacks, :text_beyond_flushed)
-
+  @spec process_line(String.t(), stream_state()) :: stream_state()
+  def process_line(line, state) do
     case Jason.decode(line) do
       {:ok,
        %{
          "type" => "message_update",
          "assistantMessageEvent" => %{"type" => "text_delta", "delta" => text}
        }} ->
-        handle_text_delta(text, state, check_abort_fn, text_beyond_fn)
+        handle_text_delta(text, state)
 
       {:ok,
        %{
@@ -277,11 +267,11 @@ defmodule Cli.Harness.Pi do
 
   # --- Internal helpers ---
 
-  defp handle_text_delta(text, state, check_abort_fn, text_beyond_fn) do
-    text_to_write = text_beyond_fn.(text, state.flushed_chars)
+  defp handle_text_delta(text, state) do
+    text_to_write = Cli.Text.text_beyond_flushed(text, state.flushed_chars)
     maybe_write_text(text_to_write)
 
-    {abort_seen, recent_text, had_newline} = check_abort_fn.(text, state)
+    {abort_seen, recent_text, had_newline} = Cli.Text.check_abort_signal(text, state)
 
     %{
       state

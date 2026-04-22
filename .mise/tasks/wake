@@ -43,7 +43,6 @@ fi
 # --- Find session file ---
 
 # shellcheck source=/dev/null
-source "$MISE_CONFIG_ROOT/lib/harness/pi.sh"
 source "$MISE_CONFIG_ROOT/lib/find.sh"
 source "$MISE_CONFIG_ROOT/lib/shell.sh"
 SESSION_FILE=$(find_session_file "$SESSION_ID") || exit 1

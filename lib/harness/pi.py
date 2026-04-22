@@ -64,8 +64,13 @@ def meta(entries: list) -> dict:
     return {}
 
 
-def slug(entries: list) -> str:  # noqa: ARG001 (kept for parity with claude, which may have one)
-    """Pi sessions don't have slugs."""
+def slug() -> str:
+    """Pi sessions don't have slugs.
+
+    Kept as a no-arg function so the dispatcher in step 2 can route to
+    per-harness implementations uniformly. Harnesses that derive slugs
+    from entries (if any emerge) will introduce their own signature.
+    """
     return ""
 
 

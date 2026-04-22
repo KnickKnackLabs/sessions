@@ -250,14 +250,3 @@ harness_pi_wake_entry() {
   fi
 }
 
-# --- Launch ---
-
-# Print the args pi's headless harness expects to continue an existing
-# session. Today that's `--session <file>`. Callers append these after
-# the harness command (e.g. `shimmer agent --headless`).
-#
-# Printed one arg per line so callers can read into an array safely.
-harness_pi_launch_session_args() {
-  local session_file="$1"
-  printf '%s\n' "--session" "$session_file"
-}
