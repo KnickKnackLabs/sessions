@@ -6,7 +6,7 @@
 #USAGE flag "--context-file <context_file>" help="File containing initial context message"
 #USAGE flag "--model <model>" default="claude-sonnet-4-20250514" help="Model to set (default: claude-sonnet-4-20250514)"
 #USAGE flag "--meta <meta>" var=#true help="Metadata key=value pairs (repeatable, supports dotted paths e.g. agent.name=ikma)"
-#USAGE flag "--harness <harness>" help="Harness adapter to use (default: pi, or \$SESSIONS_DEFAULT_HARNESS)"
+#USAGE flag "--harness <harness>" help="Harness adapter to use (default: pi, or value of SESSIONS_DEFAULT_HARNESS)"
 
 set -euo pipefail
 

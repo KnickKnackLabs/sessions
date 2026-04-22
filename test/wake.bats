@@ -100,20 +100,20 @@ teardown() {
   jq -e 'select(.type == "wake")' "$src_file"
 }
 
-@test "wake --headless records 'sessions run --headless' as harness" {
+@test "wake --headless records harness=pi and headless=true" {
   command -v shell >/dev/null 2>&1 || skip "shell not installed"
   run sessions wake "$SESSION_1" --headless --background
   [ "$status" -eq 0 ]
   src_file=$(find "$PROJECT_DIR" -name "*${SESSION_1}.jsonl")
-  jq -e 'select(.type == "wake" and .harness == "sessions run --headless")' "$src_file"
+  jq -e 'select(.type == "wake" and .harness == "pi" and .headless == true)' "$src_file"
 }
 
-@test "wake without --headless records 'sessions run' as harness" {
+@test "wake without --headless records harness=pi and headless=false" {
   command -v shell >/dev/null 2>&1 || skip "shell not installed"
   run sessions wake "$SESSION_1" --background
   [ "$status" -eq 0 ]
   src_file=$(find "$PROJECT_DIR" -name "*${SESSION_1}.jsonl")
-  jq -e 'select(.type == "wake" and .harness == "sessions run")' "$src_file"
+  jq -e 'select(.type == "wake" and .harness == "pi" and .headless == false)' "$src_file"
 }
 
 # --- Foreground mode ---

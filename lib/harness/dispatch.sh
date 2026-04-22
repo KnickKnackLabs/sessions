@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Harness dispatch layer: registry, resolver, and the harness JSONL entry
-# writer.
+# Harness dispatch layer: registry, resolver, and the JSONL entries that
+# belong to the sessions tool itself (not to any particular harness).
 #
 # Step 2 of multi-harness support (sessions#50). This file is harness-
 # agnostic — it knows about the dispatch protocol, not about pi or claude
@@ -10,6 +10,17 @@
 # sessions on disk, parse a harness's streaming output, and launch a
 # process. Each adapter lives in `lib/harness/<name>.sh` (plus .py / .ex
 # for the python and elixir surfaces).
+#
+# Two categories of JSONL entry live in our session files:
+#
+#   1. Harness-native entries (session header, model_change, message) —
+#      their shape is dictated by what the harness binary reads/writes.
+#      Builders for these live in `lib/harness/<name>.sh`.
+#
+#   2. Sessions-tool entries (wake, harness) — we invented them and the
+#      harness binaries ignore them. Their shape is uniform across
+#      adapters. Builders for these live here.
+#
 #
 # Resolver priority (highest first):
 #   1. Explicit flag on the invoking command (passed in)
@@ -130,7 +141,7 @@ harness_resolve() {
   echo "$name"
 }
 
-# --- Entry builder ---
+# --- Entry builders (sessions-tool entries) ---
 
 # Harness declaration entry — states that from this point forward the
 # active harness is <name>. Written at `sessions new` and whenever a
@@ -155,4 +166,67 @@ harness_entry() {
       timestamp: $ts,
       name: $name
     }'
+}
+
+# Wake event entry — records that an agent was woken into a session.
+# Shape is uniform across harnesses: the harness binaries don't read
+# this entry type; we own the schema.
+#
+#   $1 entry_id, $2 parent_id, $3 timestamp_iso, $4 shell_name,
+#   $5 agent, $6 harness_name, $7 headless ("true" | "false"),
+#   $8 meta_json (optional, "{}" or "" for none)
+wake_entry() {
+  local entry_id="$1"
+  local parent_id="$2"
+  local ts="$3"
+  local shell_name="$4"
+  local agent="$5"
+  local harness_name="$6"
+  local headless="$7"
+  local meta_json="${8:-}"
+
+  local headless_bool=false
+  [ "$headless" = "true" ] && headless_bool=true
+
+  if [ -z "$meta_json" ] || [ "$meta_json" = "{}" ]; then
+    jq -nc \
+      --arg id "$entry_id" \
+      --arg parent_id "$parent_id" \
+      --arg ts "$ts" \
+      --arg shell_name "$shell_name" \
+      --arg agent "$agent" \
+      --arg harness "$harness_name" \
+      --argjson headless "$headless_bool" \
+      '{
+        type: "wake",
+        id: $id,
+        parentId: $parent_id,
+        timestamp: $ts,
+        shell: $shell_name,
+        agent: $agent,
+        harness: $harness,
+        headless: $headless
+      }'
+  else
+    jq -nc \
+      --arg id "$entry_id" \
+      --arg parent_id "$parent_id" \
+      --arg ts "$ts" \
+      --arg shell_name "$shell_name" \
+      --arg agent "$agent" \
+      --arg harness "$harness_name" \
+      --argjson headless "$headless_bool" \
+      --argjson meta "$meta_json" \
+      '{
+        type: "wake",
+        id: $id,
+        parentId: $parent_id,
+        timestamp: $ts,
+        shell: $shell_name,
+        agent: $agent,
+        harness: $harness,
+        headless: $headless,
+        meta: $meta
+      }'
+  fi
 }
