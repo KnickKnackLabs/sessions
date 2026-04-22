@@ -7,7 +7,8 @@ defmodule Cli.Harness.Pi.Command do
   path) are passed as positional `$1`/`$2`/... args so they never enter
   the shell script as interpolated text.
 
-  See `Cli.Harness.Pi` for the multi-harness plan (sessions#50).
+  Part of the pi harness adapter — see sessions#50 for the
+  multi-harness plan.
   """
 
   @default_model "claude-opus-4-6"
@@ -16,11 +17,20 @@ defmodule Cli.Harness.Pi.Command do
   @spec default_model() :: String.t()
   def default_model, do: @default_model
 
+  @typep build_opts :: [
+           extensions: boolean(),
+           skills: boolean(),
+           prompt_templates: boolean()
+         ]
+
   @doc """
   Build the shell script + positional args for running pi.
 
   Returns `{shell_script, positional_args}`. The caller passes
   `positional_args` after `--` to `/bin/sh -c`.
+
+  `opts` controls pi's extension/skills/prompt-template flags. Missing
+  keys default to enabled.
   """
   @spec build_command(
           message :: String.t(),
@@ -28,20 +38,13 @@ defmodule Cli.Harness.Pi.Command do
           system_prompt_file :: String.t(),
           session :: String.t() | nil,
           timeout :: non_neg_integer() | nil,
-          extensions :: boolean(),
-          skills :: boolean(),
-          prompt_templates :: boolean()
+          opts :: build_opts()
         ) :: {String.t(), [String.t()]}
-  def build_command(
-        message,
-        model,
-        system_prompt_file,
-        session,
-        timeout,
-        extensions,
-        skills,
-        prompt_templates
-      ) do
+  def build_command(message, model, system_prompt_file, session, timeout, opts \\ []) do
+    extensions = Keyword.get(opts, :extensions, true)
+    skills = Keyword.get(opts, :skills, true)
+    prompt_templates = Keyword.get(opts, :prompt_templates, true)
+
     qualified_model =
       if String.contains?(model, "/"), do: model, else: "anthropic/#{model}"
 

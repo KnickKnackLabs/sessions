@@ -10,7 +10,8 @@ defmodule Cli.Harness.Pi.Stream do
 
   Unknown / malformed / unrelated events pass through untouched.
 
-  See `Cli.Harness.Pi` for the multi-harness plan (sessions#50).
+  Part of the pi harness adapter — see sessions#50 for the
+  multi-harness plan.
   """
 
   @typep stream_state :: %{

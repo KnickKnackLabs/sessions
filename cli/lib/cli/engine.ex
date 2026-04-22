@@ -46,9 +46,7 @@ defmodule Cli.Engine do
         system_prompt_file,
         session,
         timeout,
-        pi_opts[:extensions],
-        pi_opts[:skills],
-        pi_opts[:prompt_templates]
+        pi_opts
       )
 
     args = ["-c", shell_script, "--"] ++ positional_args

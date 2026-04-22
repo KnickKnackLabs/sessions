@@ -4,7 +4,7 @@ defmodule Cli.UsageReport do
   completes.
 
   Reads a harness-agnostic usage map populated by the harness's stream
-  parser (see `Cli.Harness.Pi.Stream.handle_agent_end/2`). Does nothing
+  parser (see `Cli.Harness.Pi.Stream.process_line/2`). Does nothing
   when `state.usage` is `nil`.
   """
 
@@ -43,5 +43,7 @@ defmodule Cli.UsageReport do
         IO.puts("  Cache: #{cache_read} read, #{cache_create} created")
       end
     end
+
+    :ok
   end
 end

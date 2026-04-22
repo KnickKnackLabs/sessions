@@ -7,7 +7,8 @@ defmodule Cli.Harness.Pi.ToolInput do
   edit array, grep pattern, webfetch, etc.). The fallback head returns
   `nil` so callers can skip unrecognized shapes.
 
-  See `Cli.Harness.Pi` for the multi-harness plan (sessions#50).
+  Part of the pi harness adapter — see sessions#50 for the
+  multi-harness plan.
   """
 
   @truncate_edit_limit 60

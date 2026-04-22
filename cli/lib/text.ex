@@ -5,8 +5,9 @@ defmodule Cli.Text do
   These operate purely on strings — no knowledge of any specific harness
   schema — so every harness adapter can call them directly instead of
   receiving them as callbacks. Moving them here breaks the circular
-  dependency that would otherwise exist between `Cli` and
-  `Cli.Harness.Pi` (and any future harness adapter).
+  dependency that would otherwise exist between `Cli` and the harness
+  stream parsers (`Cli.Harness.Pi.Stream` today, plus any future
+  adapter).
   """
 
   @doc """
