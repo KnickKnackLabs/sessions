@@ -290,10 +290,14 @@ mise run test`}</CodeBlock>
 │   └── import       # Import exported sessions
 ├── cli/             # Elixir execution engine (timeout, ABORT, usage)
 ├── lib/
-│   ├── parse.py     # JSONL parser, session model, filter engine
-│   └── format.py    # Rich formatting helpers
+│   ├── parse.py        # JSONL parser, session model, filter engine
+│   ├── format.py       # Rich formatting helpers
+│   ├── ensure-deps.sh  # First-run CLI deps self-heal
+│   ├── find.sh         # Back-compat shim → harness adapter
+│   ├── shell.sh        # Shell helpers
+│   └── harness/        # Per-harness adapters (pi, …)
 └── test/
-    └── *.bats       # ${testCount} tests`}</CodeBlock>
+    └── *.bats          # ${testCount} tests`}</CodeBlock>
       </Details>
     </Section>
 
