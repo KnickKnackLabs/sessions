@@ -5,8 +5,9 @@ defmodule Cli.Text do
   These operate purely on strings — no knowledge of any specific harness
   schema — so every harness adapter can call them directly instead of
   receiving them as callbacks. Moving them here breaks the circular
-  dependency that would otherwise exist between `Cli` and
-  `Cli.Harness.Pi` (and any future harness adapter).
+  dependency that would otherwise exist between `Cli` and the harness
+  stream parsers (`Cli.Harness.Pi.Stream` today, plus any future
+  adapter).
   """
 
   @doc """
@@ -39,9 +40,9 @@ defmodule Cli.Text do
   end
 
   @typep abort_state :: %{
-           optional(:abort_seen) => boolean(),
-           optional(:recent_text) => String.t(),
-           optional(:had_newline_before_window) => boolean()
+           abort_seen: boolean(),
+           recent_text: String.t(),
+           had_newline_before_window: boolean()
          }
 
   @doc """
