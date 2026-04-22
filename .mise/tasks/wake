@@ -42,6 +42,7 @@ fi
 
 # --- Find session file ---
 
+# shellcheck source=/dev/null
 source "$MISE_CONFIG_ROOT/lib/find.sh"
 source "$MISE_CONFIG_ROOT/lib/shell.sh"
 SESSION_FILE=$(find_session_file "$SESSION_ID") || exit 1
@@ -97,43 +98,14 @@ fi
 HARNESS_CMD="sessions run"
 [ "$HEADLESS" = "true" ] && HARNESS_CMD="sessions run --headless"
 
-if [ "$WAKE_META" = "{}" ]; then
-  jq -nc \
-    --arg id "$WAKE_ID" \
-    --arg parent_id "$LAST_ID" \
-    --arg ts "$NOW_ISO" \
-    --arg shell_name "$SHELL_NAME" \
-    --arg agent "${GIT_AUTHOR_NAME:-unknown}" \
-    --arg harness "$HARNESS_CMD" \
-    '{
-      type: "wake",
-      id: $id,
-      parentId: $parent_id,
-      timestamp: $ts,
-      shell: $shell_name,
-      agent: $agent,
-      harness: $harness
-    }' >> "$SESSION_FILE"
-else
-  jq -nc \
-    --arg id "$WAKE_ID" \
-    --arg parent_id "$LAST_ID" \
-    --arg ts "$NOW_ISO" \
-    --arg shell_name "$SHELL_NAME" \
-    --arg agent "${GIT_AUTHOR_NAME:-unknown}" \
-    --arg harness "$HARNESS_CMD" \
-    --argjson meta "$WAKE_META" \
-    '{
-      type: "wake",
-      id: $id,
-      parentId: $parent_id,
-      timestamp: $ts,
-      shell: $shell_name,
-      agent: $agent,
-      harness: $harness,
-      meta: $meta
-    }' >> "$SESSION_FILE"
-fi
+harness_pi_wake_entry \
+  "$WAKE_ID" \
+  "$LAST_ID" \
+  "$NOW_ISO" \
+  "$SHELL_NAME" \
+  "${GIT_AUTHOR_NAME:-unknown}" \
+  "$HARNESS_CMD" \
+  "$WAKE_META" >> "$SESSION_FILE"
 
 # --- Inject context into session file if provided ---
 
@@ -141,21 +113,7 @@ if [ -n "$CONTEXT" ]; then
   LAST_ID="$WAKE_ID"
   MSG_ID=$(uuidgen | tr '[:upper:]' '[:lower:]' | cut -c1-8)
 
-  jq -nc \
-    --arg id "$MSG_ID" \
-    --arg parent_id "$LAST_ID" \
-    --arg ts "$NOW_ISO" \
-    --arg content "$CONTEXT" \
-    '{
-      type: "message",
-      id: $id,
-      parentId: $parent_id,
-      timestamp: $ts,
-      message: {
-        role: "user",
-        content: [{ type: "text", text: $content }]
-      }
-    }' >> "$SESSION_FILE"
+  harness_pi_user_message_entry "$MSG_ID" "$LAST_ID" "$NOW_ISO" "$CONTEXT" >> "$SESSION_FILE"
 fi
 
 # --- Resolve working directory from session ---

@@ -39,21 +39,14 @@ fi
 command -v jq >/dev/null 2>&1 || { echo "Error: jq is required" >&2; exit 1; }
 command -v uuidgen >/dev/null 2>&1 || { echo "Error: uuidgen is required" >&2; exit 1; }
 
-PI_DIR="${PI_DIR:-$HOME/.pi}"
-SESSIONS_DIR="$PI_DIR/agent/sessions"
-
-# --- Encode cwd as pi directory name ---
-# Pi uses double-dash bookends: /Users/foo/bar -> --Users-foo-bar--
-ENCODED=$(echo "$CWD_ABS" | sed 's|/|-|g')
-PROJECT_DIR="$SESSIONS_DIR/-${ENCODED}-/"
-mkdir -p "$PROJECT_DIR"
+# shellcheck source=/dev/null
+source "$MISE_CONFIG_ROOT/lib/harness/pi.sh"
 
 # --- Generate session ---
 
 SESSION_ID=$(uuidgen | tr '[:upper:]' '[:lower:]')
 NOW_ISO=$(date -u +"%Y-%m-%dT%H:%M:%S.000Z")
-NOW_FILE=$(echo "$NOW_ISO" | sed 's/:/-/g')
-SESSION_FILE="${PROJECT_DIR}${NOW_FILE}_${SESSION_ID}.jsonl"
+SESSION_FILE=$(harness_pi_session_file_path "$CWD_ABS" "$SESSION_ID" "$NOW_ISO")
 
 # --- Build meta object from --meta flags ---
 #
@@ -90,60 +83,17 @@ if [ -n "$META_RAW" ]; then
 fi
 
 # --- Session header ---
-# Build with jq, conditionally including name and meta fields.
 
-HEADER_ARGS=(
-  --arg id "$SESSION_ID"
-  --arg ts "$NOW_ISO"
-  --arg cwd "$CWD_ABS"
-)
-HEADER_EXPR='{type: "session", version: 3, id: $id, timestamp: $ts, cwd: $cwd}'
-
-if [ -n "$NAME" ]; then
-  HEADER_ARGS+=(--arg name "$NAME")
-  HEADER_EXPR="$HEADER_EXPR + {name: \$name}"
-fi
-
-if [ "$META_JSON" != "{}" ]; then
-  HEADER_ARGS+=(--argjson meta "$META_JSON")
-  HEADER_EXPR="$HEADER_EXPR + {meta: \$meta}"
-fi
-
-jq -nc "${HEADER_ARGS[@]}" "$HEADER_EXPR" > "$SESSION_FILE"
+harness_pi_header_entry "$SESSION_ID" "$NOW_ISO" "$CWD_ABS" "$NAME" "$META_JSON" > "$SESSION_FILE"
 
 # Model change entry
 MC_ID=$(uuidgen | tr '[:upper:]' '[:lower:]' | cut -c1-8)
-jq -nc \
-  --arg id "$MC_ID" \
-  --arg ts "$NOW_ISO" \
-  --arg model "$MODEL" \
-  '{
-    type: "model_change",
-    id: $id,
-    parentId: null,
-    timestamp: $ts,
-    provider: "anthropic",
-    modelId: $model
-  }' >> "$SESSION_FILE"
+harness_pi_model_change_entry "$MC_ID" "$NOW_ISO" "$MODEL" >> "$SESSION_FILE"
 
 # Inject context as a user message if provided
 if [ -n "$CONTEXT" ]; then
   MSG_ID=$(uuidgen | tr '[:upper:]' '[:lower:]' | cut -c1-8)
-  jq -nc \
-    --arg id "$MSG_ID" \
-    --arg parent_id "$MC_ID" \
-    --arg ts "$NOW_ISO" \
-    --arg content "$CONTEXT" \
-    '{
-      type: "message",
-      id: $id,
-      parentId: $parent_id,
-      timestamp: $ts,
-      message: {
-        role: "user",
-        content: [{ type: "text", text: $content }]
-      }
-    }' >> "$SESSION_FILE"
+  harness_pi_user_message_entry "$MSG_ID" "$MC_ID" "$NOW_ISO" "$CONTEXT" >> "$SESSION_FILE"
 fi
 
 # --- Output ---
