@@ -86,24 +86,27 @@ teardown() {
 # Error paths
 # ----------------------------------------------------------------------------
 
-@test "ensure_cli_deps: errors when cli_dir argument is missing" {
+@test "ensure_cli_deps: returns 2 (programmer error) when cli_dir argument is missing" {
+  # Tests the documented contract: return 2 for programmer errors,
+  # return 1 for runtime fetch failures. A future refactor that swaps
+  # these should fail here.
   run ensure_cli_deps
-  [ "$status" -ne 0 ]
+  [ "$status" -eq 2 ]
   [[ "$output" == *"cli_dir argument required"* ]]
 }
 
-@test "ensure_cli_deps: errors when cli_dir does not exist" {
+@test "ensure_cli_deps: returns 2 (programmer error) when cli_dir does not exist" {
   run ensure_cli_deps "$TMP/does-not-exist"
-  [ "$status" -ne 0 ]
+  [ "$status" -eq 2 ]
   [[ "$output" == *"cli dir does not exist"* ]]
 }
 
-@test "ensure_cli_deps: errors and emits hint when mix fetch fails" {
+@test "ensure_cli_deps: returns 1 (fetch failed) and emits hint when mix fails" {
   # Break the mix project so deps.get fails.
   echo "this is not valid elixir" > "$CLI/mix.exs"
 
   run ensure_cli_deps "$CLI"
-  [ "$status" -ne 0 ]
+  [ "$status" -eq 1 ]
   [[ "$output" == *"first-run setup"* ]]
   [[ "$output" == *"failed to fetch dependencies"* ]]
   [[ "$output" == *"mise run cli:build"* ]]

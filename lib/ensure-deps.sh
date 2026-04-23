@@ -27,14 +27,16 @@ ensure_cli_deps() {
     return 2
   fi
 
-  # Populated-deps check: if any subdir exists under deps/, we assume
+  # Populated-deps check: if any entry exists under deps/, we assume
   # deps have been fetched at least once. `mix` itself will handle
-  # version drift (it re-fetches on `mix.lock` change).
+  # version drift (it re-fetches on `mix.lock` change). In practice
+  # `mix deps.get` only creates subdirectories, but we check for any
+  # entry so the code matches what `ls -A` actually reports.
   if [ -n "$(ls -A "$cli_dir/deps" 2>/dev/null)" ]; then
     return 0
   fi
 
-  echo "sessions: first-run setup — fetching Elixir dependencies (one-time)…" >&2
+  echo "sessions: first-run setup — fetching Elixir dependencies…" >&2
   (
     cd "$cli_dir" || exit 1
     mix local.hex --force --if-missing >&2 || exit 1
