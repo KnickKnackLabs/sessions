@@ -5,15 +5,15 @@ This module is deliberately harness-agnostic: it loads JSONL files,
 exposes a `Session` container, and implements filter parsing that
 works against any dotted-path + value expression.
 
-All pi-specific schema knowledge lives in `lib/harness/pi.py`. Step 1b
-of multi-harness support (sessions#50) extracted it there; step 2 will
-add a dispatcher so `Session` methods pick the right harness adapter.
+Harness schema knowledge (pi-specific, claude-specific, ...) lives in
+`lib/harness/<name>.py`. `lib/harness/__init__.py` resolves which adapter
+to use for a given session. Step 2 of sessions#50.
 
 Usage:
     import parse
     session = parse.load(filepath)
     # session.entries       — all raw JSONL dicts
-    # session.messages      — user/assistant message entries (pi-shaped today)
+    # session.messages      — user/assistant message entries
     # session.metadata()    — dict with id, project, model, timestamps, counts, etc.
     # session.text_messages() — list of (index, role, timestamp, text) tuples
 """
@@ -22,7 +22,7 @@ import json
 import sys
 from dataclasses import dataclass, field
 
-from harness import pi as _pi
+import harness
 
 
 @dataclass
@@ -31,43 +31,52 @@ class Session:
     entries: list = field(default_factory=list)
 
     @property
+    def _h(self):
+        """Cached adapter module for this session's harness."""
+        if not hasattr(self, "_h_cached"):
+            self._h_cached = harness.resolve(
+                filepath=self.filepath, entries=self.entries
+            )
+        return self._h_cached
+
+    @property
     def messages(self) -> list:
-        return _pi.messages(self.entries)
+        return self._h.messages(self.entries)
 
     @property
     def session_id(self) -> str:
-        return _pi.session_id(self.entries, self.filepath)
+        return self._h.session_id(self.entries, self.filepath)
 
     @property
     def name(self) -> str:
-        return _pi.name(self.entries)
+        return self._h.name(self.entries)
 
     @property
     def slug(self) -> str:
-        return _pi.slug()
+        return self._h.slug()
 
     @property
     def meta(self) -> dict:
-        return _pi.meta(self.entries)
+        return self._h.meta(self.entries)
 
     @property
     def project(self) -> str:
-        return _pi.project(self.filepath)
+        return self._h.project(self.filepath)
 
     @property
     def model(self) -> str:
-        return _pi.model(self.entries)
+        return self._h.model(self.entries)
 
     @property
     def first_timestamp(self) -> str:
-        return _pi.first_timestamp(self.entries)
+        return self._h.first_timestamp(self.entries)
 
     @property
     def last_timestamp(self) -> str:
-        return _pi.last_timestamp(self.entries)
+        return self._h.last_timestamp(self.entries)
 
     def metadata(self) -> dict:
-        user_count, assistant_count = _pi.message_counts(self.entries)
+        user_count, assistant_count = self._h.message_counts(self.entries)
         result = {
             "session_id": self.session_id,
             "name": self.name,
@@ -86,7 +95,7 @@ class Session:
         return result
 
     def text_messages(self) -> list:
-        return _pi.text_messages(self.entries)
+        return self._h.text_messages(self.entries)
 
 
 # --- Generic helpers (harness-agnostic) ---
@@ -271,19 +280,53 @@ def load(filepath: str) -> Session:
     return Session(filepath=filepath, entries=entries)
 
 
-# --- Back-compat shims ---
+# --- Top-level lookup (harness-aware) ---
 #
-# These delegate to the pi harness adapter. Step 2 will turn them into
-# dispatchers that pick an adapter based on context.
-#
-# Used by: .mise/tasks/{export,import,list} (via `parse.find_session` and
-# `parse.discover_sessions_dir`). Do not drop without updating those
-# callers — the shims exist so tasks don't yet need to know about the
-# harness layer.
+# Used by: .mise/tasks/{export,import,list}. Each function iterates over
+# all available harnesses and merges the results. Today pi is the only
+# adapter, so the iteration has one iteration — the shape is ready for
+# when claude (or another adapter) lands.
 
 def discover_sessions_dir() -> str:
-    return _pi.sessions_dir()
+    """Return the default harness's sessions root.
+
+    Kept for back-compat with tasks that want "the" sessions dir; with
+    multiple harnesses installed, prefer iterating `harness.available()`
+    and calling each adapter's `sessions_dir()` directly.
+    """
+    return harness.adapter(harness.DEFAULT).sessions_dir()
 
 
 def find_session(query: str) -> str:
-    return _pi.find_session(query)
+    """Find a session JSONL by UUID prefix or name across all harnesses.
+
+    Exits non-zero on no match or ambiguity. If multiple harnesses each
+    find a match, lists them all in the error.
+    """
+    import contextlib
+    import io
+
+    matches = []
+    for name in harness.available():
+        adapter = harness.adapter(name)
+        # Adapters' find_session calls sys.exit(1) on no match and prints
+        # to stderr. Suppress their stderr during iteration so the aggregator
+        # owns the final error message.
+        with contextlib.redirect_stderr(io.StringIO()):
+            try:
+                matches.append(adapter.find_session(query))
+            except SystemExit:
+                continue
+
+    if not matches:
+        print(f"Error: No session matching '{query}'", file=sys.stderr)
+        sys.exit(1)
+    if len(matches) > 1:
+        print(
+            f"Error: Ambiguous query '{query}', matches across harnesses:",
+            file=sys.stderr,
+        )
+        for m in matches:
+            print(f"  {m}", file=sys.stderr)
+        sys.exit(1)
+    return matches[0]
