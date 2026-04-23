@@ -86,7 +86,10 @@ defmodule Cli.HarnessTest do
     end
 
     test "path-based detection requires a `/` separator after the prefix" do
-      # `$PI_DIR-alt/...` must NOT match as pi.
+      # TODO(step 3): when a second adapter exists, strengthen this test
+      # so the resolver returning :pi via the *path rule* is distinguishable
+      # from it returning :pi via the compile-time default. Today both
+      # produce the same answer.
       base = System.tmp_dir!() |> Path.join("harness-test-base-#{System.unique_integer([:positive])}")
       alt = base <> "-alt"
       File.mkdir_p!(base)
@@ -98,20 +101,62 @@ defmodule Cli.HarnessTest do
 
       try do
         with_env(%{"PI_DIR" => base, "SESSIONS_DEFAULT_HARNESS" => nil}, fn ->
-          # No harness entry in file, path doesn't match PI_DIR, no env set →
-          # falls to compile default (still pi today, but the path detection
-          # itself must not claim this file).
           assert Harness.resolve(session: legacy_under_alt) == Cli.Harness.Pi
-          # Directly check the internal rule by simulating a "different
-          # default" world would require a second adapter; covered by bash
-          # tests where a false-positive path match would make the resolver
-          # return pi without env set. Here we just confirm resolution
-          # succeeds without raising.
         end)
       after
         File.rm_rf!(base)
         File.rm_rf!(alt)
       end
+    end
+
+    # The rule-by-rule tests below invoke the internal `from_path`
+    # directly (exposed as `@doc false def` so these assertions can
+    # distinguish "rule matched" from "fell through to default" — a
+    # distinction `resolve/1` can't surface while pi is the only
+    # adapter).
+
+    test "from_path matches under $PI_DIR with a separator" do
+      with_env(%{"PI_DIR" => "/custom/pi"}, fn ->
+        assert Harness.from_path("/custom/pi/agent/sessions/foo.jsonl") == :pi
+      end)
+    end
+
+    test "from_path rejects sibling of $PI_DIR (no trailing-slash false positive)" do
+      with_env(%{"PI_DIR" => "/custom/pi", "HOME" => "/nonexistent"}, fn ->
+        assert Harness.from_path("/custom/pi-alt/agent/sessions/foo.jsonl") == nil
+      end)
+    end
+
+    test "from_path matches under $HOME/.pi when PI_DIR is unset" do
+      with_env(%{"PI_DIR" => nil, "HOME" => "/fake/home"}, fn ->
+        assert Harness.from_path("/fake/home/.pi/agent/sessions/foo.jsonl") == :pi
+      end)
+    end
+
+    test "from_path rejects $HOME/.pi-alt even when PI_DIR is unset (Path.join regression)" do
+      # Regression: `Path.join(home, ".pi/")` strips the trailing
+      # slash, producing `/fake/home/.pi` which then false-positive
+      # matches `/fake/home/.pi-alt/...`. Fix: build `home <> "/.pi/"`
+      # directly.
+      with_env(%{"PI_DIR" => nil, "HOME" => "/fake/home"}, fn ->
+        assert Harness.from_path("/fake/home/.pi-alt/agent/sessions/foo.jsonl") == nil
+      end)
+    end
+
+    test "from_path treats PI_DIR=\"\" the same as unset" do
+      # Regression: an empty PI_DIR used to become the prefix "" → "/",
+      # matching every absolute path as pi.
+      with_env(%{"PI_DIR" => "", "HOME" => "/fake/home"}, fn ->
+        assert Harness.from_path("/etc/passwd") == nil
+        assert Harness.from_path("/fake/home/.pi/foo.jsonl") == :pi
+      end)
+    end
+
+    test "from_path normalizes a trailing slash on $PI_DIR" do
+      # `PI_DIR=/opt/x/` should still match `/opt/x/agent/sessions/...`.
+      with_env(%{"PI_DIR" => "/opt/x/", "HOME" => "/nonexistent"}, fn ->
+        assert Harness.from_path("/opt/x/agent/sessions/foo.jsonl") == :pi
+      end)
     end
 
     test "honours SESSIONS_DEFAULT_HARNESS when no session context is given" do

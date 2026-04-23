@@ -29,11 +29,16 @@ import harness
 class Session:
     filepath: str
     entries: list = field(default_factory=list)
+    # Adapter module cached lazily on first `_h` access. Declared as a
+    # proper dataclass field (rather than a late `self._h_cached = ...`
+    # hack) so the attribute survives `@dataclass(frozen=True)` if that
+    # is ever turned on. `None` is the "not yet resolved" sentinel.
+    _h_cached: object = field(default=None, init=False, repr=False, compare=False)
 
     @property
     def _h(self):
         """Cached adapter module for this session's harness."""
-        if not hasattr(self, "_h_cached"):
+        if self._h_cached is None:
             self._h_cached = harness.resolve(
                 filepath=self.filepath, entries=self.entries
             )

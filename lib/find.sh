@@ -7,8 +7,12 @@
 # Adapter contract (see `lib/harness/pi.sh`):
 #   exit 0 + path on stdout  → unique match
 #   exit 1 + empty output    → no match (benign; try next adapter)
-#   exit 2 + stderr message  → hard error (within-adapter ambiguity or
-#                              actual failure); we surface and stop.
+#   exit ≥2 + stderr message → hard error (within-adapter ambiguity,
+#                              unexpected failure, missing tool, etc.);
+#                              we surface the adapter's stderr and
+#                              propagate its exit code.
+# Exit code 2 is the *convention* for hard errors; the aggregator
+# treats any non-{0,1} code identically (catch-all safety).
 #
 # Aggregator behaviour:
 #   - Zero matches across all adapters → "No session matching..." (exit 1).

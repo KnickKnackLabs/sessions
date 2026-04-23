@@ -64,8 +64,16 @@ def _from_path(filepath: str):
     """
     if not filepath:
         return None
-    pi_dir = os.environ.get("PI_DIR", os.path.expanduser("~/.pi"))
-    candidates = {pi_dir.rstrip("/") + "/", os.path.expanduser("~/.pi/")}
+    # `os.environ.get(..., default)` returns the default only for *missing*
+    # keys; an empty-string value still wins. Guard explicitly so
+    # `PI_DIR=""` doesn't collapse the prefix to `"/"` (which would
+    # match every absolute path).
+    env_pi = os.environ.get("PI_DIR") or None
+    home_pi = os.path.expanduser("~/.pi")
+    candidates = set()
+    if env_pi:
+        candidates.add(env_pi.rstrip("/") + "/")
+    candidates.add(home_pi.rstrip("/") + "/")
     if any(filepath.startswith(p) for p in candidates):
         return "pi"
     # Future: ~/.claude/... → claude

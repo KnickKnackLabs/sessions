@@ -75,6 +75,10 @@ defmodule CliTest do
 
   describe "Cli module" do
     test "exports main/1 function" do
+      # `function_exported?` returns `false` unless the module is
+      # already loaded; force the load first so the test doesn't flake
+      # when scheduled before anything else references `Cli`.
+      Code.ensure_loaded!(Cli)
       assert function_exported?(Cli, :main, 1)
     end
 

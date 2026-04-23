@@ -78,8 +78,13 @@ harness_of_session() {
 harness_from_path() {
   local path="$1"
   [ -n "$path" ] || return 0
-  # Pi sessions live under ~/.pi/agent/sessions (or $PI_DIR/agent/sessions)
+  # Pi sessions live under ~/.pi/agent/sessions (or $PI_DIR/agent/sessions).
+  # Strip any trailing slash so `PI_DIR=/opt/custom-pi/` still matches
+  # `/opt/custom-pi/agent/sessions/...` (case pattern `//*` wouldn't).
+  # `${PI_DIR:-...}` also protects against `PI_DIR=""` silently becoming
+  # `/` — an empty value is treated the same as unset.
   local pi_dir="${PI_DIR:-$HOME/.pi}"
+  pi_dir="${pi_dir%/}"
   case "$path" in
     "$pi_dir"/*|"$HOME"/.pi/*) echo "pi"; return 0 ;;
   esac

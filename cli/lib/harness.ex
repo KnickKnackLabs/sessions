@@ -62,13 +62,20 @@ defmodule Cli.Harness do
   end
 
   # --- Internals ---
+  #
+  # The `from_*` helpers are `def` rather than `defp` so tests can
+  # verify their rules in isolation (one-adapter world makes indirect
+  # verification ambiguous — see `path_matches_pi?/1` for the test
+  # seam). They are not part of the stable public API; treat
+  # `resolve/1` as the only intended entry point.
 
   defp maybe_or(nil, fun), do: fun.()
   defp maybe_or(value, _fun), do: value
 
-  defp from_session_file(nil), do: nil
+  @doc false
+  def from_session_file(nil), do: nil
 
-  defp from_session_file(path) do
+  def from_session_file(path) do
     case File.read(path) do
       {:ok, body} ->
         body
@@ -91,7 +98,8 @@ defmodule Cli.Harness do
     end
   end
 
-  defp from_path(nil), do: nil
+  @doc false
+  def from_path(nil), do: nil
 
   # Infer the harness from a path prefix. Kept in sync with
   # `lib/harness/dispatch.sh` and `lib/harness/__init__.py` — review all
@@ -102,11 +110,22 @@ defmodule Cli.Harness do
   # `$HOME/.pi` path are checked, because the environment override and
   # the default location can coexist (e.g. a user with a custom PI_DIR
   # who still has legacy sessions under ~/.pi).
-  defp from_path(path) when is_binary(path) do
+  def from_path(path) when is_binary(path) do
     home = System.get_env("HOME")
-    home_pi = if home, do: Path.join(home, ".pi/"), else: nil
+
+    # Bypass Path.join here — `Path.join(home, ".pi/")` strips the
+    # trailing separator, which would re-introduce the `~/.pi-alt/...`
+    # false-positive we added the trailing slash to prevent.
+    home_pi = if home && home != "", do: home <> "/.pi/", else: nil
+
     env_pi = System.get_env("PI_DIR")
-    env_pi_slash = if env_pi, do: String.trim_trailing(env_pi, "/") <> "/", else: nil
+
+    env_pi_slash =
+      if env_pi && env_pi != "" do
+        String.trim_trailing(env_pi, "/") <> "/"
+      else
+        nil
+      end
 
     candidates =
       [env_pi_slash, home_pi]
@@ -119,7 +138,8 @@ defmodule Cli.Harness do
     end
   end
 
-  defp from_env do
+  @doc false
+  def from_env do
     case System.get_env("SESSIONS_DEFAULT_HARNESS") do
       nil -> nil
       "" -> nil

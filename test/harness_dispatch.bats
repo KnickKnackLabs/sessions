@@ -101,27 +101,44 @@ JSONL
 }
 
 @test "path-based detection requires a '/' separator (no \`\$PI_DIR-alt\` false positive)" {
-  # A session file directly under a directory whose name *begins with*
-  # \$PI_DIR but has extra characters must not be claimed as pi. Without
-  # the trailing-slash anchor we'd false-positive sibling dirs like
-  # \$PI_DIR-alt, \$PI_DIR.backup, etc.
+  # TODO(step 3): with a second adapter this test becomes stronger —
+  # today both "path matched → pi" and "fell through to default → pi"
+  # produce the same answer, so we probe `harness_from_path` directly
+  # for the rule under test.
   mkdir -p "${PI_DIR}-alt"
   sf="${PI_DIR}-alt/legacy.jsonl"
   cat > "$sf" <<JSONL
 {"type":"session","id":"legacy"}
 JSONL
 
-  # With no env default set, a non-matching path should still resolve to
-  # the compile-time default (pi today). The important thing is the
-  # bash resolver does not match `-alt` as pi via the path rule — we
-  # assert that by clearing the env and confirming path detection did
-  # not fire prematurely (which we prove indirectly by the lack of
-  # any stray lookup behaviour; resolver still returns pi via rule 5).
-  SESSIONS_DEFAULT_HARNESS='' run harness_resolve --session "$sf"
+  # Rule-level assertion: the path rule must NOT claim this sibling.
+  run harness_from_path "$sf"
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+
+  rm -rf "${PI_DIR}-alt"
+}
+
+@test "path-based detection normalizes trailing slash on \$PI_DIR" {
+  # Regression: `PI_DIR=/opt/x/` previously became a case pattern `/opt/x//*`
+  # which won't match /opt/x/... .
+  mkdir -p /tmp/trailing-slash-pi-test/agent/sessions
+  sf=/tmp/trailing-slash-pi-test/agent/sessions/foo.jsonl
+  : > "$sf"
+
+  PI_DIR=/tmp/trailing-slash-pi-test/ run harness_from_path "$sf"
   [ "$status" -eq 0 ]
   [ "$output" = "pi" ]
 
-  rm -rf "${PI_DIR}-alt"
+  rm -rf /tmp/trailing-slash-pi-test
+}
+
+@test "path-based detection treats \$PI_DIR='' as unset (no '/' collapse)" {
+  # Regression: an empty PI_DIR used to be respected literally, collapsing
+  # to a prefix of '/' which would match any absolute path.
+  PI_DIR='' HOME=/nonexistent run harness_from_path /etc/passwd
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
 }
 
 # --- Resolver: env fallback ---
