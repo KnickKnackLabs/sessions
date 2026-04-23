@@ -32,9 +32,10 @@ defmodule Cli do
   defp run_with_opts(opts, rest) do
     message = Enum.join(rest, " ")
     timeout = opts[:timeout]
-    model = opts[:model] || Cli.Harness.Pi.Command.default_model()
-    cwd = opts[:cwd]
     session = opts[:session]
+    harness = Cli.Harness.resolve(session: session)
+    model = opts[:model] || harness.default_model()
+    cwd = opts[:cwd]
 
     # Extension flags default to true (enabled) unless explicitly disabled.
     extensions = opts[:no_extensions] != true
@@ -122,7 +123,7 @@ defmodule Cli do
   end
 
   defp print_help do
-    default_model = Cli.Harness.Pi.Command.default_model()
+    default_model = Cli.Harness.resolve().default_model()
 
     IO.puts("""
     Usage: sessions run --system-prompt-file <path> [options] <message>

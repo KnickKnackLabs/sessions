@@ -7,10 +7,10 @@ defmodule Cli.Engine do
   between lines, handles timeout exit, and returns the process status
   (with ABORT detection surfacing as exit 1).
 
-  Today this engine only knows pi. When the multi-harness dispatcher
-  lands (sessions#50 step 2) the calls into `Cli.Harness.Pi.Command`
-  and `Cli.Harness.Pi.Stream` here will route through a resolved
-  harness adapter instead.
+  The engine is harness-agnostic: `Cli.Harness.resolve/1` picks the
+  right adapter module for the session, and the engine calls that
+  module's `build_command/6`, `process_line/2`, and
+  `extract_partial_text/1` functions. Step 2 of sessions#50.
   """
 
   @buffer_flush_timeout_ms 100
@@ -39,8 +39,10 @@ defmodule Cli.Engine do
           run_opts()
         ) :: non_neg_integer()
   def run(message, system_prompt_file, timeout, model, cwd, session, pi_opts) do
+    harness = Cli.Harness.resolve(session: session)
+
     {shell_script, positional_args} =
-      Cli.Harness.Pi.Command.build_command(
+      harness.build_command(
         message,
         model,
         system_prompt_file,
@@ -58,6 +60,7 @@ defmodule Cli.Engine do
 
     status =
       stream_output(port, %{
+        harness: harness,
         tool_input: "",
         buffer: "",
         usage: nil,
@@ -82,12 +85,14 @@ defmodule Cli.Engine do
         lines = String.split(combined, "\n")
         {complete_lines, [new_buffer]} = Enum.split(lines, -1)
 
+        harness = state.harness
+
         new_state =
           complete_lines
           |> Enum.reject(&(&1 == ""))
           |> Enum.reduce(
             %{state | buffer: new_buffer},
-            &Cli.Harness.Pi.Stream.process_line/2
+            &harness.process_line/2
           )
 
         stream_output(port, new_state)
@@ -110,7 +115,7 @@ defmodule Cli.Engine do
             stream_output(port, state)
 
           partial ->
-            extracted = Cli.Harness.Pi.Stream.extract_partial_text(partial)
+            extracted = state.harness.extract_partial_text(partial)
             new_text = Cli.Text.text_beyond_flushed(extracted, state.flushed_chars)
             if new_text != "", do: IO.write(new_text)
             stream_output(port, %{state | flushed_chars: String.length(extracted)})
@@ -123,10 +128,10 @@ defmodule Cli.Engine do
   defp finalize_buffer(buffer, state) do
     case Jason.decode(buffer) do
       {:ok, _} ->
-        Cli.Harness.Pi.Stream.process_line(buffer, state)
+        state.harness.process_line(buffer, state)
 
       {:error, _} ->
-        extracted = Cli.Harness.Pi.Stream.extract_partial_text(buffer)
+        extracted = state.harness.extract_partial_text(buffer)
         new_text = Cli.Text.text_beyond_flushed(extracted, state.flushed_chars)
         if new_text != "", do: IO.write(new_text)
 
