@@ -17,7 +17,7 @@
 # claude` therefore fails fast at session_file_path — before any
 # directory creation or file write — with a clean UNSUPPORTED message.
 #
-# Usage:
+# Usage (from task scripts, where $MISE_CONFIG_ROOT is set by mise):
 #   source "$MISE_CONFIG_ROOT/lib/harness/claude.sh"
 
 # --- Location ---

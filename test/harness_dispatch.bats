@@ -291,7 +291,8 @@ JSONL
   # entry then wins over path-based detection (see the priority test
   # above), so wake dispatches to claude — which errors UNSUPPORTED
   # when the Elixir run path asks claude for its default model.
-  command -v shell >/dev/null 2>&1 || skip "shell not installed"
+  # Foreground wake (no --background) — execs mise run directly, so
+  # `shell` isn't required.
 
   local sid="cccccccc-3333-3333-3333-333333333333"
   local sf="$PI_DIR/agent/sessions/--claude-acceptance--/2026-04-22T10-00-00-000Z_${sid}.jsonl"

@@ -30,12 +30,26 @@ UNSUPPORTED_EXIT = 10
 class Unsupported(Exception):
     """Raised by adapter functions that don't implement a given operation.
 
-    Adapters raise this with a short, user-facing message; the CLI
-    entry point catches it, prints the message, and exits with
-    `UNSUPPORTED_EXIT`. Aggregator code (e.g. `parse.find_session`) may
-    catch it earlier to skip adapters that can't contribute to the
-    aggregate — see call sites for which semantics apply.
+    Carries structured fields (`op` and optionally `harness`) so catch
+    sites can inspect them — mirrors `Cli.Harness.UnsupportedError` in
+    Elixir. Back-compat: `raise Unsupported("op_name")` still works;
+    `raise Unsupported("op_name", harness="claude")` adds the harness
+    for structured access and produces a richer message.
+
+    Adapters raise this with a short, user-facing identifier; the CLI
+    entry point (or `exit_unsupported` below) owns the final wording
+    and exit.
     """
+
+    def __init__(self, op: str, harness: str = ""):
+        self.op = op
+        self.harness = harness
+        message = (
+            f"'{harness}' harness does not support '{op}' yet"
+            if harness
+            else op
+        )
+        super().__init__(message)
 
 
 def exit_unsupported(harness: str, op: str) -> None:

@@ -15,57 +15,57 @@ from harness import Unsupported
 # --- Entry-level schema ---
 
 def is_message_entry(entry: dict) -> bool:
-    raise Unsupported("is_message_entry")
+    raise Unsupported("is_message_entry", harness="claude")
 
 
 def messages(entries: list) -> list:
-    raise Unsupported("messages")
+    raise Unsupported("messages", harness="claude")
 
 
 def session_id(entries: list, filepath: str) -> str:
-    raise Unsupported("session_id")
+    raise Unsupported("session_id", harness="claude")
 
 
 def name(entries: list) -> str:
-    raise Unsupported("name")
+    raise Unsupported("name", harness="claude")
 
 
 def meta(entries: list) -> dict:
-    raise Unsupported("meta")
+    raise Unsupported("meta", harness="claude")
 
 
 def slug() -> str:
-    raise Unsupported("slug")
+    raise Unsupported("slug", harness="claude")
 
 
 def model(entries: list) -> str:
-    raise Unsupported("model")
+    raise Unsupported("model", harness="claude")
 
 
 def project(filepath: str) -> str:
-    raise Unsupported("project")
+    raise Unsupported("project", harness="claude")
 
 
 def first_timestamp(entries: list) -> str:
-    raise Unsupported("first_timestamp")
+    raise Unsupported("first_timestamp", harness="claude")
 
 
 def last_timestamp(entries: list) -> str:
-    raise Unsupported("last_timestamp")
+    raise Unsupported("last_timestamp", harness="claude")
 
 
 def message_counts(entries: list) -> tuple:
-    raise Unsupported("message_counts")
+    raise Unsupported("message_counts", harness="claude")
 
 
 def text_messages(entries: list) -> list:
-    raise Unsupported("text_messages")
+    raise Unsupported("text_messages", harness="claude")
 
 
 # --- Location / lookup ---
 
 def sessions_dir() -> str:
-    raise Unsupported("sessions_dir")
+    raise Unsupported("sessions_dir", harness="claude")
 
 
 def find_session(query: str):

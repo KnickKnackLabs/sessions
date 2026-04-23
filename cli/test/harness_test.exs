@@ -107,10 +107,12 @@ defmodule Cli.HarnessTest do
     end
 
     test "path-based detection requires a `/` separator after the prefix" do
-      # TODO(step 3): when a second adapter exists, strengthen this test
-      # so the resolver returning :pi via the *path rule* is distinguishable
-      # from it returning :pi via the compile-time default. Today both
-      # produce the same answer.
+      # With two adapters registered, this test now bites: a path
+      # under `$CLAUDE_DIR-alt/` must NOT resolve to :claude. If the
+      # rule were loose (prefix match without the separator), it
+      # would; if the rule is right, resolve/1 falls through past the
+      # path rule and lands on the compile-time default (:pi). That's
+      # a distinguishable outcome.
       base = System.tmp_dir!() |> Path.join("harness-test-base-#{System.unique_integer([:positive])}")
       alt = base <> "-alt"
       File.mkdir_p!(base)
@@ -121,7 +123,10 @@ defmodule Cli.HarnessTest do
       """)
 
       try do
-        with_env(%{"PI_DIR" => base, "SESSIONS_DEFAULT_HARNESS" => nil}, fn ->
+        with_env(%{"CLAUDE_DIR" => base, "SESSIONS_DEFAULT_HARNESS" => nil}, fn ->
+          # If the path rule incorrectly claimed the -alt directory,
+          # this would resolve to Cli.Harness.Claude. It doesn't —
+          # proving the rule correctly requires the trailing separator.
           assert Harness.resolve(session: legacy_under_alt) == Cli.Harness.Pi
         end)
       after
@@ -139,6 +144,39 @@ defmodule Cli.HarnessTest do
     test "from_path matches under $PI_DIR with a separator" do
       with_env(%{"PI_DIR" => "/custom/pi"}, fn ->
         assert Harness.from_path("/custom/pi/agent/sessions/foo.jsonl") == :pi
+      end)
+    end
+
+    # --- Claude path rules (mirror the pi coverage above) ---
+
+    test "from_path matches under $CLAUDE_DIR with a separator" do
+      with_env(%{"CLAUDE_DIR" => "/custom/claude"}, fn ->
+        assert Harness.from_path("/custom/claude/projects/foo.jsonl") == :claude
+      end)
+    end
+
+    test "from_path rejects sibling of $CLAUDE_DIR (no trailing-slash false positive)" do
+      with_env(%{"CLAUDE_DIR" => "/custom/claude", "HOME" => "/nonexistent"}, fn ->
+        assert Harness.from_path("/custom/claude-alt/projects/foo.jsonl") == nil
+      end)
+    end
+
+    test "from_path matches under $HOME/.claude when CLAUDE_DIR is unset" do
+      with_env(%{"CLAUDE_DIR" => nil, "HOME" => "/fake/home"}, fn ->
+        assert Harness.from_path("/fake/home/.claude/projects/foo.jsonl") == :claude
+      end)
+    end
+
+    test "from_path rejects $HOME/.claude-alt even when CLAUDE_DIR is unset" do
+      with_env(%{"CLAUDE_DIR" => nil, "HOME" => "/fake/home"}, fn ->
+        assert Harness.from_path("/fake/home/.claude-alt/projects/foo.jsonl") == nil
+      end)
+    end
+
+    test "from_path treats CLAUDE_DIR=\"\" the same as unset" do
+      with_env(%{"CLAUDE_DIR" => "", "HOME" => "/fake/home"}, fn ->
+        assert Harness.from_path("/etc/passwd") == nil
+        assert Harness.from_path("/fake/home/.claude/foo.jsonl") == :claude
       end)
     end
 

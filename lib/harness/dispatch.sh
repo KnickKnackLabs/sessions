@@ -29,10 +29,17 @@
 #   4. $SESSIONS_DEFAULT_HARNESS environment variable
 #   5. Compile-time default: "pi"
 #
-# Usage:
+# Usage (from task scripts, where $MISE_CONFIG_ROOT is set by mise):
 #   source "$MISE_CONFIG_ROOT/lib/harness/dispatch.sh"
 #   name=$(harness_resolve --session "$SESSION_FILE" --flag "$HARNESS_FLAG")
 #   source "$MISE_CONFIG_ROOT/lib/harness/$name.sh"
+
+# Source guard — this file is sometimes sourced via two paths in the
+# same shell (wake sources dispatch.sh directly, then sources find.sh
+# which in turn re-sources dispatch.sh). Redefining functions is
+# harmless but burns cycles; the guard skips the re-run.
+[ -n "${_DISPATCH_SH_LOADED:-}" ] && return 0
+_DISPATCH_SH_LOADED=1
 
 # Self-locate: this file IS `lib/harness/dispatch.sh`, so its own
 # directory is the harness lib dir. The env override (HARNESS_LIB_DIR)

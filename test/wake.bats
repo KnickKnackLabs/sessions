@@ -87,7 +87,8 @@ teardown() {
   # through PATH we route to the wrong codebase. Prove we don't by
   # running wake with a PATH that points `sessions` at a stub that
   # always fails; wake must still succeed because it uses
-  # `mise -C "$REPO_DIR" run` for sibling dispatch.
+  # `mise -C "$MISE_CONFIG_ROOT" run` for sibling dispatch (production
+  # variable, not the test-level $REPO_DIR).
   command -v shell >/dev/null 2>&1 || skip "shell not installed"
 
   local stub_dir="$BATS_TEST_TMPDIR/stub-path"
@@ -105,8 +106,6 @@ STUB
   # If the stub ever fired, its stderr would leak into output.
   ! echo "$output" | grep -q "stub-sessions invoked"
 }
-
-
 
 # --- Context injection (works in both modes) ---
 
