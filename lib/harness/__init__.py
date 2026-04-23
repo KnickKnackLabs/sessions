@@ -89,25 +89,30 @@ def _from_entries(entries: list):
 def _from_path(filepath: str):
     """Infer harness from a path prefix. Returns None if no rule matches.
 
-    Requires a trailing `/` after the prefix so `~/.pi-alt/...` does not
-    get claimed by the pi adapter. Kept in sync with `lib/harness/dispatch.sh`
-    and `cli/lib/harness.ex` — review all three together when editing.
+    Each prefix candidate ends with a `/` so `~/.pi-alt/...` does not
+    get claimed by the pi adapter. Kept in sync with
+    `lib/harness/dispatch.sh` and `cli/lib/harness.ex` — review all
+    three together when editing.
+
+    `PI_DIR=""` / `CLAUDE_DIR=""` are treated as unset, not as `"/"`
+    (which would match every absolute path).
     """
     if not filepath:
         return None
-    # `os.environ.get(..., default)` returns the default only for *missing*
-    # keys; an empty-string value still wins. Guard explicitly so
-    # `PI_DIR=""` doesn't collapse the prefix to `"/"` (which would
-    # match every absolute path).
-    env_pi = os.environ.get("PI_DIR") or None
-    home_pi = os.path.expanduser("~/.pi")
-    candidates = set()
-    if env_pi:
-        candidates.add(env_pi.rstrip("/") + "/")
-    candidates.add(home_pi.rstrip("/") + "/")
-    if any(filepath.startswith(p) for p in candidates):
-        return "pi"
-    # Future: ~/.claude/... → claude
+
+    for harness_name, env_var, default_home in (
+        ("pi", "PI_DIR", "~/.pi"),
+        ("claude", "CLAUDE_DIR", "~/.claude"),
+    ):
+        env_override = os.environ.get(env_var) or None
+        home_default = os.path.expanduser(default_home)
+        candidates = set()
+        if env_override:
+            candidates.add(env_override.rstrip("/") + "/")
+        candidates.add(home_default.rstrip("/") + "/")
+        if any(filepath.startswith(p) for p in candidates):
+            return harness_name
+
     return None
 
 

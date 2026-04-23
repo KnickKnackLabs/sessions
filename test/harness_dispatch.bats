@@ -23,10 +23,12 @@ teardown() {
 
 # --- Registry ---
 
-@test "harness_list returns installed adapters (pi today)" {
+@test "harness_list returns installed adapters" {
   run harness_list
   [ "$status" -eq 0 ]
-  [ "$output" = "pi" ]
+  # Sorted output, one per line. Update this list as adapters land.
+  [ "$output" = "claude
+pi" ]
 }
 
 @test "harness_valid accepts installed adapters" {

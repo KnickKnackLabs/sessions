@@ -23,8 +23,8 @@ defmodule Cli.HarnessTest do
   # --- Registry ---
 
   describe "available/0" do
-    test "returns :pi today, sorted" do
-      assert Harness.available() == [:pi]
+    test "returns registered adapters, sorted" do
+      assert Harness.available() == [:claude, :pi]
     end
   end
 
@@ -33,9 +33,13 @@ defmodule Cli.HarnessTest do
       assert Harness.adapter(:pi) == Cli.Harness.Pi
     end
 
+    test "returns the claude adapter module" do
+      assert Harness.adapter(:claude) == Cli.Harness.Claude
+    end
+
     test "raises on unknown name" do
       assert_raise ArgumentError, ~r/Unknown harness/, fn ->
-        Harness.adapter(:claude)
+        Harness.adapter(:xyz)
       end
     end
   end
@@ -55,9 +59,10 @@ defmodule Cli.HarnessTest do
 
     test "explicit :name as string is validated against the adapter list" do
       assert Harness.resolve(name: "pi") == Cli.Harness.Pi
+      assert Harness.resolve(name: "claude") == Cli.Harness.Claude
 
-      assert_raise ArgumentError, ~r/Unknown harness "claude" from name: option/, fn ->
-        Harness.resolve(name: "claude")
+      assert_raise ArgumentError, ~r/Unknown harness "xyz" from name: option/, fn ->
+        Harness.resolve(name: "xyz")
       end
     end
 
