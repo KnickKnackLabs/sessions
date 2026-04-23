@@ -70,5 +70,11 @@ CLI_ARGS=(--system-prompt-file "$SYSTEM_PROMPT_FILE" --cwd "$CWD")
 [ "$SKILLS" != "true" ] && CLI_ARGS+=(--no-skills)
 [ "$PROMPT_TEMPLATES" != "true" ] && CLI_ARGS+=(--no-prompt-templates)
 
+# Self-heal on fresh installs before handing off to mix. See
+# KnickKnackLabs/sessions#53 for rationale.
+# shellcheck source=../../lib/ensure-deps.sh
+source "$MISE_CONFIG_ROOT/lib/ensure-deps.sh"
+ensure_cli_deps "$CLI_DIR"
+
 cd "$CLI_DIR"
 exec mix sessions "${CLI_ARGS[@]}" "$MESSAGE"

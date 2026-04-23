@@ -8,8 +8,8 @@ Create sessions with structured metadata, wake agents into them,
 observe transcripts in real time, and query your history.
 
 ![lang: bash + python](https://img.shields.io/badge/lang-bash%20%2B%20python-4EAA25?style=flat&logo=gnubash&logoColor=white)
-[![tests: 141 passing](https://img.shields.io/badge/tests-141%20passing-brightgreen?style=flat)](test/)
-![commands: 10](https://img.shields.io/badge/commands-10-blue?style=flat)
+[![tests: 161 passing](https://img.shields.io/badge/tests-161%20passing-brightgreen?style=flat)](test/)
+![commands: 13](https://img.shields.io/badge/commands-13-blue?style=flat)
 ![license: MIT](https://img.shields.io/badge/license-MIT-blue?style=flat)
 
 </div>
@@ -162,7 +162,7 @@ cd sessions && mise trust && mise install
 mise run test
 ```
 
-**141 tests** across 10 suites, using [BATS 1.13.0](https://github.com/bats-core/bats-core). Tasks are bash scripts (session creation, wake, metadata) and Python scripts with [Rich](https://github.com/Textualize/rich) output (list, read, inspect, search). The JSONL parsing library is 634 lines of Python in `lib/`.
+**161 tests** across 12 suites, using [BATS 1.13.0](https://github.com/bats-core/bats-core). Tasks are bash scripts (session creation, wake, metadata) and Python scripts with [Rich](https://github.com/Textualize/rich) output (list, read, inspect, search). The JSONL parsing library is 434 lines of Python in `lib/`.
 
 <details>
 <summary><b>Project structure</b></summary>
@@ -178,13 +178,21 @@ sessions/
 │   ├── search       # Full-text regex across transcripts
 │   ├── inspect      # Forensic metadata (duration, tools, model)
 │   ├── copy         # Duplicate sessions for handoff
+│   ├── remove       # Remove sessions (kill shell + delete file)
+│   ├── run          # Execute agent sessions (wraps Elixir CLI)
+│   ├── cli/build    # Build Elixir CLI dependencies
 │   ├── export       # Portable bundles (JSONL + metadata)
 │   └── import       # Import exported sessions
+├── cli/             # Elixir execution engine (timeout, ABORT, usage)
 ├── lib/
-│   ├── parse.py     # JSONL parser, session model, filter engine
-│   └── format.py    # Rich formatting helpers
+│   ├── parse.py        # JSONL parser, session model, filter engine
+│   ├── format.py       # Rich formatting helpers
+│   ├── ensure-deps.sh  # First-run CLI deps self-heal
+│   ├── find.sh         # Back-compat shim → harness adapter
+│   ├── shell.sh        # Shell helpers
+│   └── harness/        # Per-harness adapters (pi, …)
 └── test/
-    └── *.bats       # 141 tests
+    └── *.bats          # 161 tests
 ```
 
 </details>
