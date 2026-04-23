@@ -3,6 +3,22 @@ defmodule Cli.HarnessTest do
   # async: false — we mutate process environment variables.
 
   alias Cli.Harness
+  alias Cli.Harness.UnsupportedError
+
+  # --- UNSUPPORTED exception ---
+
+  describe "UnsupportedError" do
+    test "exit_code/0 matches the bash/python contract (10)" do
+      assert UnsupportedError.exit_code() == 10
+    end
+
+    test "exception carries harness, op, and a readable message" do
+      e = UnsupportedError.exception(harness: :claude, op: :build_command)
+      assert e.harness == :claude
+      assert e.op == :build_command
+      assert Exception.message(e) =~ "'claude' harness does not support 'build_command' yet"
+    end
+  end
 
   # --- Registry ---
 

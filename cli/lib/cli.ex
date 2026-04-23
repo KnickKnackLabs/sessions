@@ -25,7 +25,17 @@ defmodule Cli do
       print_help()
       0
     else
-      run_with_opts(opts, rest)
+      try do
+        run_with_opts(opts, rest)
+      rescue
+        e in Cli.Harness.UnsupportedError ->
+          # Clean UNSUPPORTED path: short message to stderr, reserved
+          # exit code so wrapping shells can branch. No stacktrace —
+          # this is an expected "not yet implemented for this adapter"
+          # signal, not a bug.
+          IO.puts(:stderr, "sessions: #{Exception.message(e)}")
+          Cli.Harness.UnsupportedError.exit_code()
+      end
     end
   end
 

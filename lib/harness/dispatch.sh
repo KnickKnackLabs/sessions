@@ -37,6 +37,46 @@
 HARNESS_LIB_DIR="${HARNESS_LIB_DIR:-$MISE_CONFIG_ROOT/lib/harness}"
 HARNESS_DEFAULT="pi"
 
+# --- UNSUPPORTED contract ---
+#
+# Adapters that don't (yet) implement a given operation signal so via a
+# reserved exit code. Callers of adapter functions should go through
+# `harness_call` (below), which turns the reserved code into a clean
+# user-facing error and exits with the same code so wrapping scripts
+# can branch on it. Mirrors `Unsupported` in `lib/harness/__init__.py`
+# and `Cli.Harness.UnsupportedError` in `cli/lib/harness.ex`.
+HARNESS_UNSUPPORTED_EXIT=10
+
+# Adapter helper — use inside an adapter function to signal that this
+# operation isn't supported by this harness. Writes nothing to stdout;
+# the caller's `harness_call` wrapper owns the user-facing message.
+harness_unsupported() {
+  return "$HARNESS_UNSUPPORTED_EXIT"
+}
+
+# Call an adapter function with UNSUPPORTED handling.
+#
+# Usage: harness_call <harness> <fn_suffix> [args...]
+#   e.g. harness_call pi header_entry "$id" "$ts" "$cwd"
+#
+# - Passes through stdout and stderr from the adapter function.
+# - On the reserved UNSUPPORTED exit code, prints a clean message to
+#   stderr and exits the current shell with the same code (so `set -e`
+#   callers fail fast with a useful error).
+# - Any other exit code is returned as-is; the caller can decide.
+harness_call() {
+  local harness="$1" fn_suffix="$2"
+  shift 2
+  local fn="harness_${harness}_${fn_suffix}"
+  local rc=0
+  "$fn" "$@" || rc=$?
+  if [ "$rc" -eq "$HARNESS_UNSUPPORTED_EXIT" ]; then
+    echo "sessions: '$harness' harness does not support '$fn_suffix' yet" >&2
+    exit "$HARNESS_UNSUPPORTED_EXIT"
+  fi
+  return "$rc"
+}
+
 # --- Registry ---
 
 # List available harnesses (sorted, one per line). An adapter is

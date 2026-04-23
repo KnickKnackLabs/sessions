@@ -117,7 +117,7 @@ if [ -n "$CONTEXT" ]; then
   LAST_ID="$WAKE_ID"
   MSG_ID=$(uuidgen | tr '[:upper:]' '[:lower:]' | cut -c1-8)
 
-  "harness_${HARNESS_NAME}_user_message_entry" "$MSG_ID" "$LAST_ID" "$NOW_ISO" "$CONTEXT" >> "$SESSION_FILE"
+  harness_call "$HARNESS_NAME" user_message_entry "$MSG_ID" "$LAST_ID" "$NOW_ISO" "$CONTEXT" >> "$SESSION_FILE"
 fi
 
 # --- Resolve working directory from session ---

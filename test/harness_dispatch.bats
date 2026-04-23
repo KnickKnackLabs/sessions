@@ -275,3 +275,64 @@ JSONL
   [ "$status" -eq 0 ]
   echo "$output" | jq -e '.type == "harness" and .name == "pi" and .parentId == "parent1"'
 }
+
+# --- UNSUPPORTED contract ---
+
+@test "harness_unsupported returns the reserved exit code" {
+  run bash -c '
+    source "$1/lib/harness/dispatch.sh"
+    harness_unsupported
+  ' _ "$MISE_CONFIG_ROOT"
+  [ "$status" -eq 10 ]
+  [ -z "$output" ]
+}
+
+@test "harness_call passes through on success" {
+  run bash -c '
+    source "$1/lib/harness/dispatch.sh"
+    harness_fake_ok() { echo "hello from fake"; }
+    harness_call fake ok
+  ' _ "$MISE_CONFIG_ROOT"
+  [ "$status" -eq 0 ]
+  [ "$output" = "hello from fake" ]
+}
+
+@test "harness_call prints clean UNSUPPORTED message and exits 10" {
+  run bash -c '
+    source "$1/lib/harness/dispatch.sh"
+    harness_skel_header_entry() { harness_unsupported; }
+    harness_call skel header_entry
+    echo "should not reach"
+  ' _ "$MISE_CONFIG_ROOT"
+  [ "$status" -eq 10 ]
+  echo "$output" | grep -qi "'skel' harness does not support 'header_entry'"
+  # Ensure we really exited, not just returned.
+  ! echo "$output" | grep -q "should not reach"
+}
+
+@test "harness_call preserves stdout so callers can redirect it" {
+  # Regression guard: `new` uses `harness_call ... > file`, which
+  # requires the function's stdout to reach the caller's redirect.
+  local tmp="$BATS_TEST_TMPDIR/captured"
+  bash -c '
+    source "$1/lib/harness/dispatch.sh"
+    harness_fake_emit() { echo "payload"; }
+    harness_call fake emit > "$2"
+  ' _ "$MISE_CONFIG_ROOT" "$tmp"
+  [ "$(cat "$tmp")" = "payload" ]
+}
+
+@test "harness_call returns non-UNSUPPORTED exit codes instead of exiting" {
+  # Adapters may fail for reasons other than UNSUPPORTED (e.g. a jq
+  # parse failure). Those should propagate as ordinary return values
+  # so callers can decide — not collapse into UNSUPPORTED's exit path.
+  run bash -c '
+    source "$1/lib/harness/dispatch.sh"
+    harness_fake_boom() { return 3; }
+    harness_call fake boom || echo "got rc=$?"
+    echo "kept going"
+  ' _ "$MISE_CONFIG_ROOT"
+  [ "$status" -eq 0 ]
+  echo "$output" | grep -q "got rc=3"
+  echo "$output" | grep -q "kept going"
+}

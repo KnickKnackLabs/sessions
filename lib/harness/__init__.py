@@ -17,8 +17,39 @@ same surface — see `pi.py` for the reference.
 
 import importlib
 import os
+import sys
 
 DEFAULT = "pi"
+
+# Reserved exit code for UNSUPPORTED operations. Mirrored in
+# `lib/harness/dispatch.sh` (HARNESS_UNSUPPORTED_EXIT=10) and
+# `Cli.Harness.UnsupportedError` (Elixir).
+UNSUPPORTED_EXIT = 10
+
+
+class Unsupported(Exception):
+    """Raised by adapter functions that don't implement a given operation.
+
+    Adapters raise this with a short, user-facing message; the CLI
+    entry point catches it, prints the message, and exits with
+    `UNSUPPORTED_EXIT`. Aggregator code (e.g. `parse.find_session`) may
+    catch it earlier to skip adapters that can't contribute to the
+    aggregate — see call sites for which semantics apply.
+    """
+
+
+def exit_unsupported(harness: str, op: str) -> None:
+    """Print the clean UNSUPPORTED message and exit the process.
+
+    Call from CLI entry points after catching an `Unsupported` raised
+    deep in an adapter. Kept here (not duplicated across .mise/tasks)
+    so the wording is uniform.
+    """
+    print(
+        f"sessions: '{harness}' harness does not support '{op}' yet",
+        file=sys.stderr,
+    )
+    sys.exit(UNSUPPORTED_EXIT)
 
 
 # --- Registry ---

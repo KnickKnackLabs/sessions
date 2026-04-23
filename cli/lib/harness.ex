@@ -1,3 +1,30 @@
+defmodule Cli.Harness.UnsupportedError do
+  @moduledoc """
+  Raised by adapter functions that don't implement a given operation
+  for this harness.
+
+  Mirrors `harness_unsupported` (bash, exit 10) and `harness.Unsupported`
+  (Python). The CLI boundary rescues this, prints a clean message, and
+  halts with exit code 10 so wrapping shells can branch.
+  """
+
+  # Reserved exit code — stay in sync with `HARNESS_UNSUPPORTED_EXIT` in
+  # `lib/harness/dispatch.sh` and `UNSUPPORTED_EXIT` in
+  # `lib/harness/__init__.py`.
+  @exit_code 10
+  def exit_code, do: @exit_code
+
+  defexception [:harness, :op, :message]
+
+  @impl true
+  def exception(opts) do
+    harness = Keyword.fetch!(opts, :harness)
+    op = Keyword.fetch!(opts, :op)
+    msg = "'#{harness}' harness does not support '#{op}' yet"
+    %__MODULE__{harness: harness, op: op, message: msg}
+  end
+end
+
 defmodule Cli.Harness do
   @moduledoc """
   Harness dispatch layer (Elixir). Mirrors `lib/harness/dispatch.sh` and
