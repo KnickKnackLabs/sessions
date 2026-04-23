@@ -300,23 +300,26 @@ def discover_sessions_dir() -> str:
 def find_session(query: str) -> str:
     """Find a session JSONL by UUID prefix or name across all harnesses.
 
-    Exits non-zero on no match or ambiguity. If multiple harnesses each
-    find a match, lists them all in the error.
-    """
-    import contextlib
-    import io
+    Adapters return Optional[str] from their own `find_session` (None on
+    no-match) and raise `ValueError` on within-adapter ambiguity. Hard
+    errors (permission denied, etc.) propagate as normal exceptions
+    rather than being caught.
 
+    Exits non-zero with a clear message on no-match across all adapters,
+    on any adapter's within-adapter ambiguity, or on cross-adapter
+    ambiguity (two adapters each find a unique match).
+    """
     matches = []
     for name in harness.available():
         adapter = harness.adapter(name)
-        # Adapters' find_session calls sys.exit(1) on no match and prints
-        # to stderr. Suppress their stderr during iteration so the aggregator
-        # owns the final error message.
-        with contextlib.redirect_stderr(io.StringIO()):
-            try:
-                matches.append(adapter.find_session(query))
-            except SystemExit:
-                continue
+        try:
+            match = adapter.find_session(query)
+        except ValueError as e:
+            # Within-adapter ambiguity — surface and stop.
+            print(f"Error: {e}", file=sys.stderr)
+            sys.exit(1)
+        if match is not None:
+            matches.append(match)
 
     if not matches:
         print(f"Error: No session matching '{query}'", file=sys.stderr)

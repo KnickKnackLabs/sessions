@@ -33,6 +33,9 @@ defmodule Cli do
     message = Enum.join(rest, " ")
     timeout = opts[:timeout]
     session = opts[:session]
+    # Resolve the harness once here and pass it down. `Cli.Engine.run`
+    # used to re-resolve from the session file, which meant reading
+    # the JSONL twice on every invocation.
     harness = Cli.Harness.resolve(session: session)
     model = opts[:model] || harness.default_model()
     cwd = opts[:cwd]
@@ -51,6 +54,7 @@ defmodule Cli do
 
       :ok ->
         Cli.Engine.run(
+          harness,
           message,
           opts[:system_prompt_file],
           timeout,

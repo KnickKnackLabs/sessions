@@ -54,14 +54,25 @@ harness_pi_session_file_path() {
 # --- Lookup ---
 
 # Find a pi session file by UUID prefix or session name.
-# Prints the path on success; prints error and returns non-zero otherwise.
+#
+# Contract (shared across adapters — see `lib/find.sh` for the
+# aggregator):
+#   - Exit 0 + path on stdout  → unique match
+#   - Exit 1 + empty output    → no match (the aggregator owns the
+#     final "not found" message; missing sessions dir is treated as
+#     "no match" since other adapters may have sessions)
+#   - Exit 2 + stderr message  → within-adapter ambiguity (hard error;
+#     aggregator propagates)
+#
+# Real failures (permission denied, corrupt filesystem) are not caught
+# here — bash's normal non-zero exit from the underlying command
+# surfaces.
 harness_pi_find_session() {
   local query="$1"
   local sessions_dir
   sessions_dir=$(harness_pi_sessions_dir)
 
   if [ ! -d "$sessions_dir" ]; then
-    echo "Error: No sessions directory at $sessions_dir" >&2
     return 1
   fi
 
@@ -102,7 +113,6 @@ harness_pi_find_session() {
 
   case ${#matches[@]} in
     0)
-      echo "Error: No session matching '$query'" >&2
       return 1
       ;;
     1)
@@ -110,9 +120,9 @@ harness_pi_find_session() {
       return 0
       ;;
     *)
-      echo "Error: Ambiguous query '$query', matches:" >&2
+      echo "Error: Ambiguous query '$query' matches multiple pi sessions:" >&2
       printf '  %s\n' "${matches[@]}" >&2
-      return 1
+      return 2
       ;;
   esac
 }

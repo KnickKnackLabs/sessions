@@ -44,8 +44,15 @@ defmodule Cli.Harness do
   """
   @spec resolve(keyword()) :: module()
   def resolve(opts \\ []) do
+    explicit =
+      case opts[:name] do
+        nil -> nil
+        atom when is_atom(atom) -> atom
+        str when is_binary(str) -> atomize_or_raise(str, "name: option")
+      end
+
     name =
-      opts[:name]
+      explicit
       |> maybe_or(fn -> from_session_file(opts[:session]) end)
       |> maybe_or(fn -> from_path(opts[:session]) end)
       |> maybe_or(&from_env/0)
@@ -77,7 +84,7 @@ defmodule Cli.Harness do
   defp extract_harness_name(line) do
     case Jason.decode(line) do
       {:ok, %{"type" => "harness", "name" => name}} when is_binary(name) ->
-        atomize(name)
+        atomize_or_raise(name, "session file")
 
       _ ->
         nil
@@ -86,13 +93,28 @@ defmodule Cli.Harness do
 
   defp from_path(nil), do: nil
 
+  # Infer the harness from a path prefix. Kept in sync with
+  # `lib/harness/dispatch.sh` and `lib/harness/__init__.py` — review all
+  # three together when editing.
+  #
+  # Each prefix candidate ends with a `/` so `~/.pi-alt/...` does not
+  # get claimed by the pi adapter. Both `$PI_DIR` and the literal
+  # `$HOME/.pi` path are checked, because the environment override and
+  # the default location can coexist (e.g. a user with a custom PI_DIR
+  # who still has legacy sessions under ~/.pi).
   defp from_path(path) when is_binary(path) do
-    pi_dir =
-      System.get_env("PI_DIR") ||
-        (System.get_env("HOME") && Path.join(System.get_env("HOME"), ".pi"))
+    home = System.get_env("HOME")
+    home_pi = if home, do: Path.join(home, ".pi/"), else: nil
+    env_pi = System.get_env("PI_DIR")
+    env_pi_slash = if env_pi, do: String.trim_trailing(env_pi, "/") <> "/", else: nil
+
+    candidates =
+      [env_pi_slash, home_pi]
+      |> Enum.reject(&is_nil/1)
+      |> Enum.uniq()
 
     cond do
-      pi_dir && String.starts_with?(path, pi_dir) -> :pi
+      Enum.any?(candidates, &String.starts_with?(path, &1)) -> :pi
       true -> nil
     end
   end
@@ -101,17 +123,28 @@ defmodule Cli.Harness do
     case System.get_env("SESSIONS_DEFAULT_HARNESS") do
       nil -> nil
       "" -> nil
-      name -> atomize(name)
+      name -> atomize_or_raise(name, "$SESSIONS_DEFAULT_HARNESS")
     end
   end
 
-  # Convert a string harness name to a known-adapter atom. Unknown names
-  # bubble up to `adapter/1` which raises.
-  defp atomize(name) when is_binary(name) do
-    case name do
-      "pi" -> :pi
-      # Future adapters added to @adapters must also be listed here.
-      other -> String.to_atom(other)
+  # Convert a string harness name to a known-adapter atom, raising with
+  # a source-aware message if the name is not a registered adapter.
+  #
+  # We explicitly do NOT use `String.to_atom/1` — that would be an
+  # atom-exhaustion vector, since names can come from user-controlled
+  # environment variables and (eventually) session files.
+  defp atomize_or_raise(name, source) when is_binary(name) do
+    match =
+      Enum.find(Map.keys(@adapters), fn atom -> Atom.to_string(atom) == name end)
+
+    case match do
+      nil ->
+        raise ArgumentError,
+              "Unknown harness #{inspect(name)} from #{source} " <>
+                "(available: #{inspect(available())})"
+
+      atom ->
+        atom
     end
   end
 end

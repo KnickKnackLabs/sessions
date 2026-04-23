@@ -28,8 +28,13 @@ defmodule Cli.Engine do
   Times out after `timeout` seconds (if given); prints a timeout
   banner when that fires. Returns `1` (not the harness's own status)
   if the agent printed `[[ABORT]]` on its own line.
+
+  The `harness` argument is the adapter module produced by
+  `Cli.Harness.resolve/1`. The caller resolves it once — re-resolving
+  here would mean reading the session JSONL a second time.
   """
   @spec run(
+          harness :: module(),
           message :: String.t(),
           system_prompt_file :: String.t(),
           timeout :: non_neg_integer() | nil,
@@ -38,9 +43,7 @@ defmodule Cli.Engine do
           session :: String.t() | nil,
           run_opts()
         ) :: non_neg_integer()
-  def run(message, system_prompt_file, timeout, model, cwd, session, pi_opts) do
-    harness = Cli.Harness.resolve(session: session)
-
+  def run(harness, message, system_prompt_file, timeout, model, cwd, session, harness_opts) do
     {shell_script, positional_args} =
       harness.build_command(
         message,
@@ -48,7 +51,7 @@ defmodule Cli.Engine do
         system_prompt_file,
         session,
         timeout,
-        pi_opts
+        harness_opts
       )
 
     args = ["-c", shell_script, "--"] ++ positional_args

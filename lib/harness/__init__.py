@@ -35,10 +35,9 @@ def available() -> list:
 
 def _load(name: str):
     """Import and return an adapter module by name. Raises ValueError if unknown."""
-    if name not in available():
-        raise ValueError(
-            f"Unknown harness: {name!r} (available: {available()})"
-        )
+    names = available()
+    if name not in names:
+        raise ValueError(f"Unknown harness: {name!r} (available: {names})")
     return importlib.import_module(f"harness.{name}")
 
 
@@ -57,11 +56,17 @@ def _from_entries(entries: list):
 
 
 def _from_path(filepath: str):
-    """Infer harness from a path prefix. Returns None if no rule matches."""
+    """Infer harness from a path prefix. Returns None if no rule matches.
+
+    Requires a trailing `/` after the prefix so `~/.pi-alt/...` does not
+    get claimed by the pi adapter. Kept in sync with `lib/harness/dispatch.sh`
+    and `cli/lib/harness.ex` — review all three together when editing.
+    """
     if not filepath:
         return None
     pi_dir = os.environ.get("PI_DIR", os.path.expanduser("~/.pi"))
-    if filepath.startswith(pi_dir) or filepath.startswith(os.path.expanduser("~/.pi")):
+    candidates = {pi_dir.rstrip("/") + "/", os.path.expanduser("~/.pi/")}
+    if any(filepath.startswith(p) for p in candidates):
         return "pi"
     # Future: ~/.claude/... → claude
     return None

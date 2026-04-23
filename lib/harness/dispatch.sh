@@ -185,6 +185,10 @@ wake_entry() {
   local headless="$7"
   local meta_json="${8:-}"
 
+  # Intentionally strict: only the exact string "true" maps to true.
+  # Any other value ("false", "", "TRUE", "yes", "1") maps to false.
+  # Callers pass "$usage_headless" from the mise USAGE flag, which is
+  # always "true" or the empty string — no need to be lenient here.
   local headless_bool=false
   [ "$headless" = "true" ] && headless_bool=true
 

@@ -255,16 +255,25 @@ def sessions_dir() -> str:
     return os.path.join(pi_dir, "agent", "sessions")
 
 
-def find_session(query: str) -> str:
+def find_session(query: str) -> str | None:
     """Find a pi session JSONL by UUID prefix or session name.
 
-    Prints errors to stderr and calls sys.exit(1) on no-match or ambiguous
-    match — matching the legacy `parse.find_session` contract.
+    Contract:
+      - Returns the filepath on a unique match.
+      - Returns None on no-match — the dispatcher aggregates across
+        adapters and owns the final "not found" message.
+      - Raises `ValueError` on ambiguous match within this adapter so
+        the dispatcher surfaces the list.
+
+    Hard errors (permission denied, corrupt directory, etc.) propagate
+    as their natural exceptions; callers that want to suppress them
+    must do so explicitly.
     """
     root = sessions_dir()
     if not os.path.isdir(root):
-        print(f"Error: No sessions directory at {root}", file=sys.stderr)
-        sys.exit(1)
+        # No sessions directory is not an error — this adapter has no
+        # sessions; other adapters may.
+        return None
 
     id_matches = []
     name_matches = []
@@ -296,17 +305,16 @@ def find_session(query: str) -> str:
                         if hname and hname == query:
                             name_matches.append(filepath)
             except (json.JSONDecodeError, OSError):
+                # Malformed header is a benign skip, not a hard error.
                 continue
 
     matches = id_matches if id_matches else name_matches
 
     if not matches:
-        print(f"Error: No session matching '{query}'", file=sys.stderr)
-        sys.exit(1)
+        return None
     if len(matches) > 1:
-        print(f"Error: Ambiguous query '{query}', matches:", file=sys.stderr)
-        for m in matches:
-            print(f"  {os.path.basename(m)}", file=sys.stderr)
-        sys.exit(1)
-
+        raise ValueError(
+            f"Ambiguous query '{query}' matches multiple pi sessions:\n"
+            + "\n".join(f"  {os.path.basename(m)}" for m in matches)
+        )
     return matches[0]
