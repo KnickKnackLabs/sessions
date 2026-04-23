@@ -13,8 +13,8 @@ setup() {
   # Tests that go through `sessions new` don't need this — they use the
   # wrapper — but the resolver unit tests do.
   # shellcheck source=/dev/null
-  export HARNESS_LIB_DIR="$MISE_CONFIG_ROOT/lib/harness"
-  source "$MISE_CONFIG_ROOT/lib/harness/dispatch.sh"
+  export HARNESS_LIB_DIR="$REPO_DIR/lib/harness"
+  source "$REPO_DIR/lib/harness/dispatch.sh"
 }
 
 teardown() {
@@ -325,7 +325,7 @@ JSONL
 JSONL
 
   # shellcheck source=/dev/null
-  source "$MISE_CONFIG_ROOT/lib/find.sh"
+  source "$REPO_DIR/lib/find.sh"
   run find_session_file duplicate-name
   [ "$status" -ne 0 ]
   # The ambiguity message from the pi adapter must reach the caller —
@@ -386,7 +386,7 @@ JSONL
   run bash -c '
     source "$1/lib/harness/dispatch.sh"
     harness_unsupported
-  ' _ "$MISE_CONFIG_ROOT"
+  ' _ "$REPO_DIR"
   [ "$status" -eq 10 ]
   [ -z "$output" ]
 }
@@ -396,7 +396,7 @@ JSONL
     source "$1/lib/harness/dispatch.sh"
     harness_fake_ok() { echo "hello from fake"; }
     harness_call fake ok
-  ' _ "$MISE_CONFIG_ROOT"
+  ' _ "$REPO_DIR"
   [ "$status" -eq 0 ]
   [ "$output" = "hello from fake" ]
 }
@@ -407,7 +407,7 @@ JSONL
     harness_skel_header_entry() { harness_unsupported; }
     harness_call skel header_entry
     echo "should not reach"
-  ' _ "$MISE_CONFIG_ROOT"
+  ' _ "$REPO_DIR"
   [ "$status" -eq 10 ]
   echo "$output" | grep -qi "'skel' harness does not support 'header_entry'"
   # Ensure we really exited, not just returned.
@@ -422,7 +422,7 @@ JSONL
     source "$1/lib/harness/dispatch.sh"
     harness_fake_emit() { echo "payload"; }
     harness_call fake emit > "$2"
-  ' _ "$MISE_CONFIG_ROOT" "$tmp"
+  ' _ "$REPO_DIR" "$tmp"
   [ "$(cat "$tmp")" = "payload" ]
 }
 
@@ -435,7 +435,7 @@ JSONL
     harness_fake_boom() { return 3; }
     harness_call fake boom || echo "got rc=$?"
     echo "kept going"
-  ' _ "$MISE_CONFIG_ROOT"
+  ' _ "$REPO_DIR"
   [ "$status" -eq 0 ]
   echo "$output" | grep -q "got rc=3"
   echo "$output" | grep -q "kept going"

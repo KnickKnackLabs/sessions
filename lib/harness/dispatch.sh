@@ -34,7 +34,13 @@
 #   name=$(harness_resolve --session "$SESSION_FILE" --flag "$HARNESS_FLAG")
 #   source "$MISE_CONFIG_ROOT/lib/harness/$name.sh"
 
-HARNESS_LIB_DIR="${HARNESS_LIB_DIR:-$MISE_CONFIG_ROOT/lib/harness}"
+# Self-locate: this file IS `lib/harness/dispatch.sh`, so its own
+# directory is the harness lib dir. The env override (HARNESS_LIB_DIR)
+# still wins — tests set it to point at test fixtures — but the
+# fallback no longer depends on $MISE_CONFIG_ROOT, which can be
+# polluted when libs are sourced from a test context (see
+# KnickKnackLabs/codebase#16).
+HARNESS_LIB_DIR="${HARNESS_LIB_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
 HARNESS_DEFAULT="pi"
 
 # --- UNSUPPORTED contract ---

@@ -23,8 +23,13 @@
 #
 # Used by: .mise/tasks/wake (and anything else that sources this file).
 
+# Self-locate relative to this file. Don't reach for $MISE_CONFIG_ROOT:
+# that's a task-execution variable and callers from a test context may
+# have a polluted value (see KnickKnackLabs/codebase#16).
+_FIND_SH_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 # shellcheck source=/dev/null
-source "$MISE_CONFIG_ROOT/lib/harness/dispatch.sh"
+source "$_FIND_SH_DIR/harness/dispatch.sh"
 
 find_session_file() {
   local query="$1"

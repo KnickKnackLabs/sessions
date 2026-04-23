@@ -76,7 +76,7 @@ teardown() {
 
 @test "wake --background checks for shell dependency" {
   # Verify the wake task source checks for shell when --background is used
-  grep -q 'command -v shell' "$MISE_CONFIG_ROOT/.mise/tasks/wake"
+  grep -q 'command -v shell' "$REPO_DIR/.mise/tasks/wake"
 }
 
 # --- Self-reference: call siblings through `mise -C`, not via PATH ---
@@ -87,7 +87,7 @@ teardown() {
   # through PATH we route to the wrong codebase. Prove we don't by
   # running wake with a PATH that points `sessions` at a stub that
   # always fails; wake must still succeed because it uses
-  # `mise -C "$MISE_CONFIG_ROOT" run` for sibling dispatch.
+  # `mise -C "$REPO_DIR" run` for sibling dispatch.
   command -v shell >/dev/null 2>&1 || skip "shell not installed"
 
   local stub_dir="$BATS_TEST_TMPDIR/stub-path"
