@@ -54,14 +54,25 @@ harness_pi_session_file_path() {
 # --- Lookup ---
 
 # Find a pi session file by UUID prefix or session name.
-# Prints the path on success; prints error and returns non-zero otherwise.
+#
+# Contract (shared across adapters — see `lib/find.sh` for the
+# aggregator):
+#   - Exit 0 + path on stdout  → unique match
+#   - Exit 1 + empty output    → no match (the aggregator owns the
+#     final "not found" message; missing sessions dir is treated as
+#     "no match" since other adapters may have sessions)
+#   - Exit 2 + stderr message  → within-adapter ambiguity (hard error;
+#     aggregator propagates)
+#
+# Real failures (permission denied, corrupt filesystem) are not caught
+# here — bash's normal non-zero exit from the underlying command
+# surfaces.
 harness_pi_find_session() {
   local query="$1"
   local sessions_dir
   sessions_dir=$(harness_pi_sessions_dir)
 
   if [ ! -d "$sessions_dir" ]; then
-    echo "Error: No sessions directory at $sessions_dir" >&2
     return 1
   fi
 
@@ -102,7 +113,6 @@ harness_pi_find_session() {
 
   case ${#matches[@]} in
     0)
-      echo "Error: No session matching '$query'" >&2
       return 1
       ;;
     1)
@@ -110,9 +120,9 @@ harness_pi_find_session() {
       return 0
       ;;
     *)
-      echo "Error: Ambiguous query '$query', matches:" >&2
+      echo "Error: Ambiguous query '$query' matches multiple pi sessions:" >&2
       printf '  %s\n' "${matches[@]}" >&2
-      return 1
+      return 2
       ;;
   esac
 }
@@ -197,56 +207,5 @@ harness_pi_user_message_entry() {
         content: [{ type: "text", text: $content }]
       }
     }'
-}
-
-# Wake event entry.
-#   $1 entry_id, $2 parent_id, $3 timestamp_iso, $4 shell_name,
-#   $5 agent, $6 harness_cmd, $7 meta_json (optional, "{}" or "" for none)
-harness_pi_wake_entry() {
-  local entry_id="$1"
-  local parent_id="$2"
-  local ts="$3"
-  local shell_name="$4"
-  local agent="$5"
-  local harness_cmd="$6"
-  local meta_json="${7:-}"
-
-  if [ -z "$meta_json" ] || [ "$meta_json" = "{}" ]; then
-    jq -nc \
-      --arg id "$entry_id" \
-      --arg parent_id "$parent_id" \
-      --arg ts "$ts" \
-      --arg shell_name "$shell_name" \
-      --arg agent "$agent" \
-      --arg harness "$harness_cmd" \
-      '{
-        type: "wake",
-        id: $id,
-        parentId: $parent_id,
-        timestamp: $ts,
-        shell: $shell_name,
-        agent: $agent,
-        harness: $harness
-      }'
-  else
-    jq -nc \
-      --arg id "$entry_id" \
-      --arg parent_id "$parent_id" \
-      --arg ts "$ts" \
-      --arg shell_name "$shell_name" \
-      --arg agent "$agent" \
-      --arg harness "$harness_cmd" \
-      --argjson meta "$meta_json" \
-      '{
-        type: "wake",
-        id: $id,
-        parentId: $parent_id,
-        timestamp: $ts,
-        shell: $shell_name,
-        agent: $agent,
-        harness: $harness,
-        meta: $meta
-      }'
-  fi
 }
 

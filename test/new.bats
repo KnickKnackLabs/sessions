@@ -102,12 +102,20 @@ teardown() { teardown_test_sessions; }
 
 # --- model ---
 
-@test "new includes model_change entry" {
+@test "new includes harness entry as line 2" {
   run sessions new --cwd "$BATS_TMPDIR"
   [ "$status" -eq 0 ]
   new_id=$(echo "$output" | head -1)
   new_file=$(find "$PI_DIR/agent/sessions" -name "*${new_id}.jsonl")
-  sed -n '2p' "$new_file" | jq -e '.type == "model_change"'
+  sed -n '2p' "$new_file" | jq -e '.type == "harness" and .name == "pi"'
+}
+
+@test "new includes model_change entry as line 3" {
+  run sessions new --cwd "$BATS_TMPDIR"
+  [ "$status" -eq 0 ]
+  new_id=$(echo "$output" | head -1)
+  new_file=$(find "$PI_DIR/agent/sessions" -name "*${new_id}.jsonl")
+  sed -n '3p' "$new_file" | jq -e '.type == "model_change"'
 }
 
 @test "new respects --model flag" {
@@ -115,7 +123,7 @@ teardown() { teardown_test_sessions; }
   [ "$status" -eq 0 ]
   new_id=$(echo "$output" | head -1)
   new_file=$(find "$PI_DIR/agent/sessions" -name "*${new_id}.jsonl")
-  sed -n '2p' "$new_file" | jq -e '.modelId == "claude-opus-4-6"'
+  sed -n '3p' "$new_file" | jq -e '.modelId == "claude-opus-4-6"'
 }
 
 # --- context ---
@@ -126,18 +134,20 @@ teardown() { teardown_test_sessions; }
   new_id=$(echo "$output" | head -1)
   new_file=$(find "$PI_DIR/agent/sessions" -name "*${new_id}.jsonl")
   lines=$(wc -l < "$new_file" | tr -d ' ')
-  [ "$lines" -eq 3 ]
+  # session + harness + model_change + message = 4 lines
+  [ "$lines" -eq 4 ]
   tail -1 "$new_file" | jq -e '.type == "message"'
   tail -1 "$new_file" | jq -r '.message.content[0].text' | grep -q "PR #42"
 }
 
-@test "new without context creates 2-entry session" {
+@test "new without context creates 3-entry session" {
   run sessions new --cwd "$BATS_TMPDIR"
   [ "$status" -eq 0 ]
   new_id=$(echo "$output" | head -1)
   new_file=$(find "$PI_DIR/agent/sessions" -name "*${new_id}.jsonl")
   lines=$(wc -l < "$new_file" | tr -d ' ')
-  [ "$lines" -eq 2 ]
+  # session + harness + model_change = 3 lines
+  [ "$lines" -eq 3 ]
 }
 
 @test "new --context-file reads from file" {

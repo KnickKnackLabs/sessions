@@ -43,9 +43,15 @@ fi
 # --- Find session file ---
 
 # shellcheck source=/dev/null
+source "$MISE_CONFIG_ROOT/lib/harness/dispatch.sh"
 source "$MISE_CONFIG_ROOT/lib/find.sh"
 source "$MISE_CONFIG_ROOT/lib/shell.sh"
 SESSION_FILE=$(find_session_file "$SESSION_ID") || exit 1
+
+# Resolve the harness for this session (reads the latest harness entry).
+HARNESS_NAME=$(harness_resolve --session "$SESSION_FILE") || exit 1
+# shellcheck source=/dev/null
+source "$MISE_CONFIG_ROOT/lib/harness/$HARNESS_NAME.sh"
 
 FULL_SESSION_ID=$(head -1 "$SESSION_FILE" | jq -r '.id // empty')
 if [ -z "$FULL_SESSION_ID" ]; then
@@ -95,16 +101,14 @@ if [ -n "$WAKE_META_RAW" ]; then
   done < <(printf '%s' "$WAKE_META_RAW" | xargs printf '%s\n')
 fi
 
-HARNESS_CMD="sessions run"
-[ "$HEADLESS" = "true" ] && HARNESS_CMD="sessions run --headless"
-
-harness_pi_wake_entry \
+wake_entry \
   "$WAKE_ID" \
   "$LAST_ID" \
   "$NOW_ISO" \
   "$SHELL_NAME" \
   "${GIT_AUTHOR_NAME:-unknown}" \
-  "$HARNESS_CMD" \
+  "$HARNESS_NAME" \
+  "$HEADLESS" \
   "$WAKE_META" >> "$SESSION_FILE"
 
 # --- Inject context into session file if provided ---
@@ -113,7 +117,7 @@ if [ -n "$CONTEXT" ]; then
   LAST_ID="$WAKE_ID"
   MSG_ID=$(uuidgen | tr '[:upper:]' '[:lower:]' | cut -c1-8)
 
-  harness_pi_user_message_entry "$MSG_ID" "$LAST_ID" "$NOW_ISO" "$CONTEXT" >> "$SESSION_FILE"
+  "harness_${HARNESS_NAME}_user_message_entry" "$MSG_ID" "$LAST_ID" "$NOW_ISO" "$CONTEXT" >> "$SESSION_FILE"
 fi
 
 # --- Resolve working directory from session ---

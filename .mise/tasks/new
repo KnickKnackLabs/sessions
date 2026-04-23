@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
-#MISE description="Create a new pi session with optional injected context"
+#MISE description="Create a new session with optional injected context"
 #USAGE arg "[name]" help="Session name (human-readable label, also used for lookup)"
 #USAGE flag "--cwd <cwd>" help="Working directory for the session (default: current directory)"
 #USAGE flag "--context <context>" help="Initial context message to inject"
 #USAGE flag "--context-file <context_file>" help="File containing initial context message"
 #USAGE flag "--model <model>" default="claude-sonnet-4-20250514" help="Model to set (default: claude-sonnet-4-20250514)"
 #USAGE flag "--meta <meta>" var=#true help="Metadata key=value pairs (repeatable, supports dotted paths e.g. agent.name=ikma)"
+#USAGE flag "--harness <harness>" help="Harness adapter to use (default: pi, or value of SESSIONS_DEFAULT_HARNESS)"
 
 set -euo pipefail
 
@@ -15,6 +16,7 @@ CONTEXT="${usage_context:-}"
 CONTEXT_FILE="${usage_context_file:-}"
 MODEL="${usage_model:-claude-sonnet-4-20250514}"
 META_RAW="${usage_meta:-}"
+HARNESS_FLAG="${usage_harness:-}"
 
 # Default cwd to current directory
 if [ -z "$CWD" ]; then
@@ -40,13 +42,20 @@ command -v jq >/dev/null 2>&1 || { echo "Error: jq is required" >&2; exit 1; }
 command -v uuidgen >/dev/null 2>&1 || { echo "Error: uuidgen is required" >&2; exit 1; }
 
 # shellcheck source=/dev/null
-source "$MISE_CONFIG_ROOT/lib/harness/pi.sh"
+source "$MISE_CONFIG_ROOT/lib/harness/dispatch.sh"
+
+# Resolve the harness for this new session. No session file yet, so only
+# rule 1 (flag), rule 4 (env), and rule 5 (default) can apply.
+HARNESS_NAME=$(harness_resolve --flag "$HARNESS_FLAG") || exit 1
+
+# shellcheck source=/dev/null
+source "$MISE_CONFIG_ROOT/lib/harness/$HARNESS_NAME.sh"
 
 # --- Generate session ---
 
 SESSION_ID=$(uuidgen | tr '[:upper:]' '[:lower:]')
 NOW_ISO=$(date -u +"%Y-%m-%dT%H:%M:%S.000Z")
-SESSION_FILE=$(harness_pi_session_file_path "$CWD_ABS" "$SESSION_ID" "$NOW_ISO")
+SESSION_FILE=$("harness_${HARNESS_NAME}_session_file_path" "$CWD_ABS" "$SESSION_ID" "$NOW_ISO")
 
 # --- Build meta object from --meta flags ---
 #
@@ -84,16 +93,22 @@ fi
 
 # --- Session header ---
 
-harness_pi_header_entry "$SESSION_ID" "$NOW_ISO" "$CWD_ABS" "$NAME" "$META_JSON" > "$SESSION_FILE"
+"harness_${HARNESS_NAME}_header_entry" "$SESSION_ID" "$NOW_ISO" "$CWD_ABS" "$NAME" "$META_JSON" > "$SESSION_FILE"
+
+# Harness declaration entry — records the active harness. Subsequent
+# readers (wake, run, read) use `harness_resolve` over this file to
+# pick the right adapter.
+HARNESS_ENTRY_ID=$(uuidgen | tr '[:upper:]' '[:lower:]' | cut -c1-8)
+harness_entry "$HARNESS_ENTRY_ID" "$SESSION_ID" "$NOW_ISO" "$HARNESS_NAME" >> "$SESSION_FILE"
 
 # Model change entry
 MC_ID=$(uuidgen | tr '[:upper:]' '[:lower:]' | cut -c1-8)
-harness_pi_model_change_entry "$MC_ID" "$NOW_ISO" "$MODEL" >> "$SESSION_FILE"
+"harness_${HARNESS_NAME}_model_change_entry" "$MC_ID" "$NOW_ISO" "$MODEL" >> "$SESSION_FILE"
 
 # Inject context as a user message if provided
 if [ -n "$CONTEXT" ]; then
   MSG_ID=$(uuidgen | tr '[:upper:]' '[:lower:]' | cut -c1-8)
-  harness_pi_user_message_entry "$MSG_ID" "$MC_ID" "$NOW_ISO" "$CONTEXT" >> "$SESSION_FILE"
+  "harness_${HARNESS_NAME}_user_message_entry" "$MSG_ID" "$MC_ID" "$NOW_ISO" "$CONTEXT" >> "$SESSION_FILE"
 fi
 
 # --- Output ---
