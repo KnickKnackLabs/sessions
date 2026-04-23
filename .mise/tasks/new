@@ -55,7 +55,7 @@ source "$MISE_CONFIG_ROOT/lib/harness/$HARNESS_NAME.sh"
 
 SESSION_ID=$(uuidgen | tr '[:upper:]' '[:lower:]')
 NOW_ISO=$(date -u +"%Y-%m-%dT%H:%M:%S.000Z")
-SESSION_FILE=$("harness_${HARNESS_NAME}_session_file_path" "$CWD_ABS" "$SESSION_ID" "$NOW_ISO")
+SESSION_FILE=$(harness_call "$HARNESS_NAME" session_file_path "$CWD_ABS" "$SESSION_ID" "$NOW_ISO")
 
 # --- Build meta object from --meta flags ---
 #
@@ -93,7 +93,7 @@ fi
 
 # --- Session header ---
 
-"harness_${HARNESS_NAME}_header_entry" "$SESSION_ID" "$NOW_ISO" "$CWD_ABS" "$NAME" "$META_JSON" > "$SESSION_FILE"
+harness_call "$HARNESS_NAME" header_entry "$SESSION_ID" "$NOW_ISO" "$CWD_ABS" "$NAME" "$META_JSON" > "$SESSION_FILE"
 
 # Harness declaration entry — records the active harness. Subsequent
 # readers (wake, run, read) use `harness_resolve` over this file to
@@ -103,12 +103,12 @@ harness_entry "$HARNESS_ENTRY_ID" "$SESSION_ID" "$NOW_ISO" "$HARNESS_NAME" >> "$
 
 # Model change entry
 MC_ID=$(uuidgen | tr '[:upper:]' '[:lower:]' | cut -c1-8)
-"harness_${HARNESS_NAME}_model_change_entry" "$MC_ID" "$NOW_ISO" "$MODEL" >> "$SESSION_FILE"
+harness_call "$HARNESS_NAME" model_change_entry "$MC_ID" "$NOW_ISO" "$MODEL" >> "$SESSION_FILE"
 
 # Inject context as a user message if provided
 if [ -n "$CONTEXT" ]; then
   MSG_ID=$(uuidgen | tr '[:upper:]' '[:lower:]' | cut -c1-8)
-  "harness_${HARNESS_NAME}_user_message_entry" "$MSG_ID" "$MC_ID" "$NOW_ISO" "$CONTEXT" >> "$SESSION_FILE"
+  harness_call "$HARNESS_NAME" user_message_entry "$MSG_ID" "$MC_ID" "$NOW_ISO" "$CONTEXT" >> "$SESSION_FILE"
 fi
 
 # --- Output ---

@@ -14,7 +14,7 @@
 # All functions are prefixed `harness_pi_` to keep the namespace clean
 # when dispatched from a generic harness loader.
 #
-# Usage:
+# Usage (from task scripts, where $MISE_CONFIG_ROOT is set by mise):
 #   source "$MISE_CONFIG_ROOT/lib/harness/pi.sh"
 
 # --- Location ---

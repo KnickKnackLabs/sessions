@@ -76,7 +76,35 @@ teardown() {
 
 @test "wake --background checks for shell dependency" {
   # Verify the wake task source checks for shell when --background is used
-  grep -q 'command -v shell' "$MISE_CONFIG_ROOT/.mise/tasks/wake"
+  grep -q 'command -v shell' "$REPO_DIR/.mise/tasks/wake"
+}
+
+# --- Self-reference: call siblings through `mise -C`, not via PATH ---
+
+@test "wake calls sibling tasks through mise -C, not a PATH-resolved 'sessions' binary" {
+  # Regression guard. A shiv-installed `sessions` on PATH will lag
+  # behind the working tree during development — if wake ever calls it
+  # through PATH we route to the wrong codebase. Prove we don't by
+  # running wake with a PATH that points `sessions` at a stub that
+  # always fails; wake must still succeed because it uses
+  # `mise -C "$MISE_CONFIG_ROOT" run` for sibling dispatch (production
+  # variable, not the test-level $REPO_DIR).
+  command -v shell >/dev/null 2>&1 || skip "shell not installed"
+
+  local stub_dir="$BATS_TEST_TMPDIR/stub-path"
+  mkdir -p "$stub_dir"
+  cat > "$stub_dir/sessions" <<'STUB'
+#!/usr/bin/env bash
+echo "stub-sessions invoked — this should never run" >&2
+exit 42
+STUB
+  chmod +x "$stub_dir/sessions"
+
+  # Keep mise itself discoverable; just shadow `sessions`.
+  PATH="$stub_dir:$PATH" run sessions wake "${SESSION_1:0:8}" --background
+  [ "$status" -eq 0 ]
+  # If the stub ever fired, its stderr would leak into output.
+  ! echo "$output" | grep -q "stub-sessions invoked"
 }
 
 # --- Context injection (works in both modes) ---

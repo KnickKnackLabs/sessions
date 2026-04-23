@@ -1,18 +1,31 @@
 # Shared test helpers for sessions BATS tests
 #
 # Provides:
+#   - REPO_DIR derived from the test file location (BATS_TEST_DIRNAME)
 #   - sessions() wrapper that calls tasks through mise
 #   - PI_DIR override for test isolation
 #   - Synthetic JSONL generation (pi format)
 #   - Common setup/teardown
 
-if [ -z "${MISE_CONFIG_ROOT:-}" ]; then
-  echo "MISE_CONFIG_ROOT not set — run tests via: mise run test" >&2
-  exit 1
-fi
+# The canonical invocation is `mise run test`; that's what sets up
+# mise-managed tools (jq, bats, erlang, elixir, shell) on PATH. These
+# helpers don't try to support running bats directly — they just make
+# sure that when the suite DOES run, test code resolves repo paths to
+# the tree under test rather than reaching for any inherited env var.
+#
+# Three primitives, three contexts:
+#   - .mise/tasks/*       → $MISE_CONFIG_ROOT (mise sets it, task uses it)
+#   - lib/*.sh            → BASH_SOURCE-relative (self-locating, hermetic)
+#   - test/* (this file)  → $BATS_TEST_DIRNAME (bats sets it)
+#
+# Each layer uses its own primitive; nothing leaks across boundaries.
+# See KnickKnackLabs/codebase#16 for the broader lint that enforces
+# this.
+REPO_DIR="$(cd "$BATS_TEST_DIRNAME/.." && pwd)"
+export REPO_DIR
 
 sessions() {
-  cd "$MISE_CONFIG_ROOT" && PI_DIR="$PI_DIR" mise run -q "$@"
+  cd "$REPO_DIR" && PI_DIR="$PI_DIR" mise run -q "$@"
 }
 export -f sessions
 

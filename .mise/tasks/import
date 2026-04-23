@@ -1,7 +1,10 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
 #MISE description="Import a previously exported session bundle"
 #USAGE arg "<path>" help="Path to exported bundle directory or JSONL file"
 #USAGE flag "--project <project>" help="Target project directory name (required for JSONL imports)"
+# /// script
+# requires-python = ">=3.10"
+# ///
 
 import json
 import os

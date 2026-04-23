@@ -1,3 +1,30 @@
+defmodule Cli.Harness.UnsupportedError do
+  @moduledoc """
+  Raised by adapter functions that don't implement a given operation
+  for this harness.
+
+  Mirrors `harness_unsupported` (bash, exit 10) and `harness.Unsupported`
+  (Python). The CLI boundary rescues this, prints a clean message, and
+  halts with exit code 10 so wrapping shells can branch.
+  """
+
+  # Reserved exit code — stay in sync with `HARNESS_UNSUPPORTED_EXIT` in
+  # `lib/harness/dispatch.sh` and `UNSUPPORTED_EXIT` in
+  # `lib/harness/__init__.py`.
+  @exit_code 10
+  def exit_code, do: @exit_code
+
+  defexception [:harness, :op, :message]
+
+  @impl true
+  def exception(opts) do
+    harness = Keyword.fetch!(opts, :harness)
+    op = Keyword.fetch!(opts, :op)
+    msg = "'#{harness}' harness does not support '#{op}' yet"
+    %__MODULE__{harness: harness, op: op, message: msg}
+  end
+end
+
 defmodule Cli.Harness do
   @moduledoc """
   Harness dispatch layer (Elixir). Mirrors `lib/harness/dispatch.sh` and
@@ -19,7 +46,7 @@ defmodule Cli.Harness do
   """
 
   @default :pi
-  @adapters %{pi: Cli.Harness.Pi}
+  @adapters %{pi: Cli.Harness.Pi, claude: Cli.Harness.Claude}
 
   @spec available() :: [atom()]
   def available, do: @adapters |> Map.keys() |> Enum.sort()
@@ -106,36 +133,44 @@ defmodule Cli.Harness do
   # three together when editing.
   #
   # Each prefix candidate ends with a `/` so `~/.pi-alt/...` does not
-  # get claimed by the pi adapter. Both `$PI_DIR` and the literal
-  # `$HOME/.pi` path are checked, because the environment override and
-  # the default location can coexist (e.g. a user with a custom PI_DIR
-  # who still has legacy sessions under ~/.pi).
+  # get claimed by the pi adapter. Both the env override (`$PI_DIR` /
+  # `$CLAUDE_DIR`) and the literal `$HOME/.<name>` path are checked, so
+  # a user with a custom override and legacy sessions under the default
+  # location both resolve.
   def from_path(path) when is_binary(path) do
+    rules = [
+      {:pi, "PI_DIR", "/.pi/"},
+      {:claude, "CLAUDE_DIR", "/.claude/"}
+    ]
+
+    Enum.find_value(rules, fn {name, env_var, home_suffix} ->
+      if path_matches?(path, env_var, home_suffix), do: name, else: nil
+    end)
+  end
+
+  defp path_matches?(path, env_var, home_suffix) do
     home = System.get_env("HOME")
 
     # Bypass Path.join here — `Path.join(home, ".pi/")` strips the
     # trailing separator, which would re-introduce the `~/.pi-alt/...`
     # false-positive we added the trailing slash to prevent.
-    home_pi = if home && home != "", do: home <> "/.pi/", else: nil
+    home_prefix = if home && home != "", do: home <> home_suffix, else: nil
 
-    env_pi = System.get_env("PI_DIR")
+    env_override = System.get_env(env_var)
 
-    env_pi_slash =
-      if env_pi && env_pi != "" do
-        String.trim_trailing(env_pi, "/") <> "/"
+    env_prefix =
+      if env_override && env_override != "" do
+        String.trim_trailing(env_override, "/") <> "/"
       else
         nil
       end
 
     candidates =
-      [env_pi_slash, home_pi]
+      [env_prefix, home_prefix]
       |> Enum.reject(&is_nil/1)
       |> Enum.uniq()
 
-    cond do
-      Enum.any?(candidates, &String.starts_with?(path, &1)) -> :pi
-      true -> nil
-    end
+    Enum.any?(candidates, &String.starts_with?(path, &1))
   end
 
   @doc false

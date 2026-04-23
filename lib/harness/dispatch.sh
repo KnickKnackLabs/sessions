@@ -29,13 +29,66 @@
 #   4. $SESSIONS_DEFAULT_HARNESS environment variable
 #   5. Compile-time default: "pi"
 #
-# Usage:
+# Usage (from task scripts, where $MISE_CONFIG_ROOT is set by mise):
 #   source "$MISE_CONFIG_ROOT/lib/harness/dispatch.sh"
 #   name=$(harness_resolve --session "$SESSION_FILE" --flag "$HARNESS_FLAG")
 #   source "$MISE_CONFIG_ROOT/lib/harness/$name.sh"
 
-HARNESS_LIB_DIR="${HARNESS_LIB_DIR:-$MISE_CONFIG_ROOT/lib/harness}"
+# Source guard — this file is sometimes sourced via two paths in the
+# same shell (wake sources dispatch.sh directly, then sources find.sh
+# which in turn re-sources dispatch.sh). Redefining functions is
+# harmless but burns cycles; the guard skips the re-run.
+[ -n "${_DISPATCH_SH_LOADED:-}" ] && return 0
+_DISPATCH_SH_LOADED=1
+
+# Self-locate: this file IS `lib/harness/dispatch.sh`, so its own
+# directory is the harness lib dir. The env override (HARNESS_LIB_DIR)
+# still wins — tests set it to point at test fixtures — but the
+# fallback no longer depends on $MISE_CONFIG_ROOT, which can be
+# polluted when libs are sourced from a test context (see
+# KnickKnackLabs/codebase#16).
+HARNESS_LIB_DIR="${HARNESS_LIB_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
 HARNESS_DEFAULT="pi"
+
+# --- UNSUPPORTED contract ---
+#
+# Adapters that don't (yet) implement a given operation signal so via a
+# reserved exit code. Callers of adapter functions should go through
+# `harness_call` (below), which turns the reserved code into a clean
+# user-facing error and exits with the same code so wrapping scripts
+# can branch on it. Mirrors `Unsupported` in `lib/harness/__init__.py`
+# and `Cli.Harness.UnsupportedError` in `cli/lib/harness.ex`.
+HARNESS_UNSUPPORTED_EXIT=10
+
+# Adapter helper — use inside an adapter function to signal that this
+# operation isn't supported by this harness. Writes nothing to stdout;
+# the caller's `harness_call` wrapper owns the user-facing message.
+harness_unsupported() {
+  return "$HARNESS_UNSUPPORTED_EXIT"
+}
+
+# Call an adapter function with UNSUPPORTED handling.
+#
+# Usage: harness_call <harness> <fn_suffix> [args...]
+#   e.g. harness_call pi header_entry "$id" "$ts" "$cwd"
+#
+# - Passes through stdout and stderr from the adapter function.
+# - On the reserved UNSUPPORTED exit code, prints a clean message to
+#   stderr and exits the current shell with the same code (so `set -e`
+#   callers fail fast with a useful error).
+# - Any other exit code is returned as-is; the caller can decide.
+harness_call() {
+  local harness="$1" fn_suffix="$2"
+  shift 2
+  local fn="harness_${harness}_${fn_suffix}"
+  local rc=0
+  "$fn" "$@" || rc=$?
+  if [ "$rc" -eq "$HARNESS_UNSUPPORTED_EXIT" ]; then
+    echo "sessions: '$harness' harness does not support '$fn_suffix' yet" >&2
+    exit "$HARNESS_UNSUPPORTED_EXIT"
+  fi
+  return "$rc"
+}
 
 # --- Registry ---
 
@@ -75,20 +128,29 @@ harness_of_session() {
 # Path-based detection. Given a session file path, guess the harness
 # from a path prefix. Prints the harness name or empty if no rule
 # matches.
+#
+# Kept in sync with `lib/harness/__init__.py::_from_path` and
+# `Cli.Harness.from_path/1` — review all three together when editing.
+#
+# Each prefix is normalised to end with `/` so `~/.pi-alt/...` does not
+# get claimed by the pi adapter. $PI_DIR='' and $CLAUDE_DIR='' are
+# treated as unset (not as `/`, which would match every absolute path).
 harness_from_path() {
   local path="$1"
   [ -n "$path" ] || return 0
-  # Pi sessions live under ~/.pi/agent/sessions (or $PI_DIR/agent/sessions).
-  # Strip any trailing slash so `PI_DIR=/opt/custom-pi/` still matches
-  # `/opt/custom-pi/agent/sessions/...` (case pattern `//*` wouldn't).
-  # `${PI_DIR:-...}` also protects against `PI_DIR=""` silently becoming
-  # `/` — an empty value is treated the same as unset.
+
   local pi_dir="${PI_DIR:-$HOME/.pi}"
   pi_dir="${pi_dir%/}"
   case "$path" in
     "$pi_dir"/*|"$HOME"/.pi/*) echo "pi"; return 0 ;;
   esac
-  # Future: ~/.claude/... → claude
+
+  local claude_dir="${CLAUDE_DIR:-$HOME/.claude}"
+  claude_dir="${claude_dir%/}"
+  case "$path" in
+    "$claude_dir"/*|"$HOME"/.claude/*) echo "claude"; return 0 ;;
+  esac
+
   return 0
 }
 

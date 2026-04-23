@@ -23,8 +23,21 @@
 #
 # Used by: .mise/tasks/wake (and anything else that sources this file).
 
+# Self-locate relative to this file. Don't reach for $MISE_CONFIG_ROOT:
+# that's a task-execution variable and callers from a test context may
+# have a polluted value (see KnickKnackLabs/codebase#16).
+#
+# Caveat: bash `cd` is logical by default, so if this file is accessed
+# via a symlink the result is the symlink's parent, not the target's.
+# Sessions is installed via shiv, which uses file-level regular files
+# under a versioned package dir; the only symlinks are at the
+# package-version level (`latest -> 0.3.0`) which doesn't affect
+# sibling sourcing. If we ever ship configurations where lib/*.sh is
+# individually symlinked, switch to `realpath` or `readlink -f`.
+_FIND_SH_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 # shellcheck source=/dev/null
-source "$MISE_CONFIG_ROOT/lib/harness/dispatch.sh"
+source "$_FIND_SH_DIR/harness/dispatch.sh"
 
 find_session_file() {
   local query="$1"

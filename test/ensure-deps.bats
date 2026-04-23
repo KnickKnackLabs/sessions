@@ -5,10 +5,10 @@
 load helpers
 
 setup() {
-  # Source the helper under test. Using MISE_CONFIG_ROOT guarantees we're
-  # sourcing the version in the tree being tested (not the shiv-installed
-  # one), consistent with how `.mise/tasks/run` resolves it.
-  source "$MISE_CONFIG_ROOT/lib/ensure-deps.sh"
+  # Source the helper under test. $REPO_DIR is derived from
+  # $BATS_TEST_DIRNAME (see test/helpers.bash), which pins us to the
+  # tree being tested regardless of how the suite was invoked.
+  source "$REPO_DIR/lib/ensure-deps.sh"
 
   TMP=$(mktemp -d)
   CLI="$TMP/cli"
