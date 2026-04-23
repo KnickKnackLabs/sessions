@@ -35,10 +35,13 @@ fi
 
 command -v jq >/dev/null 2>&1 || { echo "Error: jq is required" >&2; exit 1; }
 
-if ! command -v sessions >/dev/null 2>&1; then
-  echo "Error: sessions not found on PATH" >&2
-  exit 1
-fi
+# Sibling-task dispatcher. Always call from the codebase that defined
+# *this* task (`$MISE_CONFIG_ROOT`) so we don't end up calling a stale
+# PATH-resolved `sessions` binary from a shiv install of a different
+# revision. The `-C` argument is required because wake later runs
+# `cd "$SESSION_CWD"` before the final exec — without `-C`, `mise run`
+# would look for tasks in the session cwd.
+mise_run=(mise -C "$MISE_CONFIG_ROOT" run -q)
 
 # --- Find session file ---
 
@@ -122,7 +125,7 @@ fi
 
 # --- Resolve working directory from session ---
 
-SESSION_CWD=$(sessions meta "${FULL_SESSION_ID:0:8}" --field .cwd 2>/dev/null) || true
+SESSION_CWD=$("${mise_run[@]}" meta "${FULL_SESSION_ID:0:8}" --field .cwd 2>/dev/null) || true
 if [ -z "$SESSION_CWD" ] || [ ! -d "$SESSION_CWD" ]; then
   echo "Warning: session cwd '$SESSION_CWD' not found, using current directory" >&2
   SESSION_CWD="."
@@ -130,7 +133,7 @@ fi
 
 # --- Launch ---
 
-RUN_CMD=(sessions run --session "$SESSION_FILE")
+RUN_CMD=("${mise_run[@]}" run --session "$SESSION_FILE")
 [ "$HEADLESS" = "true" ] && RUN_CMD+=(--headless)
 if [ -n "$MESSAGE" ]; then
   RUN_CMD+=("$MESSAGE")
@@ -148,7 +151,7 @@ if [ "$BACKGROUND" = "true" ]; then
   fi
   echo "Monitor: sessions read ${FULL_SESSION_ID:0:8} --last 10" >&2
 else
-  # Foreground: call sessions run directly (blocks until done)
+  # Foreground: call our own `run` task directly (blocks until done)
   echo "$FULL_SESSION_ID"
   if [ -n "$SESSION_NAME" ]; then
     echo "Woke session '$SESSION_NAME'" >&2
