@@ -171,3 +171,86 @@ STUB
   src_file=$(find "$PROJECT_DIR" -name "*${SESSION_1}.jsonl")
   jq -e 'select(.type == "wake" and .meta.timeout == "900")' "$src_file"
 }
+
+# --- Model pass-through ---
+
+@test "wake --model records model on wake event" {
+  command -v shell >/dev/null 2>&1 || skip "shell not installed"
+  run sessions wake "$SESSION_1" --background --model "claude-opus-4-7"
+  [ "$status" -eq 0 ]
+  src_file=$(find "$PROJECT_DIR" -name "*${SESSION_1}.jsonl")
+  jq -e 'select(.type == "wake" and .model == "claude-opus-4-7")' "$src_file"
+}
+
+@test "wake without --model omits .model from wake event (harness default)" {
+  command -v shell >/dev/null 2>&1 || skip "shell not installed"
+  run sessions wake "$SESSION_1" --background
+  [ "$status" -eq 0 ]
+  src_file=$(find "$PROJECT_DIR" -name "*${SESSION_1}.jsonl")
+  # .model should be absent (null when queried), signaling "harness default used"
+  run jq -e 'select(.type == "wake") | has("model") | not' "$src_file"
+  [ "$status" -eq 0 ]
+}
+
+@test "wake --model forwards --model to sessions run in RUN_CMD" {
+  # Regression guard against the hardcoded @default_model in sessions run's
+  # Elixir CLI. `sessions wake --model X` must pass `--model X` down so the
+  # CLI doesn't fall back to its own default.
+  #
+  # We stub `shell` (which wake's --background path invokes with the full
+  # RUN_CMD as argv) to dump its arguments to a file, then assert the
+  # dumped argv contains `--model claude-opus-4-7`. This is a runtime
+  # check, not a grep against source — it survives refactors of the wake
+  # task (variable renames, reordering of the RUN_CMD build).
+  command -v shell >/dev/null 2>&1 || skip "shell not installed"
+
+  local stub_dir="$BATS_TEST_TMPDIR/stub-shell"
+  local capture="$BATS_TEST_TMPDIR/shell-argv"
+  mkdir -p "$stub_dir"
+  cat > "$stub_dir/shell" <<STUB
+#!/usr/bin/env bash
+printf '%s\n' "\$@" > "$capture"
+exit 0
+STUB
+  chmod +x "$stub_dir/shell"
+
+  PATH="$stub_dir:$PATH" run sessions wake "${SESSION_1:0:8}" --background --model "claude-opus-4-7"
+  [ "$status" -eq 0 ]
+  [ -f "$capture" ]
+
+  # Captured argv must contain `--model claude-opus-4-7` in sequence.
+  grep -q '^--model$' "$capture"
+  grep -q '^claude-opus-4-7$' "$capture"
+
+  # Sanity: `sessions run` is also in the argv (confirms we're stubbing
+  # the right layer).
+  grep -q '^run$' "$capture"
+}
+
+@test "wake without --model omits --model from RUN_CMD" {
+  # Mirror of the forwarding test: when `--model` isn't passed, the
+  # string `--model` must NOT appear in the argv at all (otherwise the
+  # Elixir CLI would receive a bare flag with no value).
+  command -v shell >/dev/null 2>&1 || skip "shell not installed"
+
+  local stub_dir="$BATS_TEST_TMPDIR/stub-shell-nomodel"
+  local capture="$BATS_TEST_TMPDIR/shell-argv-nomodel"
+  mkdir -p "$stub_dir"
+  cat > "$stub_dir/shell" <<STUB
+#!/usr/bin/env bash
+printf '%s\n' "\$@" > "$capture"
+exit 0
+STUB
+  chmod +x "$stub_dir/shell"
+
+  PATH="$stub_dir:$PATH" run sessions wake "${SESSION_1:0:8}" --background
+  [ "$status" -eq 0 ]
+  [ -f "$capture" ]
+  ! grep -q '^--model$' "$capture"
+}
+
+@test "wake --model is advertised in --help" {
+  run sessions wake --help
+  [ "$status" -eq 0 ]
+  echo "$output" | grep -q -- "--model"
+}

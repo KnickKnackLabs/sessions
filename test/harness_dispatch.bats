@@ -373,6 +373,35 @@ JSONL
   echo "$output" | jq -e 'has("meta") | not'
 }
 
+@test "wake_entry records .model when 9th arg is non-empty" {
+  run wake_entry w1 parent1 "2026-04-22T10:00:00.000Z" shellA ikma pi true "{}" "claude-opus-4-7"
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.model == "claude-opus-4-7"'
+}
+
+@test "wake_entry omits .model when 9th arg is absent" {
+  # Absence signals "harness default was used" — readers should treat
+  # the missing field identically to explicit null.
+  run wake_entry w1 parent1 "2026-04-22T10:00:00.000Z" shellA ikma pi true "{}"
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e 'has("model") | not'
+}
+
+@test "wake_entry omits .model when 9th arg is empty string" {
+  # Exercises the `[ -n "$model" ]` gate — must distinguish "" from unset
+  # both with the same "no model field" outcome.
+  run wake_entry w1 parent1 "2026-04-22T10:00:00.000Z" shellA ikma pi true "{}" ""
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e 'has("model") | not'
+}
+
+@test "wake_entry includes both .meta and .model when both are non-empty" {
+  # Second jq branch (meta present) with fragment concatenation for model.
+  run wake_entry w1 parent1 "2026-04-22T10:00:00.000Z" shellA ikma pi true '{"by":"zeke"}' "claude-opus-4-7"
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.meta.by == "zeke" and .model == "claude-opus-4-7"'
+}
+
 # --- harness_entry builder ---
 
 @test "harness_entry produces a well-formed declaration entry" {

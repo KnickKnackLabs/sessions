@@ -241,7 +241,16 @@ harness_entry() {
 #
 #   $1 entry_id, $2 parent_id, $3 timestamp_iso, $4 shell_name,
 #   $5 agent, $6 harness_name, $7 headless ("true" | "false"),
-#   $8 meta_json (optional, "{}" or "" for none)
+#   $8 meta_json (optional, "{}" or "" for none),
+#   $9 model   (optional, "" for none — absence of `.model` on the
+#              output signals "harness default was used"; readers
+#              should treat both absent and explicit null the same way)
+#
+# Field-placement rule: fields that `sessions wake` itself owns
+# (`.headless`, `.model`) go top-level; caller-provided key=value pairs
+# passed via `--meta` go inside `.meta`. Apply this rule when adding
+# new fields: if wake owns the flag, top-level; if it's user-space,
+# stuff it into `meta_json` at the callsite.
 wake_entry() {
   local entry_id="$1"
   local parent_id="$2"
@@ -251,6 +260,7 @@ wake_entry() {
   local harness_name="$6"
   local headless="$7"
   local meta_json="${8:-}"
+  local model="${9:-}"
 
   # Intentionally strict: only the exact string "true" maps to true.
   # Any other value ("false", "", "TRUE", "yes", "1") maps to false.
@@ -258,6 +268,17 @@ wake_entry() {
   # always "true" or the empty string — no need to be lenient here.
   local headless_bool=false
   [ "$headless" = "true" ] && headless_bool=true
+
+  # `.model` is written only when explicitly provided. Absent means
+  # "harness default was used"; readers can distinguish the two cases.
+  # `"${arr[@]+"${arr[@]}"}"` is the nounset-safe empty-array expansion
+  # (bash < 4.4 treats `"${empty[@]}"` as an unset reference under -u).
+  local model_args=()
+  local model_fragment=''
+  if [ -n "$model" ]; then
+    model_args=(--arg model "$model")
+    model_fragment=' + {model: $model}'
+  fi
 
   if [ -z "$meta_json" ] || [ "$meta_json" = "{}" ]; then
     jq -nc \
@@ -268,6 +289,7 @@ wake_entry() {
       --arg agent "$agent" \
       --arg harness "$harness_name" \
       --argjson headless "$headless_bool" \
+      "${model_args[@]+"${model_args[@]}"}" \
       '{
         type: "wake",
         id: $id,
@@ -277,7 +299,7 @@ wake_entry() {
         agent: $agent,
         harness: $harness,
         headless: $headless
-      }'
+      }'"$model_fragment"
   else
     jq -nc \
       --arg id "$entry_id" \
@@ -288,6 +310,7 @@ wake_entry() {
       --arg harness "$harness_name" \
       --argjson headless "$headless_bool" \
       --argjson meta "$meta_json" \
+      "${model_args[@]+"${model_args[@]}"}" \
       '{
         type: "wake",
         id: $id,
@@ -298,6 +321,6 @@ wake_entry() {
         harness: $harness,
         headless: $headless,
         meta: $meta
-      }'
+      }'"$model_fragment"
   fi
 }
