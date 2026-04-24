@@ -243,14 +243,23 @@ harness_entry() {
 #   $5 agent, $6 harness_name, $7 headless ("true" | "false"),
 #   $8 meta_json (optional, "{}" or "" for none),
 #   $9 model   (optional, "" for none — absence of `.model` on the
-#              output signals "harness default was used"; readers
-#              should treat both absent and explicit null the same way)
+#              output signals "harness default was used". `wake_entry`
+#              itself never writes null; readers processing wake events
+#              from other sources should normalize null to absent.)
 #
 # Field-placement rule: fields that `sessions wake` itself owns
 # (`.headless`, `.model`) go top-level; caller-provided key=value pairs
 # passed via `--meta` go inside `.meta`. Apply this rule when adding
 # new fields: if wake owns the flag, top-level; if it's user-space,
 # stuff it into `meta_json` at the callsite.
+#
+# Schema-evolution risk: `.model` is written as a bare string in
+# harness-native vocabulary (e.g. pi's "claude-opus-4-7"). Readers
+# that consume wake events across harnesses must branch on `.harness`
+# to interpret `.model` correctly. If per-harness model vocabularies
+# diverge further (e.g. structured fields, different naming schemes),
+# revisit: either namespace the field (`.harness_model`) or push it
+# into a per-harness sub-object. Tracked as an open question on #61.
 wake_entry() {
   local entry_id="$1"
   local parent_id="$2"

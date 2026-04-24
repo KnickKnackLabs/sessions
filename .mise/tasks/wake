@@ -106,6 +106,10 @@ if [ -n "$WAKE_META_RAW" ]; then
   done < <(printf '%s' "$WAKE_META_RAW" | xargs printf '%s\n')
 fi
 
+# wake_entry args: entry_id parent_id ts shell_name agent harness headless meta_json model
+# (keep in sync with the signature in lib/harness/dispatch.sh — order matters
+# because they're positional; structural refactor to named args is tracked
+# alongside sessions#61)
 wake_entry \
   "$WAKE_ID" \
   "$LAST_ID" \

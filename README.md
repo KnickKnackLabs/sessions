@@ -88,7 +88,7 @@ sessions wake review/pr-50 --message "You missed the edge case in line 42"
 
 The spawning stack uses [shell](https://github.com/KnickKnackLabs/shell) for persistent zmx sessions. `sessions wake` calls `sessions run` directly for execution — identity (AGENT_IDENTITY, etc.) must already be in the environment, typically set upstream via `eval $(shimmer as <agent>)`.
 
-`--model` on `sessions wake` is a one-shot override for this wake only; it's not currently remembered across wakes (tracked in [issue #61](https://github.com/KnickKnackLabs/sessions/issues/61)). If you pass `sessions new --model X` and then `sessions wake` without `--model`, the wake falls back to the harness default — pass `--model X` to both, or wait for #61 to land.
+`--model` on `sessions wake` is a one-shot override; it is not remembered across wakes — pass `--model X` on each wake, or track [issue #61](https://github.com/KnickKnackLabs/sessions/issues/61).
 
 ## Metadata
 

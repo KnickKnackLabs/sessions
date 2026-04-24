@@ -379,20 +379,23 @@ JSONL
   echo "$output" | jq -e '.model == "claude-opus-4-7"'
 }
 
-@test "wake_entry omits .model when 9th arg is absent" {
-  # Absence signals "harness default was used" — readers should treat
-  # the missing field identically to explicit null.
-  run wake_entry w1 parent1 "2026-04-22T10:00:00.000Z" shellA ikma pi true "{}"
-  [ "$status" -eq 0 ]
-  echo "$output" | jq -e 'has("model") | not'
-}
-
-@test "wake_entry omits .model when 9th arg is empty string" {
-  # Exercises the `[ -n "$model" ]` gate — must distinguish "" from unset
-  # both with the same "no model field" outcome.
-  run wake_entry w1 parent1 "2026-04-22T10:00:00.000Z" shellA ikma pi true "{}" ""
-  [ "$status" -eq 0 ]
-  echo "$output" | jq -e 'has("model") | not'
+@test "wake_entry omits .model when 9th arg is absent or empty" {
+  # Both absent (no 9th arg) and explicit empty string must produce no
+  # `.model` field. Absence signals "harness default was used"; the
+  # empty-string case exercises the `[ -n "$model" ]` gate so it
+  # doesn't accidentally emit `{"model": ""}`.
+  for arg in absent empty; do
+    if [ "$arg" = "absent" ]; then
+      run wake_entry w1 parent1 "2026-04-22T10:00:00.000Z" shellA ikma pi true "{}"
+    else
+      run wake_entry w1 parent1 "2026-04-22T10:00:00.000Z" shellA ikma pi true "{}" ""
+    fi
+    [ "$status" -eq 0 ]
+    echo "$output" | jq -e 'has("model") | not' >/dev/null || {
+      echo "case=$arg leaked a .model field: $output" >&2
+      return 1
+    }
+  done
 }
 
 @test "wake_entry includes both .meta and .model when both are non-empty" {

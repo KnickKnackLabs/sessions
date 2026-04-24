@@ -199,9 +199,17 @@ STUB
   #
   # We stub `shell` (which wake's --background path invokes with the full
   # RUN_CMD as argv) to dump its arguments to a file, then assert the
-  # dumped argv contains `--model claude-opus-4-7`. This is a runtime
-  # check, not a grep against source — it survives refactors of the wake
-  # task (variable renames, reordering of the RUN_CMD build).
+  # dumped argv contains `--model claude-opus-4-7` with the value
+  # immediately following the flag. This is a runtime check, not a grep
+  # against source — it survives refactors of the wake task (variable
+  # renames, reordering of the RUN_CMD build).
+  #
+  # Coverage caveat: the foreground path (`.mise/tasks/wake:165`,
+  # `exec "${RUN_CMD[@]}"`) is NOT covered by this test — it exec's
+  # directly rather than going through `shell`. Both branches build
+  # the same RUN_CMD array, so the background test implicitly covers
+  # foreground's argv shape; if those construction paths diverge,
+  # adjust the test.
   command -v shell >/dev/null 2>&1 || skip "shell not installed"
 
   local stub_dir="$BATS_TEST_TMPDIR/stub-shell"
@@ -218,9 +226,15 @@ STUB
   [ "$status" -eq 0 ]
   [ -f "$capture" ]
 
-  # Captured argv must contain `--model claude-opus-4-7` in sequence.
-  grep -q '^--model$' "$capture"
-  grep -q '^claude-opus-4-7$' "$capture"
+  # Adjacency check: the line AFTER `--model` must be the exact model
+  # value. Independent presence checks (grep for each) would pass even
+  # if a future refactor inserted args between flag and value.
+  local line_after_flag
+  line_after_flag=$(grep -A1 '^--model$' "$capture" | tail -1)
+  [ "$line_after_flag" = "claude-opus-4-7" ]
+
+  # Cardinality: exactly one --model in the argv (not duplicated).
+  [ "$(grep -c '^--model$' "$capture")" = 1 ]
 
   # Sanity: `sessions run` is also in the argv (confirms we're stubbing
   # the right layer).
