@@ -1,5 +1,28 @@
 #!/usr/bin/env bash
 #MISE description="Run the BATS test suite"
+#USAGE arg "[args]..." var=true help="Test files or bats flags"
+#USAGE example "all"    "mise run test"
+#USAGE example "file"   "mise run test test/wake.bats"
+#USAGE example "filter" "mise run test -- --filter 'session name'"
 set -euo pipefail
 
-bats "$MISE_CONFIG_ROOT/test/"
+TEST_DIR="$MISE_CONFIG_ROOT/test"
+
+args=()
+has_target=false
+
+for arg in "$@"; do
+  if [[ "$arg" != -* && "$arg" != *.bats && -d "$TEST_DIR/$arg" ]]; then
+    args+=("$TEST_DIR/$arg")
+    has_target=true
+  else
+    [[ "$arg" == *.bats || -d "$arg" ]] && has_target=true
+    args+=("$arg")
+  fi
+done
+
+if ! $has_target; then
+  args+=("--recursive" "$TEST_DIR/")
+fi
+
+bats "${args[@]}"

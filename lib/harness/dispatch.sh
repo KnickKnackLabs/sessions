@@ -286,6 +286,7 @@ wake_entry() {
   local model_fragment=''
   if [ -n "$model" ]; then
     model_args=(--arg model "$model")
+    # shellcheck disable=SC2016  # jq expression: $model is a jq variable bound by --arg model, not a bash expansion
     model_fragment=' + {model: $model}'
   fi
 

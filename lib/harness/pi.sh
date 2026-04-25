@@ -30,8 +30,7 @@ harness_pi_sessions_dir() {
 # Pi uses double-dash bookends: /Users/foo/bar -> --Users-foo-bar--
 harness_pi_encode_cwd() {
   local cwd_abs="$1"
-  local encoded
-  encoded=$(echo "$cwd_abs" | sed 's|/|-|g')
+  local encoded="${cwd_abs//\//-}"
   echo "-${encoded}-"
 }
 
@@ -47,7 +46,7 @@ harness_pi_session_file_path() {
   project_dir="$sessions_dir/$(harness_pi_encode_cwd "$cwd_abs")/"
   mkdir -p "$project_dir"
 
-  now_file=$(echo "$now_iso" | sed 's/:/-/g')
+  now_file="${now_iso//:/-}"
   echo "${project_dir}${now_file}_${session_id}.jsonl"
 }
 
@@ -148,6 +147,7 @@ harness_pi_header_entry() {
     --arg ts "$ts"
     --arg cwd "$cwd_abs"
   )
+  # shellcheck disable=SC2016  # jq expression: $id, $ts, $cwd are jq variables bound by --arg, not bash expansions
   local expr='{type: "session", version: 3, id: $id, timestamp: $ts, cwd: $cwd}'
 
   if [ -n "$name" ]; then
