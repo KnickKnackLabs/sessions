@@ -76,6 +76,9 @@ sessions new review/pr-50 --cwd ~/agents/ikma/den \
 # Wake an agent into it (by name)
 sessions wake review/pr-50 --message "Review PR #50"
 
+# Pin the model for this wake (defaults to the harness default if omitted)
+sessions wake review/pr-50 --model claude-opus-4-7 --message "Review PR #50"
+
 # Watch what it does
 sessions read review/pr-50 --last 5
 
@@ -84,6 +87,8 @@ sessions wake review/pr-50 --message "You missed the edge case in line 42"
 ```
 
 The spawning stack uses [shell](https://github.com/KnickKnackLabs/shell) for persistent zmx sessions. `sessions wake` calls `sessions run` directly for execution — identity (AGENT_IDENTITY, etc.) must already be in the environment, typically set upstream via `eval $(shimmer as <agent>)`.
+
+`--model` on `sessions wake` is a one-shot override; it is not remembered across wakes — pass `--model X` on each wake, or track [issue #61](https://github.com/KnickKnackLabs/sessions/issues/61).
 
 ## Metadata
 
