@@ -137,6 +137,7 @@ if [ -z "$SESSION_CWD" ] || [ ! -d "$SESSION_CWD" ]; then
   echo "Warning: session cwd '$SESSION_CWD' not found, using current directory" >&2
   SESSION_CWD="."
 fi
+SESSION_CWD=$(cd "$SESSION_CWD" && pwd -P)
 
 # --- Launch ---
 
