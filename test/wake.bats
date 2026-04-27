@@ -263,6 +263,95 @@ STUB
   ! grep -q '^--model$' "$capture"
 }
 
+@test "wake forwards session cwd to sessions run" {
+  # `wake` launches from the persisted session cwd, but `sessions run`
+  # also has its own --cwd option and otherwise defaults through
+  # CALLER_PWD. Regression guard: the RUN_CMD handed to shell must carry
+  # the session header cwd explicitly so stale CALLER_PWD cannot win.
+  command -v shell >/dev/null 2>&1 || skip "shell not installed"
+
+  local session_cwd="$BATS_TEST_TMPDIR/session-cwd"
+  mkdir -p "$session_cwd"
+  local expected_cwd
+  expected_cwd=$(cd "$session_cwd" && pwd -P)
+
+  local src_file
+  src_file=$(find "$PROJECT_DIR" -name "*${SESSION_1}.jsonl")
+  local updated_file="$BATS_TEST_TMPDIR/session-updated.jsonl"
+  jq -c --arg cwd "$session_cwd" 'if .type == "session" then .cwd = $cwd else . end' "$src_file" > "$updated_file"
+  mv "$updated_file" "$src_file"
+
+  local stub_dir="$BATS_TEST_TMPDIR/stub-shell-cwd"
+  local capture="$BATS_TEST_TMPDIR/shell-argv-cwd"
+  mkdir -p "$stub_dir"
+  cat > "$stub_dir/shell" <<STUB
+#!/usr/bin/env bash
+printf '%s\n' "\$@" > "$capture"
+exit 0
+STUB
+  chmod +x "$stub_dir/shell"
+
+  PATH="$stub_dir:$PATH" run sessions wake "${SESSION_1:0:8}" --background
+  [ "$status" -eq 0 ]
+  [ -f "$capture" ]
+
+  # The shell invocation has its own --cwd before the RUN_CMD. The
+  # sessions-run cwd is the --cwd after the --session flag.
+  local run_cwd
+  run_cwd=$(awk '
+    /^--session$/ { after_session = 1; next }
+    after_session && /^--cwd$/ { getline; print; exit }
+  ' "$capture")
+  [ "$run_cwd" = "$expected_cwd" ]
+}
+
+@test "wake normalizes invalid session cwd fallback before forwarding" {
+  # When a persisted session cwd is missing, wake falls back to "current
+  # directory". Once wake explicitly forwards --cwd to sessions run, that
+  # fallback must be absolute; otherwise the run/CLI layer could interpret
+  # "." from a later process directory.
+  command -v shell >/dev/null 2>&1 || skip "shell not installed"
+
+  local missing_cwd="$BATS_TEST_TMPDIR/missing-session-cwd"
+  local expected_cwd
+  expected_cwd=$(cd "$REPO_DIR" && pwd -P)
+
+  local src_file
+  src_file=$(find "$PROJECT_DIR" -name "*${SESSION_1}.jsonl")
+  local updated_file="$BATS_TEST_TMPDIR/session-invalid-cwd.jsonl"
+  jq -c --arg cwd "$missing_cwd" 'if .type == "session" then .cwd = $cwd else . end' "$src_file" > "$updated_file"
+  mv "$updated_file" "$src_file"
+
+  local stub_dir="$BATS_TEST_TMPDIR/stub-shell-invalid-cwd"
+  local capture="$BATS_TEST_TMPDIR/shell-argv-invalid-cwd"
+  mkdir -p "$stub_dir"
+  cat > "$stub_dir/shell" <<STUB
+#!/usr/bin/env bash
+printf '%s\n' "\$@" > "$capture"
+exit 0
+STUB
+  chmod +x "$stub_dir/shell"
+
+  PATH="$stub_dir:$PATH" run sessions wake "${SESSION_1:0:8}" --background
+  [ "$status" -eq 0 ]
+  [ -f "$capture" ]
+
+  # Both the outer shell cwd and inner sessions-run cwd should receive
+  # the same absolute fallback directory.
+  [ "$(grep -c '^--cwd$' "$capture")" = 2 ]
+
+  local outer_cwd
+  outer_cwd=$(awk '/^--cwd$/ { getline; print; exit }' "$capture")
+  [ "$outer_cwd" = "$expected_cwd" ]
+
+  local run_cwd
+  run_cwd=$(awk '
+    /^--session$/ { after_session = 1; next }
+    after_session && /^--cwd$/ { getline; print; exit }
+  ' "$capture")
+  [ "$run_cwd" = "$expected_cwd" ]
+}
+
 @test "wake --model is advertised in --help" {
   run sessions wake --help
   [ "$status" -eq 0 ]

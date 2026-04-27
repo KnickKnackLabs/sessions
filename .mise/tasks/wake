@@ -137,10 +137,11 @@ if [ -z "$SESSION_CWD" ] || [ ! -d "$SESSION_CWD" ]; then
   echo "Warning: session cwd '$SESSION_CWD' not found, using current directory" >&2
   SESSION_CWD="."
 fi
+SESSION_CWD=$(cd "$SESSION_CWD" && pwd -P)
 
 # --- Launch ---
 
-RUN_CMD=("${mise_run[@]}" run --session "$SESSION_FILE")
+RUN_CMD=("${mise_run[@]}" run --session "$SESSION_FILE" --cwd "$SESSION_CWD")
 [ "$HEADLESS" = "true" ] && RUN_CMD+=(--headless)
 [ -n "$MODEL" ] && RUN_CMD+=(--model "$MODEL")
 if [ -n "$MESSAGE" ]; then
