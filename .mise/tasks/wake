@@ -140,7 +140,7 @@ fi
 
 # --- Launch ---
 
-RUN_CMD=("${mise_run[@]}" run --session "$SESSION_FILE")
+RUN_CMD=("${mise_run[@]}" run --session "$SESSION_FILE" --cwd "$SESSION_CWD")
 [ "$HEADLESS" = "true" ] && RUN_CMD+=(--headless)
 [ -n "$MODEL" ] && RUN_CMD+=(--model "$MODEL")
 if [ -n "$MESSAGE" ]; then
