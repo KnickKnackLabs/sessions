@@ -469,6 +469,74 @@ defmodule Cli.Harness.Pi.StreamTest do
       assert result_state.usage.usage["cache_read_input_tokens"] == 450
       assert result_state.usage.usage["cache_creation_input_tokens"] == 100
     end
+
+    test "maps assistant stopReason=error into generic agent_error state" do
+      line =
+        Jason.encode!(%{
+          "type" => "agent_end",
+          "messages" => [
+            %{
+              "role" => "assistant",
+              "stopReason" => "error",
+              "errorMessage" => "You're out of extra usage.",
+              "usage" => %{
+                "input" => 0,
+                "output" => 0,
+                "cacheRead" => 0,
+                "cacheWrite" => 0,
+                "cost" => %{"total" => 0.0}
+              }
+            }
+          ]
+        })
+
+      state = %{tool_input: "", usage: nil, agent_error: nil}
+      result_state = PiStream.process_line(line, state)
+
+      assert result_state.agent_error == %{
+               source: :pi,
+               reason: "error",
+               message: "You're out of extra usage."
+             }
+
+      assert result_state.usage.num_turns == 1
+      assert result_state.usage.usage["input_tokens"] == 0
+      assert result_state.usage.usage["output_tokens"] == 0
+    end
+
+    test "maps stopReason=error without errorMessage into generic agent_error state" do
+      line =
+        Jason.encode!(%{
+          "type" => "agent_end",
+          "messages" => [
+            %{"role" => "assistant", "stopReason" => "error", "usage" => %{}}
+          ]
+        })
+
+      state = %{tool_input: "", usage: nil, agent_error: nil}
+      result_state = PiStream.process_line(line, state)
+
+      assert result_state.agent_error == %{
+               source: :pi,
+               reason: "error",
+               message: "assistant turn ended with stopReason=error"
+             }
+    end
+
+    test "does not set agent_error for successful assistant stopReason" do
+      line =
+        Jason.encode!(%{
+          "type" => "agent_end",
+          "messages" => [
+            %{"role" => "assistant", "stopReason" => "stop", "usage" => %{}}
+          ]
+        })
+
+      state = %{tool_input: "", usage: nil, agent_error: nil}
+      result_state = PiStream.process_line(line, state)
+
+      assert result_state.agent_error == nil
+    end
   end
 
   describe "process_line/2 — general" do

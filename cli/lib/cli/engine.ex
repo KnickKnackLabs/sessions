@@ -67,6 +67,7 @@ defmodule Cli.Engine do
         tool_input: "",
         buffer: "",
         usage: nil,
+        agent_error: nil,
         abort_seen: false,
         recent_text: "",
         flushed_chars: 0,
@@ -104,12 +105,18 @@ defmodule Cli.Engine do
         final_state = finalize_buffer(buffer, state)
         Cli.UsageReport.print(final_state)
 
-        if final_state.abort_seen do
-          IO.puts("\n---")
-          IO.puts("Agent requested session abort via [[ABORT]]")
-          1
-        else
-          status
+        cond do
+          final_state.abort_seen ->
+            IO.puts("\n---")
+            IO.puts("Agent requested session abort via [[ABORT]]")
+            1
+
+          final_state.agent_error ->
+            print_agent_error(final_state.agent_error)
+            if status == 0, do: 1, else: status
+
+          true ->
+            status
         end
     after
       @buffer_flush_timeout_ms ->
@@ -124,6 +131,24 @@ defmodule Cli.Engine do
             stream_output(port, %{state | flushed_chars: String.length(extracted)})
         end
     end
+  end
+
+  defp print_agent_error(error) do
+    source = Map.get(error, :source) || Map.get(error, "source")
+    reason = Map.get(error, :reason) || Map.get(error, "reason")
+    message = Map.get(error, :message) || Map.get(error, "message") || "unknown error"
+
+    IO.puts("\n---")
+
+    label =
+      case {source, reason} do
+        {nil, nil} -> "Agent reported an error"
+        {nil, reason} -> "Agent reported an error (#{reason})"
+        {source, nil} -> "Agent reported an error via #{source}"
+        {source, reason} -> "Agent reported an error via #{source} (#{reason})"
+      end
+
+    IO.puts("ERROR: #{label}: #{message}")
   end
 
   defp finalize_buffer("", state), do: state

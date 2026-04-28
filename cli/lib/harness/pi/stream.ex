@@ -17,6 +17,7 @@ defmodule Cli.Harness.Pi.Stream do
   @typep stream_state :: %{
            tool_input: String.t(),
            usage: map() | nil,
+           agent_error: map() | nil,
            abort_seen: boolean(),
            recent_text: String.t(),
            flushed_chars: non_neg_integer(),
@@ -155,21 +156,42 @@ defmodule Cli.Harness.Pi.Stream do
         end
       )
 
-    %{
-      state
-      | usage: %{
-          cost_usd: totals.cost,
-          duration_ms: nil,
-          num_turns: length(assistant_msgs),
-          usage: %{
-            "input_tokens" => totals.input,
-            "output_tokens" => totals.output,
-            "cache_read_input_tokens" => totals.cache_read,
-            "cache_creation_input_tokens" => totals.cache_write
-          },
-          model_usage: nil
-        }
-    }
+    state
+    |> Map.put(:usage, %{
+      cost_usd: totals.cost,
+      duration_ms: nil,
+      num_turns: length(assistant_msgs),
+      usage: %{
+        "input_tokens" => totals.input,
+        "output_tokens" => totals.output,
+        "cache_read_input_tokens" => totals.cache_read,
+        "cache_creation_input_tokens" => totals.cache_write
+      },
+      model_usage: nil
+    })
+    |> Map.put(:agent_error, extract_agent_error(messages))
+  end
+
+  defp extract_agent_error(messages) do
+    Enum.find_value(messages, fn
+      %{"role" => "assistant"} = msg ->
+        reason = msg["stopReason"] || msg["stop_reason"]
+        message = msg["errorMessage"] || msg["error_message"]
+
+        cond do
+          is_binary(message) and message != "" ->
+            %{source: :pi, reason: reason, message: message}
+
+          reason == "error" ->
+            %{source: :pi, reason: reason, message: "assistant turn ended with stopReason=error"}
+
+          true ->
+            nil
+        end
+
+      _ ->
+        nil
+    end)
   end
 
   defp extract_tool_name_from_event(%{
