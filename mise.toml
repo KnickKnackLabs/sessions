@@ -11,6 +11,10 @@ shiv = "https://github.com/KnickKnackLabs/vfox-shiv"
 usage = "latest"
 uv = "latest"
 bats = "1.13.0"
+"shiv:codebase" = "0.2.0"                  # Codebase linting + migrations
 "shiv:shell" = "0.1.0"                     # Persistent terminal sessions (used by wake)
 erlang = "28.4.1"
 elixir = "1.19.5-otp-27"
+
+[_.codebase]
+lint = ["mise-settings", "gum-table", "bats-test-helper", "bats-test-task", "mcr-scope", "or-true", "shellcheck"]

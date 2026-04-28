@@ -132,7 +132,7 @@ fi
 
 # --- Resolve working directory from session ---
 
-SESSION_CWD=$("${mise_run[@]}" meta "${FULL_SESSION_ID:0:8}" --field .cwd 2>/dev/null) || true
+SESSION_CWD=$("${mise_run[@]}" meta "${FULL_SESSION_ID:0:8}" --field .cwd 2>/dev/null) || SESSION_CWD=""
 if [ -z "$SESSION_CWD" ] || [ ! -d "$SESSION_CWD" ]; then
   echo "Warning: session cwd '$SESSION_CWD' not found, using current directory" >&2
   SESSION_CWD="."

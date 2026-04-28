@@ -43,7 +43,7 @@ fi
 if [ "$HAS_SHELL" = true ]; then
   SHELL_NAME=$(derive_shell_name "$SESSION_NAME" "$FULL_ID")
 
-  SHELL_STATUS=$(shell status "$SHELL_NAME" 2>/dev/null) || true
+  SHELL_STATUS=$(shell status "$SHELL_NAME" 2>/dev/null) || SHELL_STATUS=""
   if [ "$SHELL_STATUS" = "running" ] || [ "$SHELL_STATUS" = "unreachable" ] || [ "$SHELL_STATUS" = "exited" ]; then
     shell kill "$SHELL_NAME" 2>/dev/null && \
       echo "Killed shell '$SHELL_NAME'" >&2 || \

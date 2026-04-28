@@ -37,7 +37,7 @@ fi
 NEW_ID=$(uuidgen | tr '[:upper:]' '[:lower:]')
 NOW_ISO=$(date -u +"%Y-%m-%dT%H:%M:%S.000Z")
 # Pi filename format: <timestamp>_<uuid>.jsonl (timestamp with dashes instead of colons)
-NOW_FILE=$(echo "$NOW_ISO" | sed 's/:/-/g')
+NOW_FILE="${NOW_ISO//:/-}"
 NEW_FILE="${PROJECT_DIR}${NOW_FILE}_${NEW_ID}.jsonl"
 
 # Clean up on failure

@@ -37,14 +37,16 @@ if [ -z "$SYSTEM_PROMPT_FILE" ] && [ -n "${AGENT_IDENTITY:-}" ]; then
   SYSTEM_PROMPT_FILE=$(mktemp)
   echo "$AGENT_IDENTITY" > "$SYSTEM_PROMPT_FILE"
 
-  trap "rm -f '$SYSTEM_PROMPT_FILE'" EXIT
+  trap 'rm -f "$SYSTEM_PROMPT_FILE"' EXIT
 fi
 
 # Append dispatch context (outside the conditional — applies to any prompt file)
 if [ -n "${DISPATCH_CONTEXT:-}" ] && [ -n "$SYSTEM_PROMPT_FILE" ]; then
-  echo "" >> "$SYSTEM_PROMPT_FILE"
-  echo "## Dispatch Context" >> "$SYSTEM_PROMPT_FILE"
-  echo "This session was triggered by: $DISPATCH_CONTEXT" >> "$SYSTEM_PROMPT_FILE"
+  {
+    echo ""
+    echo "## Dispatch Context"
+    echo "This session was triggered by: $DISPATCH_CONTEXT"
+  } >> "$SYSTEM_PROMPT_FILE"
 fi
 
 # Append headless session context (outside the conditional — applies whether
