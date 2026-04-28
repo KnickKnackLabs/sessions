@@ -1,0 +1,49 @@
+name: Test
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up mise
+        uses: jdx/mise-action@v3
+        with:
+          install: true
+
+      - name: Run BATS tests
+        run: mise run test
+
+      - name: Install CLI dependencies
+        run: mise run cli:build
+
+      - name: Run CLI tests
+        run: cd cli && mix test
+
+      - name: Run codebase lints
+        run: |
+          for target in \
+            lint:mise-settings \
+            lint:gum-table \
+            lint:bats-test-helper \
+            lint:bats-test-task \
+            lint:mcr-scope \
+            lint:or-true \
+            lint:shellcheck
+          do
+            codebase "$target" "$PWD"
+          done
