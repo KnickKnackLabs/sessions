@@ -4,7 +4,6 @@
 #USAGE flag "--cwd <cwd>" help="Working directory for the session (default: current directory)"
 #USAGE flag "--context <context>" help="Initial context message to inject"
 #USAGE flag "--context-file <context_file>" help="File containing initial context message"
-#USAGE flag "--model <model>" default="claude-sonnet-4-20250514" help="Model to set (default: claude-sonnet-4-20250514)"
 #USAGE flag "--meta <meta>" var=#true help="Metadata key=value pairs (repeatable, supports dotted paths e.g. agent.name=ikma)"
 #USAGE flag "--harness <harness>" help="Harness adapter to use (default: pi, or value of SESSIONS_DEFAULT_HARNESS)"
 
@@ -14,7 +13,6 @@ NAME="${usage_name:-}"
 CWD="${usage_cwd:-}"
 CONTEXT="${usage_context:-}"
 CONTEXT_FILE="${usage_context_file:-}"
-MODEL="${usage_model:-claude-sonnet-4-20250514}"
 META_RAW="${usage_meta:-}"
 HARNESS_FLAG="${usage_harness:-}"
 
@@ -101,14 +99,10 @@ harness_call "$HARNESS_NAME" header_entry "$SESSION_ID" "$NOW_ISO" "$CWD_ABS" "$
 HARNESS_ENTRY_ID=$(uuidgen | tr '[:upper:]' '[:lower:]' | cut -c1-8)
 harness_entry "$HARNESS_ENTRY_ID" "$SESSION_ID" "$NOW_ISO" "$HARNESS_NAME" >> "$SESSION_FILE"
 
-# Model change entry
-MC_ID=$(uuidgen | tr '[:upper:]' '[:lower:]' | cut -c1-8)
-harness_call "$HARNESS_NAME" model_change_entry "$MC_ID" "$NOW_ISO" "$MODEL" >> "$SESSION_FILE"
-
 # Inject context as a user message if provided
 if [ -n "$CONTEXT" ]; then
   MSG_ID=$(uuidgen | tr '[:upper:]' '[:lower:]' | cut -c1-8)
-  harness_call "$HARNESS_NAME" user_message_entry "$MSG_ID" "$MC_ID" "$NOW_ISO" "$CONTEXT" >> "$SESSION_FILE"
+  harness_call "$HARNESS_NAME" user_message_entry "$MSG_ID" "$HARNESS_ENTRY_ID" "$NOW_ISO" "$CONTEXT" >> "$SESSION_FILE"
 fi
 
 # --- Output ---

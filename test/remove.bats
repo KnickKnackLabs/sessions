@@ -23,7 +23,7 @@ teardown() { teardown_test_sessions; }
 
 @test "remove deletes a session by name" {
   # Create a named session
-  run sessions new --cwd "$BATS_TMPDIR" test-named
+  run sessions new --cwd "$BATS_TEST_TMPDIR" test-named
   [ "$status" -eq 0 ]
   new_id=$(echo "$output" | head -1)
 
@@ -61,7 +61,7 @@ teardown() { teardown_test_sessions; }
 }
 
 @test "remove shows display name for named sessions" {
-  run sessions new --cwd "$BATS_TMPDIR" my-cool-session
+  run sessions new --cwd "$BATS_TEST_TMPDIR" my-cool-session
   [ "$status" -eq 0 ]
 
   run sessions remove --force my-cool-session

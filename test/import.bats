@@ -4,7 +4,7 @@ load helpers
 
 setup() {
   setup_test_sessions
-  export EXPORT_DIR="$BATS_TMPDIR/import-test-$$"
+  export EXPORT_DIR="$BATS_TEST_TMPDIR/import-test"
   mkdir -p "$EXPORT_DIR"
 
   # Export session 1 as a bundle to use for import tests

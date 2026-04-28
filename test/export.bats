@@ -4,7 +4,7 @@ load helpers
 
 setup() {
   setup_test_sessions
-  export EXPORT_DIR="$BATS_TMPDIR/export-test-$$"
+  export EXPORT_DIR="$BATS_TEST_TMPDIR/export-test"
   mkdir -p "$EXPORT_DIR"
 }
 

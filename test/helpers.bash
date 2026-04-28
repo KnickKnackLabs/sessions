@@ -7,11 +7,10 @@
 #   - Synthetic JSONL generation (pi format)
 #   - Common setup/teardown
 
-# The canonical invocation is `mise run test`; that's what sets up
-# mise-managed tools (jq, bats, erlang, elixir, shell) on PATH. These
-# helpers don't try to support running bats directly — they just make
-# sure that when the suite DOES run, test code resolves repo paths to
-# the tree under test rather than reaching for any inherited env var.
+# test/setup_suite.bash loads this repo's mise environment once per bats
+# invocation so both `mise run test` and direct `bats test/foo.bats` exercise
+# the same tool versions. This helper still derives REPO_DIR from bats as a
+# fallback so individual files remain anchored to the tree under test.
 #
 # Three primitives, three contexts:
 #   - .mise/tasks/*       → $MISE_CONFIG_ROOT (mise sets it, task uses it)
@@ -21,7 +20,7 @@
 # Each layer uses its own primitive; nothing leaks across boundaries.
 # See KnickKnackLabs/codebase#16 for the broader lint that enforces
 # this.
-REPO_DIR="$(cd "$BATS_TEST_DIRNAME/.." && pwd)"
+REPO_DIR="${REPO_DIR:-$(cd "$BATS_TEST_DIRNAME/.." && pwd)}"
 export REPO_DIR
 
 sessions() {
@@ -34,7 +33,7 @@ SESSION_1="aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
 SESSION_2="11111111-2222-3333-4444-555555555555"
 
 setup_test_sessions() {
-  export PI_DIR="$BATS_TMPDIR/pi-test-$$"
+  export PI_DIR="$BATS_TEST_TMPDIR/pi-test"
   export PROJECT_DIR="$PI_DIR/agent/sessions/--test-project--/"
   mkdir -p "$PROJECT_DIR"
 

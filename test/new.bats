@@ -8,7 +8,7 @@ teardown() { teardown_test_sessions; }
 # --- basic creation ---
 
 @test "new creates a session file (cwd defaults to .)" {
-  run sessions new --cwd "$BATS_TMPDIR"
+  run sessions new --cwd "$BATS_TEST_TMPDIR"
   [ "$status" -eq 0 ]
   new_id=$(echo "$output" | head -1)
   found=$(find "$PI_DIR/agent/sessions" -name "*${new_id}.jsonl" | wc -l | tr -d ' ')
@@ -16,13 +16,13 @@ teardown() { teardown_test_sessions; }
 }
 
 @test "new outputs a valid UUID" {
-  run sessions new --cwd "$BATS_TMPDIR"
+  run sessions new --cwd "$BATS_TEST_TMPDIR"
   [ "$status" -eq 0 ]
   echo "$output" | head -1 | grep -qE '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
 }
 
 @test "new creates valid session header" {
-  run sessions new --cwd "$BATS_TMPDIR"
+  run sessions new --cwd "$BATS_TEST_TMPDIR"
   [ "$status" -eq 0 ]
   new_id=$(echo "$output" | head -1)
   new_file=$(find "$PI_DIR/agent/sessions" -name "*${new_id}.jsonl")
@@ -43,12 +43,12 @@ teardown() { teardown_test_sessions; }
 }
 
 @test "new --cwd stores absolute path in header" {
-  run sessions new --cwd "$BATS_TMPDIR"
+  run sessions new --cwd "$BATS_TEST_TMPDIR"
   [ "$status" -eq 0 ]
   new_id=$(echo "$output" | head -1)
   new_file=$(find "$PI_DIR/agent/sessions" -name "*${new_id}.jsonl")
   header=$(head -1 "$new_file")
-  echo "$header" | jq -r '.cwd' | grep -q "$BATS_TMPDIR"
+  echo "$header" | jq -r '.cwd' | grep -q "$BATS_TEST_TMPDIR"
 }
 
 @test "new --cwd errors on nonexistent directory" {
@@ -60,7 +60,7 @@ teardown() { teardown_test_sessions; }
 # --- naming ---
 
 @test "new with name stores it in session header" {
-  run sessions new pr-review-50 --cwd "$BATS_TMPDIR"
+  run sessions new pr-review-50 --cwd "$BATS_TEST_TMPDIR"
   [ "$status" -eq 0 ]
   new_id=$(echo "$output" | head -1)
   new_file=$(find "$PI_DIR/agent/sessions" -name "*${new_id}.jsonl")
@@ -69,7 +69,7 @@ teardown() { teardown_test_sessions; }
 }
 
 @test "new without name has no name field in header" {
-  run sessions new --cwd "$BATS_TMPDIR"
+  run sessions new --cwd "$BATS_TEST_TMPDIR"
   [ "$status" -eq 0 ]
   new_id=$(echo "$output" | head -1)
   new_file=$(find "$PI_DIR/agent/sessions" -name "*${new_id}.jsonl")
@@ -78,13 +78,13 @@ teardown() { teardown_test_sessions; }
 }
 
 @test "new with name shows name in output" {
-  run sessions new scout-report --cwd "$BATS_TMPDIR"
+  run sessions new scout-report --cwd "$BATS_TEST_TMPDIR"
   [ "$status" -eq 0 ]
   echo "$output" | grep -q "scout-report"
 }
 
 @test "named session is findable by name" {
-  run sessions new find-me-by-name --cwd "$BATS_TMPDIR"
+  run sessions new find-me-by-name --cwd "$BATS_TEST_TMPDIR"
   [ "$status" -eq 0 ]
   run sessions meta find-me-by-name
   [ "$status" -eq 0 ]
@@ -92,7 +92,7 @@ teardown() { teardown_test_sessions; }
 }
 
 @test "name supports slashes for namespacing" {
-  run sessions new feature/reddit/auth --cwd "$BATS_TMPDIR"
+  run sessions new feature/reddit/auth --cwd "$BATS_TEST_TMPDIR"
   [ "$status" -eq 0 ]
   new_id=$(echo "$output" | head -1)
   new_file=$(find "$PI_DIR/agent/sessions" -name "*${new_id}.jsonl")
@@ -100,59 +100,57 @@ teardown() { teardown_test_sessions; }
   echo "$header" | jq -e '.name == "feature/reddit/auth"'
 }
 
-# --- model ---
+# --- harness ---
 
 @test "new includes harness entry as line 2" {
-  run sessions new --cwd "$BATS_TMPDIR"
+  run sessions new --cwd "$BATS_TEST_TMPDIR"
   [ "$status" -eq 0 ]
   new_id=$(echo "$output" | head -1)
   new_file=$(find "$PI_DIR/agent/sessions" -name "*${new_id}.jsonl")
   sed -n '2p' "$new_file" | jq -e '.type == "harness" and .name == "pi"'
 }
 
-@test "new includes model_change entry as line 3" {
-  run sessions new --cwd "$BATS_TMPDIR"
+@test "new does not write a synthetic model_change entry" {
+  run sessions new --cwd "$BATS_TEST_TMPDIR"
   [ "$status" -eq 0 ]
   new_id=$(echo "$output" | head -1)
   new_file=$(find "$PI_DIR/agent/sessions" -name "*${new_id}.jsonl")
-  sed -n '3p' "$new_file" | jq -e '.type == "model_change"'
+  ! jq -e 'select(.type == "model_change")' "$new_file"
 }
 
-@test "new respects --model flag" {
-  run sessions new --cwd "$BATS_TMPDIR" --model "claude-opus-4-6"
-  [ "$status" -eq 0 ]
-  new_id=$(echo "$output" | head -1)
-  new_file=$(find "$PI_DIR/agent/sessions" -name "*${new_id}.jsonl")
-  sed -n '3p' "$new_file" | jq -e '.modelId == "claude-opus-4-6"'
+@test "new rejects --model" {
+  run sessions new --cwd "$BATS_TEST_TMPDIR" --model "openai-codex/gpt-5.5"
+  [ "$status" -ne 0 ]
+  echo "$output" | grep -q "unexpected"
 }
 
 # --- context ---
 
 @test "new injects context as user message" {
-  run sessions new --cwd "$BATS_TMPDIR" --context "You are reviewing PR #42"
+  run sessions new --cwd "$BATS_TEST_TMPDIR" --context "You are reviewing PR #42"
   [ "$status" -eq 0 ]
   new_id=$(echo "$output" | head -1)
   new_file=$(find "$PI_DIR/agent/sessions" -name "*${new_id}.jsonl")
   lines=$(wc -l < "$new_file" | tr -d ' ')
-  # session + harness + model_change + message = 4 lines
-  [ "$lines" -eq 4 ]
+  # session + harness + message = 3 lines
+  [ "$lines" -eq 3 ]
   tail -1 "$new_file" | jq -e '.type == "message"'
   tail -1 "$new_file" | jq -r '.message.content[0].text' | grep -q "PR #42"
 }
 
-@test "new without context creates 3-entry session" {
-  run sessions new --cwd "$BATS_TMPDIR"
+@test "new without context creates 2-entry session" {
+  run sessions new --cwd "$BATS_TEST_TMPDIR"
   [ "$status" -eq 0 ]
   new_id=$(echo "$output" | head -1)
   new_file=$(find "$PI_DIR/agent/sessions" -name "*${new_id}.jsonl")
   lines=$(wc -l < "$new_file" | tr -d ' ')
-  # session + harness + model_change = 3 lines
-  [ "$lines" -eq 3 ]
+  # session + harness = 2 lines
+  [ "$lines" -eq 2 ]
 }
 
 @test "new --context-file reads from file" {
-  echo "You are agent Ikma. Review the following diff." > "$BATS_TMPDIR/ctx.md"
-  run sessions new --cwd "$BATS_TMPDIR" --context-file "$BATS_TMPDIR/ctx.md"
+  echo "You are agent Ikma. Review the following diff." > "$BATS_TEST_TMPDIR/ctx.md"
+  run sessions new --cwd "$BATS_TEST_TMPDIR" --context-file "$BATS_TEST_TMPDIR/ctx.md"
   [ "$status" -eq 0 ]
   new_id=$(echo "$output" | head -1)
   new_file=$(find "$PI_DIR/agent/sessions" -name "*${new_id}.jsonl")
@@ -160,7 +158,7 @@ teardown() { teardown_test_sessions; }
 }
 
 @test "new errors with nonexistent context file" {
-  run sessions new --cwd "$BATS_TMPDIR" --context-file "/tmp/nonexistent-$$"
+  run sessions new --cwd "$BATS_TEST_TMPDIR" --context-file "/tmp/nonexistent-$$"
   [ "$status" -eq 1 ]
   echo "$output" | grep -q "not found"
 }
@@ -168,7 +166,7 @@ teardown() { teardown_test_sessions; }
 # --- pi naming ---
 
 @test "new creates file with pi naming convention" {
-  run sessions new --cwd "$BATS_TMPDIR"
+  run sessions new --cwd "$BATS_TEST_TMPDIR"
   [ "$status" -eq 0 ]
   new_id=$(echo "$output" | head -1)
   new_file=$(find "$PI_DIR/agent/sessions" -name "*${new_id}.jsonl")
@@ -179,7 +177,7 @@ teardown() { teardown_test_sessions; }
 # --- integration ---
 
 @test "new session is readable by sessions read" {
-  run sessions new --cwd "$BATS_TMPDIR" --context "hello from new"
+  run sessions new --cwd "$BATS_TEST_TMPDIR" --context "hello from new"
   [ "$status" -eq 0 ]
   new_id=$(echo "$output" | head -1)
   run sessions read "$new_id"
@@ -187,11 +185,11 @@ teardown() { teardown_test_sessions; }
   echo "$output" | grep -q "hello from new"
 }
 
-@test "new session appears in sessions list" {
-  run sessions new --cwd "$BATS_TMPDIR" --context "list test"
+@test "new stub session is omitted from default sessions list" {
+  run sessions new --cwd "$BATS_TEST_TMPDIR" --context "list test"
   [ "$status" -eq 0 ]
   new_id=$(echo "$output" | head -1)
   run sessions list
   [ "$status" -eq 0 ]
-  echo "$output" | grep -q "${new_id:0:8}"
+  ! echo "$output" | grep -q "${new_id:0:8}"
 }

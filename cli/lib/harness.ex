@@ -41,8 +41,8 @@ defmodule Cli.Harness do
     5. Compile-time default: `:pi`
 
   Each adapter module exposes the public API the engine uses
-  (`build_command/6`, `default_model/0`, `process_line/2`,
-  `extract_partial_text/1`). See `Cli.Harness.Pi` for the reference.
+  (`build_command/6`, `process_line/2`, `extract_partial_text/1`).
+  See `Cli.Harness.Pi` for the reference.
   """
 
   @default :pi

@@ -11,11 +11,6 @@ defmodule Cli.Harness.Pi.Command do
   multi-harness plan.
   """
 
-  @default_model "claude-opus-4-6"
-
-  @doc "Default model when the caller doesn't pass --model."
-  @spec default_model() :: String.t()
-  def default_model, do: @default_model
 
   @typep build_opts :: [
            extensions: boolean(),
@@ -45,8 +40,7 @@ defmodule Cli.Harness.Pi.Command do
     skills = Keyword.get(opts, :skills, true)
     prompt_templates = Keyword.get(opts, :prompt_templates, true)
 
-    qualified_model =
-      if String.contains?(model, "/"), do: model, else: "anthropic/#{model}"
+    qualified_model = model
 
     session_flag =
       if session, do: ~s( --session "$4"), else: " --no-session"

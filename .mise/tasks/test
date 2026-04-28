@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 #MISE description="Run the BATS test suite"
-#USAGE arg "[args]" var=#true help="Test files or bats flags"
+#USAGE arg "[args]..." var=#true help="Test suites, files, directories, or bats flags"
 #USAGE example "mise run test" header="Run all tests"
+#USAGE example "mise run test wake" header="Run a specific suite by bare name"
 #USAGE example "mise run test test/wake.bats" header="Run a specific test file"
-#USAGE example "mise run test -- --filter 'session name'" header="Filter tests by name"
+#USAGE example "mise run test --filter 'session name'" header="Filter tests by name"
 set -euo pipefail
 
 TEST_DIR="$MISE_CONFIG_ROOT/test"
@@ -12,7 +13,10 @@ args=()
 has_target=false
 
 for arg in "$@"; do
-  if [[ "$arg" != -* && "$arg" != *.bats && -d "$TEST_DIR/$arg" ]]; then
+  if [[ "$arg" != -* && "$arg" != *.bats && -f "$TEST_DIR/$arg.bats" ]]; then
+    args+=("$TEST_DIR/$arg.bats")
+    has_target=true
+  elif [[ "$arg" != -* && "$arg" != *.bats && -d "$TEST_DIR/$arg" ]]; then
     args+=("$TEST_DIR/$arg")
     has_target=true
   else

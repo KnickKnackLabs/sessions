@@ -242,10 +242,10 @@ harness_entry() {
 #   $1 entry_id, $2 parent_id, $3 timestamp_iso, $4 shell_name,
 #   $5 agent, $6 harness_name, $7 headless ("true" | "false"),
 #   $8 meta_json (optional, "{}" or "" for none),
-#   $9 model   (optional, "" for none — absence of `.model` on the
-#              output signals "harness default was used". `wake_entry`
-#              itself never writes null; readers processing wake events
-#              from other sources should normalize null to absent.)
+#   $9 model   (optional for low-level callers, but required by
+#              `sessions wake`. `wake_entry` itself never writes null;
+#              readers processing wake events from other sources should
+#              normalize null to absent.)
 #
 # Field-placement rule: fields that `sessions wake` itself owns
 # (`.headless`, `.model`) go top-level; caller-provided key=value pairs
@@ -278,8 +278,8 @@ wake_entry() {
   local headless_bool=false
   [ "$headless" = "true" ] && headless_bool=true
 
-  # `.model` is written only when explicitly provided. Absent means
-  # "harness default was used"; readers can distinguish the two cases.
+  # `.model` is written only when explicitly provided. `sessions wake`
+  # requires it; absence is reserved for legacy/imported wake events.
   # `"${arr[@]+"${arr[@]}"}"` is the nounset-safe empty-array expansion
   # (bash < 4.4 treats `"${empty[@]}"` as an unset reference under -u).
   local model_args=()
