@@ -246,7 +246,7 @@ JSONL
 # --- `sessions new` integration ---
 
 @test "new writes a harness entry as line 2" {
-  run sessions new --cwd "$BATS_TMPDIR"
+  run sessions new --cwd "$BATS_TEST_TMPDIR"
   [ "$status" -eq 0 ]
   new_id=$(echo "$output" | head -1)
   new_file=$(find "$PI_DIR/agent/sessions" -name "*${new_id}.jsonl")
@@ -254,7 +254,7 @@ JSONL
 }
 
 @test "new --harness pi produces same header shape" {
-  run sessions new --cwd "$BATS_TMPDIR" --harness pi
+  run sessions new --cwd "$BATS_TEST_TMPDIR" --harness pi
   [ "$status" -eq 0 ]
   new_id=$(echo "$output" | head -1)
   new_file=$(find "$PI_DIR/agent/sessions" -name "*${new_id}.jsonl")
@@ -263,7 +263,7 @@ JSONL
 
 @test "new --harness xyz errors before writing a session file" {
   initial_count=$(find "$PI_DIR/agent/sessions" -name '*.jsonl' 2>/dev/null | wc -l | tr -d ' ')
-  run sessions new --cwd "$BATS_TMPDIR" --harness xyz
+  run sessions new --cwd "$BATS_TEST_TMPDIR" --harness xyz
   [ "$status" -ne 0 ]
   echo "$output" | grep -qi "unknown harness"
   # No new session file got created
@@ -277,7 +277,7 @@ JSONL
   # for isolation so we don't poke at the real ~/.claude.
   export CLAUDE_DIR="$BATS_TEST_TMPDIR/claude-home"
 
-  run sessions new --cwd "$BATS_TMPDIR" --harness claude acceptance-foo
+  run sessions new --cwd "$BATS_TEST_TMPDIR" --harness claude acceptance-foo
   [ "$status" -eq 10 ]
   echo "$output" | grep -q "'claude' harness does not support 'session_file_path'"
 
@@ -290,7 +290,7 @@ JSONL
   # lives under PI_DIR so pi's find_session locates it; the harness
   # entry then wins over path-based detection (see the priority test
   # above), so wake dispatches to claude — which errors UNSUPPORTED
-  # when the Elixir run path asks claude for its default model.
+  # when the Elixir run path asks claude to build the harness command.
   # Foreground wake (no --background) — execs mise run directly, so
   # `shell` isn't required.
 
@@ -298,17 +298,15 @@ JSONL
   local sf="$PI_DIR/agent/sessions/--claude-acceptance--/2026-04-22T10-00-00-000Z_${sid}.jsonl"
   mkdir -p "$(dirname "$sf")"
   cat > "$sf" <<JSONL
-{"type":"session","version":3,"id":"${sid}","timestamp":"2026-04-22T10:00:00.000Z","cwd":"$BATS_TMPDIR"}
+{"type":"session","version":3,"id":"${sid}","timestamp":"2026-04-22T10:00:00.000Z","cwd":"$BATS_TEST_TMPDIR"}
 {"type":"harness","id":"h1","parentId":"${sid}","timestamp":"2026-04-22T10:00:00.000Z","name":"claude"}
 JSONL
 
-  run sessions wake "${sid:0:8}" --message "acceptance"
+  run sessions wake "${sid:0:8}" --model "openai/gpt-5.5" --message "acceptance"
   [ "$status" -eq 10 ]
   # The user-facing message should name the claude harness and the
-  # specific unsupported op. Which op fires first depends on the
-  # Elixir startup order; default_model is the earliest thing to need
-  # claude knowledge.
-  echo "$output" | grep -q "'claude' harness does not support"
+  # specific unsupported op.
+  echo "$output" | grep -q "'claude' harness does not support 'build_command'"
 }
 
 # --- Cross-adapter find aggregator (hard error surfacing) ---
@@ -381,9 +379,9 @@ JSONL
 
 @test "wake_entry omits .model when 9th arg is absent or empty" {
   # Both absent (no 9th arg) and explicit empty string must produce no
-  # `.model` field. Absence signals "harness default was used"; the
-  # empty-string case exercises the `[ -n "$model" ]` gate so it
-  # doesn't accidentally emit `{"model": ""}`.
+  # `.model` field. `sessions wake` requires a model; this low-level
+  # behavior is for legacy/imported wake entries and exercises the
+  # `[ -n "$model" ]` gate so it doesn't accidentally emit `{"model": ""}`.
   for arg in absent empty; do
     if [ "$arg" = "absent" ]; then
       run wake_entry w1 parent1 "2026-04-22T10:00:00.000Z" shellA ikma pi true "{}"

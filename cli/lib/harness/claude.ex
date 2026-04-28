@@ -14,10 +14,6 @@ defmodule Cli.Harness.Claude do
     raise UnsupportedError, harness: :claude, op: :build_command
   end
 
-  def default_model do
-    raise UnsupportedError, harness: :claude, op: :default_model
-  end
-
   def process_line(_line, _state) do
     raise UnsupportedError, harness: :claude, op: :process_line
   end

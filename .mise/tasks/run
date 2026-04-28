@@ -4,7 +4,7 @@
 #USAGE arg "<message>" help="Message for the agent"
 #USAGE flag "--system-prompt-file <file>" help="Path to system prompt file"
 #USAGE flag "--timeout <seconds>" help="Timeout in seconds (default: no timeout)"
-#USAGE flag "--model <model>" help="Model to use"
+#USAGE flag "--model <model>" help="Model to use (required; provider-qualified, e.g. openai/gpt-5.5)"
 #USAGE flag "--session <session>" help="Session file for conversation continuity"
 #USAGE flag "--cwd <cwd>" help="Working directory for pi"
 #USAGE flag "--headless" help="Non-interactive mode (appends headless context to system prompt)"
@@ -28,7 +28,18 @@ PROMPT_TEMPLATES="${usage_prompt_templates:-false}"
 
 if [ -z "$MESSAGE" ]; then
   echo "Error: message required" >&2
-  echo "Usage: sessions run --system-prompt-file <path> [options] \"message\"" >&2
+  echo "Usage: sessions run --system-prompt-file <path> --model <provider/model> [options] \"message\"" >&2
+  exit 1
+fi
+
+if [ -z "$MODEL" ]; then
+  echo "Error: --model is required" >&2
+  echo "Usage: sessions run --system-prompt-file <path> --model <provider/model> [options] \"message\"" >&2
+  exit 1
+fi
+
+if [[ "$MODEL" != */* ]]; then
+  echo "Error: --model must be provider-qualified (for example: openai/gpt-5.5)" >&2
   exit 1
 fi
 
@@ -65,7 +76,7 @@ CLI_DIR="$MISE_CONFIG_ROOT/cli"
 CLI_ARGS=(--system-prompt-file "$SYSTEM_PROMPT_FILE" --cwd "$CWD")
 
 [ -n "$TIMEOUT" ] && CLI_ARGS+=(--timeout "$TIMEOUT")
-[ -n "$MODEL" ] && CLI_ARGS+=(--model "$MODEL")
+CLI_ARGS+=(--model "$MODEL")
 [ -n "$SESSION" ] && CLI_ARGS+=(--session "$SESSION")
 # Extensions off by default — only pass --no-* when NOT explicitly enabled
 [ "$EXTENSIONS" != "true" ] && CLI_ARGS+=(--no-extensions)

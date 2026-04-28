@@ -47,7 +47,7 @@ defmodule Cli do
     # used to re-resolve from the session file, which meant reading
     # the JSONL twice on every invocation.
     harness = Cli.Harness.resolve(session: session)
-    model = opts[:model] || harness.default_model()
+    model = opts[:model]
     cwd = opts[:cwd]
 
     # Extension flags default to true (enabled) unless explicitly disabled.
@@ -57,7 +57,7 @@ defmodule Cli do
 
     print_header(opts, message, timeout, model)
 
-    case validate_args(message, opts[:system_prompt_file]) do
+    case validate_args(message, opts) do
       {:error, msg} ->
         IO.puts("ERROR: #{msg}")
         1
@@ -89,10 +89,17 @@ defmodule Cli do
     IO.puts("---")
   end
 
-  defp validate_args(message, system_prompt_file) do
+  defp validate_args(message, opts) do
+    system_prompt_file = opts[:system_prompt_file]
     cond do
       String.trim(message) == "" ->
         {:error, "No message provided"}
+
+      opts[:model] == nil or opts[:model] == "" ->
+        {:error, "--model is required"}
+
+      not String.contains?(opts[:model], "/") ->
+        {:error, "--model must be provider-qualified (for example: openai/gpt-5.5)"}
 
       system_prompt_file == nil or system_prompt_file == "" ->
         {:error, "--system-prompt-file is required"}
@@ -137,19 +144,17 @@ defmodule Cli do
   end
 
   defp print_help do
-    default_model = Cli.Harness.resolve().default_model()
-
     IO.puts("""
-    Usage: sessions run --system-prompt-file <path> [options] <message>
+    Usage: sessions run --system-prompt-file <path> --model <provider/model> [options] <message>
 
     Run a pi agent session with streaming output, timeout, and ABORT detection.
 
     Required:
       --system-prompt-file <path>  Path to the system prompt file
+      --model <provider/model>     Provider-qualified model to use
 
     Options:
       --timeout <seconds>          Maximum runtime in seconds (default: no timeout)
-      --model <model>              Model to use (default: #{default_model})
       --cwd <path>                 Working directory for pi
       --session <path>             Session file for conversation continuity
       --no-extensions              Disable pi extensions
@@ -158,9 +163,9 @@ defmodule Cli do
       -h, --help                   Show this help message
 
     Examples:
-      sessions run --system-prompt-file /tmp/prompt.txt "Fix the bug"
-      sessions run --system-prompt-file ./prompt.txt --timeout 300 "Explore"
-      sessions run --session ./session.jsonl --system-prompt-file ./prompt.txt "Continue"
+      sessions run --system-prompt-file /tmp/prompt.txt --model openai/gpt-5.5 "Fix the bug"
+      sessions run --system-prompt-file ./prompt.txt --model openai/gpt-5.5 --timeout 300 "Explore"
+      sessions run --session ./session.jsonl --system-prompt-file ./prompt.txt --model openai/gpt-5.5 "Continue"
     """)
   end
 end

@@ -19,13 +19,13 @@ Identity-agnostic Elixir wrapper around pi. It:
 
 ```bash
 # Via the sessions run task (typical)
-sessions run --system-prompt-file /tmp/prompt.txt --timeout 300 "Your message"
+sessions run --system-prompt-file /tmp/prompt.txt --model openai/gpt-5.5 --timeout 300 "Your message"
 
 # Direct CLI invocation (rare)
-cd cli && mix sessions --system-prompt-file /tmp/prompt.txt "Your message"
+cd cli && mix sessions --system-prompt-file /tmp/prompt.txt --model openai/gpt-5.5 "Your message"
 
 # With session file for conversation continuity
-mix sessions --system-prompt-file ./prompt.txt --session ./session.jsonl "Continue"
+mix sessions --system-prompt-file ./prompt.txt --model openai/gpt-5.5 --session ./session.jsonl "Continue"
 ```
 
 ## Options
@@ -34,7 +34,7 @@ mix sessions --system-prompt-file ./prompt.txt --session ./session.jsonl "Contin
 |--------|-------------|
 | `--system-prompt-file <path>` | Required. Path to system prompt file |
 | `--timeout <seconds>` | Optional. Timeout in seconds (default: no timeout) |
-| `--model <model>` | Optional. Model (default: `claude-opus-4-6`) |
+| `--model <provider/model>` | Required. Provider-qualified model to use |
 | `--session <path>` | Optional. Session file for conversation continuity |
 | `--cwd <path>` | Optional. Working directory for pi |
 | `--no-extensions` | Disable pi extensions |

@@ -3,14 +3,6 @@ defmodule Cli.Harness.Pi.CommandTest do
 
   alias Cli.Harness.Pi.Command
 
-  describe "default_model/0" do
-    test "returns a non-empty model id" do
-      model = Command.default_model()
-      assert is_binary(model)
-      assert String.length(model) > 0
-    end
-  end
-
   describe "build_command/6 — shell script" do
     test "builds a basic invocation with no timeout, session, or flags" do
       {script, _args} =
@@ -104,47 +96,33 @@ defmodule Cli.Harness.Pi.CommandTest do
   end
 
   describe "build_command/6 — positional args" do
-    test "returns [message, qualified_model, system_prompt_file] without session" do
+    test "returns [message, model, system_prompt_file] without session" do
       {_script, args} =
-        Command.build_command("hello world", "claude-sonnet-4-5", "/tmp/p.txt", nil, nil)
+        Command.build_command("hello world", "openai/gpt-5.5", "/tmp/p.txt", nil, nil)
 
-      assert args == ["hello world", "anthropic/claude-sonnet-4-5", "/tmp/p.txt"]
+      assert args == ["hello world", "openai/gpt-5.5", "/tmp/p.txt"]
     end
 
     test "appends session path to positional args when given" do
       {_script, args} =
         Command.build_command(
           "hello",
-          "claude-sonnet-4-5",
+          "openai/gpt-5.5",
           "/tmp/p.txt",
           "/tmp/s.jsonl",
           nil
         )
 
-      assert args == ["hello", "anthropic/claude-sonnet-4-5", "/tmp/p.txt", "/tmp/s.jsonl"]
+      assert args == ["hello", "openai/gpt-5.5", "/tmp/p.txt", "/tmp/s.jsonl"]
     end
   end
 
   describe "build_command/6 — model qualification" do
-    test "prefixes bare model names with `anthropic/`" do
+    test "leaves provider-qualified model names unchanged" do
       {_, args} =
-        Command.build_command("hi", "claude-opus-4-6", "/tmp/p.txt", nil, nil)
+        Command.build_command("hi", "openai/gpt-5.5", "/tmp/p.txt", nil, nil)
 
-      assert Enum.at(args, 1) == "anthropic/claude-opus-4-6"
-    end
-
-    test "leaves already-qualified model names unchanged" do
-      {_, args} =
-        Command.build_command("hi", "anthropic/claude-opus-4-6", "/tmp/p.txt", nil, nil)
-
-      assert Enum.at(args, 1) == "anthropic/claude-opus-4-6"
-    end
-
-    test "leaves other-provider model names unchanged" do
-      {_, args} =
-        Command.build_command("hi", "openai/gpt-4o", "/tmp/p.txt", nil, nil)
-
-      assert Enum.at(args, 1) == "openai/gpt-4o"
+      assert Enum.at(args, 1) == "openai/gpt-5.5"
     end
   end
 end
