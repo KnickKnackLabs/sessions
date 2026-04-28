@@ -78,14 +78,14 @@ defmodule CliTest do
     end
 
     test "requires system-prompt-file" do
-      {output, exit_code} = run_cli(["--timeout", "60", "--model", "openai/gpt-5.5", "hello"])
+      {output, exit_code} = run_cli(["--timeout", "60", "--model", "openai-codex/gpt-5.5", "hello"])
       assert exit_code == 1
       assert output =~ "--system-prompt-file is required"
     end
 
     test "rejects non-existent system-prompt-file" do
       {output, exit_code} =
-        run_cli(["--system-prompt-file", "/nonexistent/path.txt", "--model", "openai/gpt-5.5", "--timeout", "60", "hello"])
+        run_cli(["--system-prompt-file", "/nonexistent/path.txt", "--model", "openai-codex/gpt-5.5", "--timeout", "60", "hello"])
 
       assert exit_code == 1
       assert output =~ "System prompt file not found"
@@ -93,7 +93,7 @@ defmodule CliTest do
 
     test "timeout is optional" do
       # Should not error on missing timeout — only on missing prompt.
-      {output, exit_code} = run_cli(["--system-prompt-file", "/nonexistent/path.txt", "--model", "openai/gpt-5.5", "hello"])
+      {output, exit_code} = run_cli(["--system-prompt-file", "/nonexistent/path.txt", "--model", "openai-codex/gpt-5.5", "hello"])
       assert exit_code == 1
       assert output =~ "System prompt file not found"
     end

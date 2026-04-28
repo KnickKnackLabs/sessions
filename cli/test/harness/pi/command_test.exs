@@ -98,31 +98,31 @@ defmodule Cli.Harness.Pi.CommandTest do
   describe "build_command/6 — positional args" do
     test "returns [message, model, system_prompt_file] without session" do
       {_script, args} =
-        Command.build_command("hello world", "openai/gpt-5.5", "/tmp/p.txt", nil, nil)
+        Command.build_command("hello world", "openai-codex/gpt-5.5", "/tmp/p.txt", nil, nil)
 
-      assert args == ["hello world", "openai/gpt-5.5", "/tmp/p.txt"]
+      assert args == ["hello world", "openai-codex/gpt-5.5", "/tmp/p.txt"]
     end
 
     test "appends session path to positional args when given" do
       {_script, args} =
         Command.build_command(
           "hello",
-          "openai/gpt-5.5",
+          "openai-codex/gpt-5.5",
           "/tmp/p.txt",
           "/tmp/s.jsonl",
           nil
         )
 
-      assert args == ["hello", "openai/gpt-5.5", "/tmp/p.txt", "/tmp/s.jsonl"]
+      assert args == ["hello", "openai-codex/gpt-5.5", "/tmp/p.txt", "/tmp/s.jsonl"]
     end
   end
 
   describe "build_command/6 — model qualification" do
     test "leaves provider-qualified model names unchanged" do
       {_, args} =
-        Command.build_command("hi", "openai/gpt-5.5", "/tmp/p.txt", nil, nil)
+        Command.build_command("hi", "openai-codex/gpt-5.5", "/tmp/p.txt", nil, nil)
 
-      assert Enum.at(args, 1) == "openai/gpt-5.5"
+      assert Enum.at(args, 1) == "openai-codex/gpt-5.5"
     end
   end
 end

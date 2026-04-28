@@ -119,7 +119,7 @@ teardown() { teardown_test_sessions; }
 }
 
 @test "new rejects --model" {
-  run sessions new --cwd "$BATS_TEST_TMPDIR" --model "openai/gpt-5.5"
+  run sessions new --cwd "$BATS_TEST_TMPDIR" --model "openai-codex/gpt-5.5"
   [ "$status" -ne 0 ]
   echo "$output" | grep -q "unexpected"
 }

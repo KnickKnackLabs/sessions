@@ -26,13 +26,13 @@ teardown() {
 # --- Validation ---
 
 @test "wake errors on nonexistent session" {
-  run sessions wake "deadbeef" --model "openai/gpt-5.5"
+  run sessions wake "deadbeef" --model "openai-codex/gpt-5.5"
   [ "$status" -eq 1 ]
   echo "$output" | grep -qi "no session"
 }
 
 @test "wake errors when context file missing" {
-  run sessions wake "$SESSION_1" --model "openai/gpt-5.5" --context-file "/tmp/nonexistent-$$"
+  run sessions wake "$SESSION_1" --model "openai-codex/gpt-5.5" --context-file "/tmp/nonexistent-$$"
   [ "$status" -eq 1 ]
   echo "$output" | grep -q "not found"
 }
@@ -41,7 +41,7 @@ teardown() {
 
 @test "wake --background launches session via shell" {
   command -v shell >/dev/null 2>&1 || skip "shell not installed"
-  run sessions wake "${SESSION_1:0:8}" --background --model "openai/gpt-5.5"
+  run sessions wake "${SESSION_1:0:8}" --background --model "openai-codex/gpt-5.5"
   [ "$status" -eq 0 ]
   echo "$output" | grep -q "$SESSION_1"
   shell list 2>/dev/null | grep -q "${SESSION_1:0:8}"
@@ -52,7 +52,7 @@ teardown() {
   run sessions new "wake-bg-name-test-$$"
   [ "$status" -eq 0 ]
 
-  run sessions wake "wake-bg-name-test-$$" --background --model "openai/gpt-5.5"
+  run sessions wake "wake-bg-name-test-$$" --background --model "openai-codex/gpt-5.5"
   [ "$status" -eq 0 ]
   shell list 2>/dev/null | grep -q "wake-bg-name-test-$$"
 }
@@ -62,14 +62,14 @@ teardown() {
   run sessions new "feature/bg-test-$$"
   [ "$status" -eq 0 ]
 
-  run sessions wake "feature/bg-test-$$" --background --model "openai/gpt-5.5"
+  run sessions wake "feature/bg-test-$$" --background --model "openai-codex/gpt-5.5"
   [ "$status" -eq 0 ]
   shell list 2>/dev/null | grep -q "feature-bg-test-$$"
 }
 
 @test "wake --background shows monitor instructions" {
   command -v shell >/dev/null 2>&1 || skip "shell not installed"
-  run sessions wake "$SESSION_1" --background --model "openai/gpt-5.5"
+  run sessions wake "$SESSION_1" --background --model "openai-codex/gpt-5.5"
   [ "$status" -eq 0 ]
   echo "$output" | grep -q "Monitor:"
 }
@@ -101,7 +101,7 @@ STUB
   chmod +x "$stub_dir/sessions"
 
   # Keep mise itself discoverable; just shadow `sessions`.
-  PATH="$stub_dir:$PATH" run sessions wake "${SESSION_1:0:8}" --background --model "openai/gpt-5.5"
+  PATH="$stub_dir:$PATH" run sessions wake "${SESSION_1:0:8}" --background --model "openai-codex/gpt-5.5"
   [ "$status" -eq 0 ]
   # If the stub ever fired, its stderr would leak into output.
   ! echo "$output" | grep -q "stub-sessions invoked"
@@ -111,7 +111,7 @@ STUB
 
 @test "wake injects context into session file" {
   command -v shell >/dev/null 2>&1 || skip "shell not installed"
-  run sessions wake "$SESSION_1" --background --model "openai/gpt-5.5" --context "Review PR #42"
+  run sessions wake "$SESSION_1" --background --model "openai-codex/gpt-5.5" --context "Review PR #42"
   [ "$status" -eq 0 ]
   src_file=$(find "$PROJECT_DIR" -name "*${SESSION_1}.jsonl")
   grep -q "PR #42" "$src_file"
@@ -122,7 +122,7 @@ STUB
 @test "wake records wake event in session file" {
   command -v shell >/dev/null 2>&1 || skip "shell not installed"
   export GIT_AUTHOR_NAME="test-agent"
-  run sessions wake "$SESSION_1" --background --model "openai/gpt-5.5"
+  run sessions wake "$SESSION_1" --background --model "openai-codex/gpt-5.5"
   [ "$status" -eq 0 ]
   src_file=$(find "$PROJECT_DIR" -name "*${SESSION_1}.jsonl")
   jq -e 'select(.type == "wake")' "$src_file"
@@ -130,7 +130,7 @@ STUB
 
 @test "wake --headless records harness=pi and headless=true" {
   command -v shell >/dev/null 2>&1 || skip "shell not installed"
-  run sessions wake "$SESSION_1" --headless --background --model "openai/gpt-5.5"
+  run sessions wake "$SESSION_1" --headless --background --model "openai-codex/gpt-5.5"
   [ "$status" -eq 0 ]
   src_file=$(find "$PROJECT_DIR" -name "*${SESSION_1}.jsonl")
   jq -e 'select(.type == "wake" and .harness == "pi" and .headless == true)' "$src_file"
@@ -138,7 +138,7 @@ STUB
 
 @test "wake without --headless records harness=pi and headless=false" {
   command -v shell >/dev/null 2>&1 || skip "shell not installed"
-  run sessions wake "$SESSION_1" --background --model "openai/gpt-5.5"
+  run sessions wake "$SESSION_1" --background --model "openai-codex/gpt-5.5"
   [ "$status" -eq 0 ]
   src_file=$(find "$PROJECT_DIR" -name "*${SESSION_1}.jsonl")
   jq -e 'select(.type == "wake" and .harness == "pi" and .headless == false)' "$src_file"
@@ -158,7 +158,7 @@ STUB
   # and confirming the same code path writes events for foreground.
   # The real foreground integration test would need the Elixir CLI.
   command -v shell >/dev/null 2>&1 || skip "shell not installed"
-  run sessions wake "$SESSION_1" --background --model "openai/gpt-5.5"
+  run sessions wake "$SESSION_1" --background --model "openai-codex/gpt-5.5"
   [ "$status" -eq 0 ]
 }
 
@@ -166,7 +166,7 @@ STUB
 
 @test "wake --meta records metadata in wake event" {
   command -v shell >/dev/null 2>&1 || skip "shell not installed"
-  run sessions wake "$SESSION_1" --background --model "openai/gpt-5.5" --meta "timeout=900"
+  run sessions wake "$SESSION_1" --background --model "openai-codex/gpt-5.5" --meta "timeout=900"
   [ "$status" -eq 0 ]
   src_file=$(find "$PROJECT_DIR" -name "*${SESSION_1}.jsonl")
   jq -e 'select(.type == "wake" and .meta.timeout == "900")' "$src_file"
@@ -176,10 +176,10 @@ STUB
 
 @test "wake --model records model on wake event" {
   command -v shell >/dev/null 2>&1 || skip "shell not installed"
-  run sessions wake "$SESSION_1" --background --model "openai/gpt-5.5"
+  run sessions wake "$SESSION_1" --background --model "openai-codex/gpt-5.5"
   [ "$status" -eq 0 ]
   src_file=$(find "$PROJECT_DIR" -name "*${SESSION_1}.jsonl")
-  jq -e 'select(.type == "wake" and .model == "openai/gpt-5.5")' "$src_file"
+  jq -e 'select(.type == "wake" and .model == "openai-codex/gpt-5.5")' "$src_file"
 }
 
 @test "wake requires --model" {
@@ -202,7 +202,7 @@ STUB
   #
   # We stub `shell` (which wake's --background path invokes with the full
   # RUN_CMD as argv) to dump its arguments to a file, then assert the
-  # dumped argv contains `--model openai/gpt-5.5` with the value
+  # dumped argv contains `--model openai-codex/gpt-5.5` with the value
   # immediately following the flag. This is a runtime check, not a grep
   # against source — it survives refactors of the wake task (variable
   # renames, reordering of the RUN_CMD build).
@@ -225,7 +225,7 @@ exit 0
 STUB
   chmod +x "$stub_dir/shell"
 
-  PATH="$stub_dir:$PATH" run sessions wake "${SESSION_1:0:8}" --background --model "openai/gpt-5.5"
+  PATH="$stub_dir:$PATH" run sessions wake "${SESSION_1:0:8}" --background --model "openai-codex/gpt-5.5"
   [ "$status" -eq 0 ]
   [ -f "$capture" ]
 
@@ -234,7 +234,7 @@ STUB
   # if a future refactor inserted args between flag and value.
   local line_after_flag
   line_after_flag=$(grep -A1 '^--model$' "$capture" | tail -1)
-  [ "$line_after_flag" = "openai/gpt-5.5" ]
+  [ "$line_after_flag" = "openai-codex/gpt-5.5" ]
 
   # Cardinality: exactly one --model in the argv (not duplicated).
   [ "$(grep -c '^--model$' "$capture")" = 1 ]
@@ -272,7 +272,7 @@ exit 0
 STUB
   chmod +x "$stub_dir/shell"
 
-  PATH="$stub_dir:$PATH" run sessions wake "${SESSION_1:0:8}" --background --model "openai/gpt-5.5"
+  PATH="$stub_dir:$PATH" run sessions wake "${SESSION_1:0:8}" --background --model "openai-codex/gpt-5.5"
   [ "$status" -eq 0 ]
   [ -f "$capture" ]
 
@@ -313,7 +313,7 @@ exit 0
 STUB
   chmod +x "$stub_dir/shell"
 
-  PATH="$stub_dir:$PATH" run sessions wake "${SESSION_1:0:8}" --background --model "openai/gpt-5.5"
+  PATH="$stub_dir:$PATH" run sessions wake "${SESSION_1:0:8}" --background --model "openai-codex/gpt-5.5"
   [ "$status" -eq 0 ]
   [ -f "$capture" ]
 

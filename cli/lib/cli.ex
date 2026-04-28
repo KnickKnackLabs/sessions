@@ -99,7 +99,7 @@ defmodule Cli do
         {:error, "--model is required"}
 
       not String.contains?(opts[:model], "/") ->
-        {:error, "--model must be provider-qualified (for example: openai/gpt-5.5)"}
+        {:error, "--model must be provider-qualified (for example: openai-codex/gpt-5.5)"}
 
       system_prompt_file == nil or system_prompt_file == "" ->
         {:error, "--system-prompt-file is required"}
@@ -163,9 +163,9 @@ defmodule Cli do
       -h, --help                   Show this help message
 
     Examples:
-      sessions run --system-prompt-file /tmp/prompt.txt --model openai/gpt-5.5 "Fix the bug"
-      sessions run --system-prompt-file ./prompt.txt --model openai/gpt-5.5 --timeout 300 "Explore"
-      sessions run --session ./session.jsonl --system-prompt-file ./prompt.txt --model openai/gpt-5.5 "Continue"
+      sessions run --system-prompt-file /tmp/prompt.txt --model openai-codex/gpt-5.5 "Fix the bug"
+      sessions run --system-prompt-file ./prompt.txt --model openai-codex/gpt-5.5 --timeout 300 "Explore"
+      sessions run --session ./session.jsonl --system-prompt-file ./prompt.txt --model openai-codex/gpt-5.5 "Continue"
     """)
   end
 end

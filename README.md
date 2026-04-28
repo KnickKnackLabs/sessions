@@ -18,7 +18,7 @@ observe transcripts in real time, and query your history.
 $ sessions new review/pr-50 --cwd ~/agents/ikma/den --meta agent.name=ikma
 e96bd43a
 
-$ sessions wake review/pr-50 --model openai/gpt-5.5 --message "review PR #50"
+$ sessions wake review/pr-50 --model openai-codex/gpt-5.5 --message "review PR #50"
 Woke session 'review/pr-50'
 
 $ sessions read review/pr-50 --last 3
@@ -74,18 +74,18 @@ sessions new review/pr-50 --cwd ~/agents/ikma/den \
   --context "Background: this PR refactors the auth module"
 
 # Wake an agent into it (by name). Model is required at wake time.
-sessions wake review/pr-50 --model openai/gpt-5.5 --message "Review PR #50"
+sessions wake review/pr-50 --model openai-codex/gpt-5.5 --message "Review PR #50"
 
 # Watch what it does
 sessions read review/pr-50 --last 5
 
 # Something went wrong? Wake the same session again.
-sessions wake review/pr-50 --model openai/gpt-5.5 --message "You missed the edge case in line 42"
+sessions wake review/pr-50 --model openai-codex/gpt-5.5 --message "You missed the edge case in line 42"
 ```
 
 The spawning stack uses [shell](https://github.com/KnickKnackLabs/shell) for persistent zmx sessions. `sessions wake` calls `sessions run` directly for execution — identity (AGENT_IDENTITY, etc.) must already be in the environment, typically set upstream via `eval $(shimmer as <agent>)`.
 
-`--model` on `sessions wake` is required and is not remembered across wakes — pass a provider-qualified model (for example `openai/gpt-5.5`) on each wake.
+`--model` on `sessions wake` is required and is not remembered across wakes — pass a provider-qualified model (for example `openai-codex/gpt-5.5`) on each wake.
 
 ## Metadata
 
@@ -112,7 +112,7 @@ Wake events carry their own metadata, separate from the session header. This rec
 
 ```bash
 sessions wake review/pr-50 \
-  --model openai/gpt-5.5 \
+  --model openai-codex/gpt-5.5 \
   --meta by.agent.name=ikma \
   --message "check the CI results"
 ```
