@@ -47,4 +47,56 @@ defmodule Cli.EngineTest do
     assert exit_code == 0
     refute output =~ "Agent reported an error"
   end
+
+  test "scrubs caller context from harness process environment" do
+    previous_caller = System.get_env("CALLER_PWD")
+    previous_shiv_caller = System.get_env("SHIV_CALLER_PWD")
+
+    try do
+      System.put_env("CALLER_PWD", "/stale/caller")
+      System.put_env("SHIV_CALLER_PWD", "/stale/shiv/caller")
+
+      output =
+        capture_io(fn ->
+          exit_code =
+            Cli.Engine.run(
+              __MODULE__.EnvHarness,
+              "ignored",
+              "/tmp/prompt.txt",
+              nil,
+              "test-model",
+              nil,
+              nil,
+              []
+            )
+
+          send(self(), {:exit_code, exit_code})
+        end)
+
+      assert_receive {:exit_code, 0}
+      assert output =~ "CALLER_PWD="
+      assert output =~ "SHIV_CALLER_PWD="
+      refute output =~ "/stale/caller"
+      refute output =~ "/stale/shiv/caller"
+    after
+      restore_env("CALLER_PWD", previous_caller)
+      restore_env("SHIV_CALLER_PWD", previous_shiv_caller)
+    end
+  end
+
+  defmodule EnvHarness do
+    def build_command(_message, _model, _system_prompt_file, _session, _timeout, _opts) do
+      {"printf 'CALLER_PWD=%s\\n' \"${CALLER_PWD-}\"; printf 'SHIV_CALLER_PWD=%s\\n' \"${SHIV_CALLER_PWD-}\"", []}
+    end
+
+    def process_line(line, state) do
+      IO.puts(line)
+      state
+    end
+
+    def extract_partial_text(_partial), do: ""
+  end
+
+  defp restore_env(name, nil), do: System.delete_env(name)
+  defp restore_env(name, value), do: System.put_env(name, value)
 end
