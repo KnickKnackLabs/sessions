@@ -302,7 +302,7 @@ JSONL
 {"type":"harness","id":"h1","parentId":"${sid}","timestamp":"2026-04-22T10:00:00.000Z","name":"claude"}
 JSONL
 
-  run sessions wake "${sid:0:8}" --model "openai-codex/gpt-5.5" --message "acceptance"
+  AGENT_IDENTITY="test identity" run sessions wake "${sid:0:8}" --model "openai-codex/gpt-5.5" --message "acceptance"
   [ "$status" -eq 10 ]
   # The user-facing message should name the claude harness and the
   # specific unsupported op.
