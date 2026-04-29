@@ -56,7 +56,14 @@ defmodule Cli.Engine do
 
     args = ["-c", shell_script, "--"] ++ positional_args
 
-    port_opts = [:binary, :exit_status, :stderr_to_stdout, {:args, args}]
+    port_opts = [
+      :binary,
+      :exit_status,
+      :stderr_to_stdout,
+      {:args, args},
+      {:env, [{~c"CALLER_PWD", false}, {~c"SHIV_CALLER_PWD", false}]}
+    ]
+
     port_opts = if cwd, do: [{:cd, cwd} | port_opts], else: port_opts
 
     port = Port.open({:spawn_executable, "/bin/sh"}, port_opts)
