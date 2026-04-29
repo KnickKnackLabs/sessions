@@ -12,6 +12,7 @@ permissions:
 env:
   GH_TOKEN: ${{ github.token }}
   GITHUB_TOKEN: ${{ github.token }}
+  MISE_JOBS: 1
 
 jobs:
   test:
@@ -29,11 +30,11 @@ jobs:
         with:
           install: true
 
-      - name: Run BATS tests
-        run: mise run test
-
       - name: Install CLI dependencies
         run: mise run cli:build
+
+      - name: Run BATS tests
+        run: mise run test
 
       - name: Run CLI tests
         run: cd cli && mix test
