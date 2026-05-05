@@ -20,6 +20,15 @@ MODEL="${usage_model:-}"
 HEADLESS="${usage_headless:-false}"
 BACKGROUND="${usage_background:-false}"
 
+scrub_caller_pwd_env() {
+  local name
+  while IFS= read -r name; do
+    case "$name" in
+      CALLER_PWD|*_CALLER_PWD) unset "$name" ;;
+    esac
+  done < <(compgen -e)
+}
+
 if [ -z "$SESSION_ID" ]; then
   echo "Error: session ID or name required" >&2
   echo "Usage: sessions wake <name-or-id> --model <provider/model> [--message '...']" >&2
@@ -157,6 +166,8 @@ RUN_CMD=("${mise_run[@]}" run --session "$SESSION_FILE" --cwd "$SESSION_CWD" --m
 if [ -n "$MESSAGE" ]; then
   RUN_CMD+=("$MESSAGE")
 fi
+
+scrub_caller_pwd_env
 
 if [ "$BACKGROUND" = "true" ]; then
   # Background: launch via shell/zmx (fire-and-forget)
