@@ -50,11 +50,13 @@ defmodule Cli.EngineTest do
 
   test "scrubs caller context from harness process environment" do
     previous_caller = System.get_env("CALLER_PWD")
-    previous_shiv_caller = System.get_env("SHIV_CALLER_PWD")
+    previous_sessions_caller = System.get_env("SESSIONS_CALLER_PWD")
+    previous_other_caller = System.get_env("OTHER_CALLER_PWD")
 
     try do
       System.put_env("CALLER_PWD", "/stale/caller")
-      System.put_env("SHIV_CALLER_PWD", "/stale/shiv/caller")
+      System.put_env("SESSIONS_CALLER_PWD", "/stale/sessions/caller")
+      System.put_env("OTHER_CALLER_PWD", "/stale/other/caller")
 
       output =
         capture_io(fn ->
@@ -75,18 +77,21 @@ defmodule Cli.EngineTest do
 
       assert_receive {:exit_code, 0}
       assert output =~ "CALLER_PWD="
-      assert output =~ "SHIV_CALLER_PWD="
+      assert output =~ "SESSIONS_CALLER_PWD="
+      assert output =~ "OTHER_CALLER_PWD="
       refute output =~ "/stale/caller"
-      refute output =~ "/stale/shiv/caller"
+      refute output =~ "/stale/sessions/caller"
+      refute output =~ "/stale/other/caller"
     after
       restore_env("CALLER_PWD", previous_caller)
-      restore_env("SHIV_CALLER_PWD", previous_shiv_caller)
+      restore_env("SESSIONS_CALLER_PWD", previous_sessions_caller)
+      restore_env("OTHER_CALLER_PWD", previous_other_caller)
     end
   end
 
   defmodule EnvHarness do
     def build_command(_message, _model, _system_prompt_file, _session, _timeout, _opts) do
-      {"printf 'CALLER_PWD=%s\\n' \"${CALLER_PWD-}\"; printf 'SHIV_CALLER_PWD=%s\\n' \"${SHIV_CALLER_PWD-}\"", []}
+      {"printf 'CALLER_PWD=%s\\n' \"${CALLER_PWD-}\"; printf 'SESSIONS_CALLER_PWD=%s\\n' \"${SESSIONS_CALLER_PWD-}\"; printf 'OTHER_CALLER_PWD=%s\\n' \"${OTHER_CALLER_PWD-}\"", []}
     end
 
     def process_line(line, state) do
