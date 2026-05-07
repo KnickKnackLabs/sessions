@@ -61,7 +61,7 @@ defmodule Cli.Engine do
       :exit_status,
       :stderr_to_stdout,
       {:args, args},
-      {:env, [{~c"CALLER_PWD", false}, {~c"SHIV_CALLER_PWD", false}]}
+      {:env, caller_pwd_env_scrub()}
     ]
 
     port_opts = if cwd, do: [{:cd, cwd} | port_opts], else: port_opts
@@ -87,6 +87,13 @@ defmodule Cli.Engine do
     end
 
     status
+  end
+
+  defp caller_pwd_env_scrub do
+    System.get_env()
+    |> Map.keys()
+    |> Enum.filter(&(&1 == "CALLER_PWD" or String.ends_with?(&1, "_CALLER_PWD")))
+    |> Enum.map(&{String.to_charlist(&1), false})
   end
 
   defp stream_output(port, %{buffer: buffer} = state) do

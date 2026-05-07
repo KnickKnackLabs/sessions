@@ -286,6 +286,38 @@ STUB
   [ "$run_cwd" = "$expected_cwd" ]
 }
 
+@test "wake scrubs caller cwd variables before background shell launch" {
+  # `sessions wake --background` starts a long-lived shell/zmx process.
+  # Caller-cwd vars describe the immediate shiv invocation and become stale
+  # ambient state once the shell outlives that invocation, so wake must scrub
+  # them after materializing the explicit --cwd arguments.
+  command -v shell >/dev/null 2>&1 || skip "shell not installed"
+
+  local stub_dir="$BATS_TEST_TMPDIR/stub-shell-env"
+  local capture="$BATS_TEST_TMPDIR/shell-env"
+  mkdir -p "$stub_dir"
+  cat > "$stub_dir/shell" <<STUB
+#!/usr/bin/env bash
+printf 'CALLER_PWD=%s\n' "\${CALLER_PWD-}" > "$capture"
+printf 'SESSIONS_CALLER_PWD=%s\n' "\${SESSIONS_CALLER_PWD-}" >> "$capture"
+printf 'OTHER_CALLER_PWD=%s\n' "\${OTHER_CALLER_PWD-}" >> "$capture"
+exit 0
+STUB
+  chmod +x "$stub_dir/shell"
+
+  export CALLER_PWD="/stale/legacy"
+  export SESSIONS_CALLER_PWD="/stale/sessions"
+  export OTHER_CALLER_PWD="/stale/other"
+
+  PATH="$stub_dir:$PATH" run sessions wake "${SESSION_1:0:8}" --background --model "openai-codex/gpt-5.5"
+  [ "$status" -eq 0 ]
+  [ -f "$capture" ]
+
+  grep -q '^CALLER_PWD=$' "$capture"
+  grep -q '^SESSIONS_CALLER_PWD=$' "$capture"
+  grep -q '^OTHER_CALLER_PWD=$' "$capture"
+}
+
 @test "wake normalizes invalid session cwd fallback before forwarding" {
   # When a persisted session cwd is missing, wake falls back to "current
   # directory". Once wake explicitly forwards --cwd to sessions run, that

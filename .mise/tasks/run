@@ -19,7 +19,7 @@ SYSTEM_PROMPT_FILE="${usage_system_prompt_file:-}"
 TIMEOUT="${usage_timeout:-}"
 MODEL="${usage_model:-}"
 SESSION="${usage_session:-}"
-CWD="${usage_cwd:-${CALLER_PWD:-.}}"
+CWD="${usage_cwd:-${SESSIONS_CALLER_PWD:-${CALLER_PWD:-.}}}"
 HEADLESS="${usage_headless:-false}"
 # Extensions disabled by default (determinism for CI). Pass --extensions etc. to enable.
 EXTENSIONS="${usage_extensions:-false}"
