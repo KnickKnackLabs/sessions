@@ -142,9 +142,26 @@ EOF
 
   run sessions host:fix --os-user iris --dry-run
   [ "$status" -eq 0 ]
+  [[ "$output" == *"printf '%s\\n'"* ]]
   [[ "$output" == *"sudo tee $SESSIONS_SUDOERS_FILE"* ]]
   [[ "$output" == *"sudo chmod 0440 $SESSIONS_SUDOERS_FILE"* ]]
   [[ "$output" == *"sudo visudo -cf $SESSIONS_SUDOERS_FILE"* ]]
+
+  cat > "$BIN/sudo" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+[ "$1" = "tee" ]
+shift
+exec tee "$@"
+EOF
+  chmod +x "$BIN/sudo"
+
+  install_cmd=$(printf '%s\n' "$output" | grep "printf '%s\\\\n'")
+  install_cmd=${install_cmd#  }
+  : > "$SESSIONS_SUDOERS_FILE"
+  bash -c "$install_cmd"
+  printf '%%humans ALL=(%%agents) NOPASSWD: ALL\n' > "$TMP/expected-sudoers"
+  cmp -s "$TMP/expected-sudoers" "$SESSIONS_SUDOERS_FILE"
 }
 
 @test "host:fix without --dry-run refuses to mutate in first slice" {
