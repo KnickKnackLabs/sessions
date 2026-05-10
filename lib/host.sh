@@ -33,6 +33,12 @@ host_sudoers_installed() {
   [ -f "$HOST_SUDOERS_FILE" ] && grep -Fxq "$(host_sudoers_rule)" "$HOST_SUDOERS_FILE"
 }
 
+host_sudoers_valid() {
+  [ -f "$HOST_SUDOERS_FILE" ] \
+    && command -v visudo >/dev/null 2>&1 \
+    && visudo -cf "$HOST_SUDOERS_FILE" >/dev/null 2>&1
+}
+
 host_create_group_command() {
   local group="$1"
   printf 'sudo dseditgroup -o create %q\n' "$group"
