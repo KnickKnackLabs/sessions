@@ -91,7 +91,68 @@ defmodule Cli.EngineTest do
 
   defmodule EnvHarness do
     def build_command(_message, _model, _system_prompt_file, _session, _timeout, _opts) do
-      {"printf 'CALLER_PWD=%s\\n' \"${CALLER_PWD-}\"; printf 'SESSIONS_CALLER_PWD=%s\\n' \"${SESSIONS_CALLER_PWD-}\"; printf 'OTHER_CALLER_PWD=%s\\n' \"${OTHER_CALLER_PWD-}\"", []}
+      {"printf 'CALLER_PWD=%s\\n' \"${CALLER_PWD-}\"; printf 'SESSIONS_CALLER_PWD=%s\\n' \"${SESSIONS_CALLER_PWD-}\"; printf 'OTHER_CALLER_PWD=%s\\n' \"${OTHER_CALLER_PWD-}\"",
+       []}
+    end
+
+    def process_line(line, state) do
+      IO.puts(line)
+      state
+    end
+
+    def extract_partial_text(_partial), do: ""
+  end
+
+  test "sanitizes mise install paths from harness PATH" do
+    home = System.get_env("HOME") || System.tmp_dir!()
+
+    stale_codebase =
+      Path.join([home, ".local", "share", "mise", "installs", "shiv-codebase", "0.1.0", "bin"])
+
+    fresh_codebase =
+      Path.join([home, ".local", "share", "mise", "installs", "shiv-codebase", "0.2.0", "bin"])
+
+    mise_shims = Path.join([home, ".local", "share", "mise", "shims"])
+    non_mise = Path.join(System.tmp_dir!(), "sessions-non-mise-bin")
+
+    previous_path = System.get_env("PATH")
+
+    try do
+      System.put_env("PATH", Enum.join([stale_codebase, non_mise, fresh_codebase], ":"))
+
+      output =
+        capture_io(fn ->
+          exit_code =
+            Cli.Engine.run(
+              __MODULE__.PathHarness,
+              "ignored",
+              "/tmp/prompt.txt",
+              nil,
+              "test-model",
+              nil,
+              nil,
+              []
+            )
+
+          send(self(), {:exit_code, exit_code})
+        end)
+
+      assert_receive {:exit_code, 0}
+      refute output =~ stale_codebase
+      refute output =~ fresh_codebase
+      assert output =~ non_mise
+
+      if File.dir?(mise_shims) do
+        assert output =~ mise_shims
+      end
+    after
+      restore_env("PATH", previous_path)
+    end
+  end
+
+  defmodule PathHarness do
+    def build_command(_message, _model, _system_prompt_file, _session, _timeout, _opts) do
+      {"printf 'PATH=%s\\n' \"$PATH\"", []}
     end
 
     def process_line(line, state) do
