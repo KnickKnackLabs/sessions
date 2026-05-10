@@ -1,0 +1,87 @@
+#!/usr/bin/env bash
+#MISE description="Check host setup for local OS-user session execution"
+#USAGE flag "--os-user <os_user>" help="Target agent OS user to check"
+set -euo pipefail
+
+OS_USER="${usage_os_user:-}"
+
+# shellcheck source=../../../lib/host.sh
+source "$MISE_CONFIG_ROOT/lib/host.sh"
+
+host_validate_user_name "$OS_USER"
+
+current_user=$(id -un)
+failures=0
+
+check_ok() {
+  printf 'OK    %s\n' "$1"
+}
+
+check_fail() {
+  printf 'FAIL  %s\n' "$1"
+  failures=$((failures + 1))
+}
+
+if host_group_exists "$HOST_HUMANS_GROUP"; then
+  check_ok "group '$HOST_HUMANS_GROUP' exists"
+else
+  check_fail "group '$HOST_HUMANS_GROUP' is missing"
+fi
+
+if host_group_exists "$HOST_AGENTS_GROUP"; then
+  check_ok "group '$HOST_AGENTS_GROUP' exists"
+else
+  check_fail "group '$HOST_AGENTS_GROUP' is missing"
+fi
+
+if host_user_exists "$OS_USER"; then
+  check_ok "target user '$OS_USER' exists"
+else
+  check_fail "target user '$OS_USER' is missing"
+fi
+
+if host_user_in_group "$current_user" "$HOST_HUMANS_GROUP"; then
+  check_ok "current user '$current_user' is in '$HOST_HUMANS_GROUP'"
+else
+  check_fail "current user '$current_user' is not in '$HOST_HUMANS_GROUP'"
+fi
+
+if host_user_exists "$OS_USER" && host_user_in_group "$OS_USER" "$HOST_AGENTS_GROUP"; then
+  check_ok "target user '$OS_USER' is in '$HOST_AGENTS_GROUP'"
+else
+  check_fail "target user '$OS_USER' is not in '$HOST_AGENTS_GROUP'"
+fi
+
+if host_sudoers_installed; then
+  check_ok "sudoers rule installed at $HOST_SUDOERS_FILE"
+else
+  check_fail "sudoers rule missing from $HOST_SUDOERS_FILE"
+fi
+
+if [ -x "$HOST_RUN_AS_USER" ]; then
+  check_ok "run-as-user helper is executable"
+else
+  check_fail "run-as-user helper is not executable: $HOST_RUN_AS_USER"
+fi
+
+if [ -x "$HOST_RUN_AS_USER" ] && "$HOST_RUN_AS_USER" --user "$OS_USER" -- whoami >/tmp/sessions-host-doctor-whoami.$$ 2>/tmp/sessions-host-doctor-err.$$; then
+  observed=$(cat /tmp/sessions-host-doctor-whoami.$$)
+  if [ "$observed" = "$OS_USER" ]; then
+    check_ok "run-as-user smoke test returned '$OS_USER'"
+  else
+    check_fail "run-as-user smoke test returned '$observed'"
+  fi
+else
+  err=$(cat /tmp/sessions-host-doctor-err.$$ 2>/dev/null || : ) # codebase:ignore or-true — diagnostic fallback when smoke test did not create stderr
+  if [ -n "$err" ]; then
+    check_fail "run-as-user smoke test failed: $err"
+  else
+    check_fail "run-as-user smoke test failed"
+  fi
+fi
+rm -f /tmp/sessions-host-doctor-whoami.$$ /tmp/sessions-host-doctor-err.$$
+
+if [ "$failures" -gt 0 ]; then
+  echo "host doctor failed: $failures issue(s)" >&2
+  exit 1
+fi
