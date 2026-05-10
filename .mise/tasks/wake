@@ -200,7 +200,7 @@ if [ -n "$MESSAGE" ]; then
 fi
 
 if [ -n "$OS_USER" ]; then
-  RUN_CMD=("$MISE_CONFIG_ROOT/libexec/run-as-user" --user "$OS_USER" -- "${RUN_CMD[@]}")
+  RUN_CMD=("$HOST_RUN_AS_USER" --user "$OS_USER" -- "${RUN_CMD[@]}")
 fi
 
 scrub_caller_pwd_env
