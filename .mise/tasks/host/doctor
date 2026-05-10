@@ -22,6 +22,10 @@ check_fail() {
   failures=$((failures + 1))
 }
 
+check_info() {
+  printf 'INFO  %s\n' "$1"
+}
+
 if host_group_exists "$HOST_HUMANS_GROUP"; then
   check_ok "group '$HOST_HUMANS_GROUP' exists"
 else
@@ -52,16 +56,22 @@ else
   check_fail "target user '$OS_USER' is not in '$HOST_AGENTS_GROUP'"
 fi
 
-if host_sudoers_installed; then
-  check_ok "sudoers rule installed at $HOST_SUDOERS_FILE"
+if ! host_sudoers_exists; then
+  check_fail "sudoers file missing: $HOST_SUDOERS_FILE"
+elif ! host_sudoers_readable; then
+  check_info "sudoers file exists but is not readable by '$current_user'; relying on run-as-user smoke test"
 else
-  check_fail "sudoers rule missing from $HOST_SUDOERS_FILE"
-fi
+  if host_sudoers_installed; then
+    check_ok "sudoers rule installed at $HOST_SUDOERS_FILE"
+  else
+    check_fail "sudoers rule missing from $HOST_SUDOERS_FILE"
+  fi
 
-if host_sudoers_valid; then
-  check_ok "sudoers file syntax is valid"
-else
-  check_fail "sudoers file syntax is invalid or cannot be validated: $HOST_SUDOERS_FILE"
+  if host_sudoers_valid; then
+    check_ok "sudoers file syntax is valid"
+  else
+    check_fail "sudoers file syntax is invalid or cannot be validated: $HOST_SUDOERS_FILE"
+  fi
 fi
 
 if [ -x "$HOST_RUN_AS_USER" ]; then

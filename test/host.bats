@@ -94,6 +94,15 @@ teardown() {
   [[ "$output" == *"FAIL  sudoers file syntax is invalid or cannot be validated: $SESSIONS_SUDOERS_FILE"* ]]
 }
 
+@test "host:doctor allows unreadable sudoers file when smoke test passes" {
+  chmod 000 "$SESSIONS_SUDOERS_FILE"
+
+  run sessions host:doctor --os-user iris
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"INFO  sudoers file exists but is not readable by 'rikonor'; relying on run-as-user smoke test"* ]]
+  [[ "$output" == *"OK    run-as-user smoke test returned 'iris'"* ]]
+}
+
 @test "host:fix --dry-run prints missing host changes" {
   rm -f "$SESSIONS_SUDOERS_FILE"
   cat > "$BIN/dscl" <<'EOF'
@@ -162,6 +171,15 @@ EOF
   bash -c "$install_cmd"
   printf '%%humans ALL=(%%agents) NOPASSWD: ALL\n' > "$TMP/expected-sudoers"
   cmp -s "$TMP/expected-sudoers" "$SESSIONS_SUDOERS_FILE"
+}
+
+@test "host:fix --dry-run does not repair unreadable sudoers file when smoke test passes" {
+  chmod 000 "$SESSIONS_SUDOERS_FILE"
+
+  run sessions host:fix --os-user iris --dry-run
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Host setup already matches the sessions humans→agents policy."* ]]
+  [[ "$output" != *"sudo tee $SESSIONS_SUDOERS_FILE"* ]]
 }
 
 @test "host:fix without --dry-run refuses to mutate in first slice" {

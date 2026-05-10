@@ -29,14 +29,42 @@ host_sudoers_rule() {
   printf '%%%s ALL=(%%%s) NOPASSWD: ALL\n' "$HOST_HUMANS_GROUP" "$HOST_AGENTS_GROUP"
 }
 
+host_sudoers_exists() {
+  [ -e "$HOST_SUDOERS_FILE" ]
+}
+
+host_sudoers_readable() {
+  [ -r "$HOST_SUDOERS_FILE" ]
+}
+
 host_sudoers_installed() {
-  [ -f "$HOST_SUDOERS_FILE" ] && grep -Fxq "$(host_sudoers_rule)" "$HOST_SUDOERS_FILE"
+  host_sudoers_readable && grep -Fxq "$(host_sudoers_rule)" "$HOST_SUDOERS_FILE"
 }
 
 host_sudoers_valid() {
-  [ -f "$HOST_SUDOERS_FILE" ] \
+  host_sudoers_readable \
     && command -v visudo >/dev/null 2>&1 \
     && visudo -cf "$HOST_SUDOERS_FILE" >/dev/null 2>&1
+}
+
+host_run_as_user_smoke() {
+  local user="$1"
+  [ -x "$HOST_RUN_AS_USER" ] && "$HOST_RUN_AS_USER" --user "$user" -- true >/dev/null 2>&1
+}
+
+host_sudoers_needs_repair() {
+  local user="$1"
+
+  if ! host_sudoers_exists; then
+    return 0
+  fi
+
+  if host_sudoers_readable; then
+    ! host_sudoers_installed || ! host_sudoers_valid
+    return $?
+  fi
+
+  ! host_run_as_user_smoke "$user"
 }
 
 host_create_group_command() {

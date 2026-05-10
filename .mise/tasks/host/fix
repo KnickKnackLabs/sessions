@@ -36,7 +36,7 @@ if ! host_user_in_group "$OS_USER" "$HOST_AGENTS_GROUP"; then
   planned+=("$(host_add_user_to_group_command "$OS_USER" "$HOST_AGENTS_GROUP")")
 fi
 
-if ! host_sudoers_installed || ! host_sudoers_valid; then
+if host_sudoers_needs_repair "$OS_USER"; then
   while IFS= read -r cmd; do
     [ -n "$cmd" ] && planned+=("$cmd")
   done < <(host_install_sudoers_commands)
