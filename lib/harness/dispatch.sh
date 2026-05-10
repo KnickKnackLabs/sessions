@@ -245,13 +245,14 @@ harness_entry() {
 #   $9 model   (optional for low-level callers, but required by
 #              `sessions wake`. `wake_entry` itself never writes null;
 #              readers processing wake events from other sources should
-#              normalize null to absent.)
+#              normalize null to absent.),
+#   $10 os_user (optional; local OS user that the payload runs as.)
 #
 # Field-placement rule: fields that `sessions wake` itself owns
-# (`.headless`, `.model`) go top-level; caller-provided key=value pairs
-# passed via `--meta` go inside `.meta`. Apply this rule when adding
-# new fields: if wake owns the flag, top-level; if it's user-space,
-# stuff it into `meta_json` at the callsite.
+# (`.headless`, `.model`, `.os_user`) go top-level; caller-provided
+# key=value pairs passed via `--meta` go inside `.meta`. Apply this rule
+# when adding new fields: if wake owns the flag, top-level; if it's
+# user-space, stuff it into `meta_json` at the callsite.
 #
 # Schema-evolution risk: `.model` is written as a bare string in
 # harness-native vocabulary (e.g. pi's "claude-opus-4-7"). Readers
@@ -270,6 +271,7 @@ wake_entry() {
   local headless="$7"
   local meta_json="${8:-}"
   local model="${9:-}"
+  local os_user="${10:-}"
 
   # Intentionally strict: only the exact string "true" maps to true.
   # Any other value ("false", "", "TRUE", "yes", "1") maps to false.
@@ -290,6 +292,14 @@ wake_entry() {
     model_fragment=' + {model: $model}'
   fi
 
+  local os_user_args=()
+  local os_user_fragment=''
+  if [ -n "$os_user" ]; then
+    os_user_args=(--arg os_user "$os_user")
+    # shellcheck disable=SC2016  # jq expression: $os_user is a jq variable bound by --arg os_user, not a bash expansion
+    os_user_fragment=' + {os_user: $os_user}'
+  fi
+
   if [ -z "$meta_json" ] || [ "$meta_json" = "{}" ]; then
     jq -nc \
       --arg id "$entry_id" \
@@ -300,6 +310,7 @@ wake_entry() {
       --arg harness "$harness_name" \
       --argjson headless "$headless_bool" \
       "${model_args[@]+"${model_args[@]}"}" \
+      "${os_user_args[@]+"${os_user_args[@]}"}" \
       '{
         type: "wake",
         id: $id,
@@ -309,7 +320,7 @@ wake_entry() {
         agent: $agent,
         harness: $harness,
         headless: $headless
-      }'"$model_fragment"
+      }'"$model_fragment""$os_user_fragment"
   else
     jq -nc \
       --arg id "$entry_id" \
@@ -321,6 +332,7 @@ wake_entry() {
       --argjson headless "$headless_bool" \
       --argjson meta "$meta_json" \
       "${model_args[@]+"${model_args[@]}"}" \
+      "${os_user_args[@]+"${os_user_args[@]}"}" \
       '{
         type: "wake",
         id: $id,
@@ -331,6 +343,6 @@ wake_entry() {
         harness: $harness,
         headless: $headless,
         meta: $meta
-      }'"$model_fragment"
+      }'"$model_fragment""$os_user_fragment"
   fi
 }

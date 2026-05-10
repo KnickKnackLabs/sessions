@@ -23,6 +23,50 @@ teardown() {
   teardown_test_sessions
 }
 
+stub_os_user_host() {
+  local user="${1:-iris}"
+  local bin="$BATS_TEST_TMPDIR/os-user-bin"
+  mkdir -p "$bin"
+  export PATH="$bin:$PATH"
+  export SESSIONS_RUN_AS_USER="$BATS_TEST_TMPDIR/run-as-user-stub"
+
+  cat > "$bin/id" <<STUB
+#!/usr/bin/env bash
+set -euo pipefail
+if [ "\${1:-}" = "-u" ] && [ "\${2:-}" = "$user" ]; then
+  echo 503
+  exit 0
+fi
+exit 1
+STUB
+  chmod +x "$bin/id"
+
+  cat > "$SESSIONS_RUN_AS_USER" <<STUB
+#!/usr/bin/env bash
+set -euo pipefail
+[ "\${1:-}" = "--user" ]
+[ "\${2:-}" = "$user" ]
+[ "\${3:-}" = "--" ]
+shift 3
+if [ "\${WAKE_OS_USER_SMOKE_FAIL:-}" = "1" ]; then
+  exit 1
+fi
+exec "\$@"
+STUB
+  chmod +x "$SESSIONS_RUN_AS_USER"
+}
+
+stub_missing_os_user_host() {
+  local bin="$BATS_TEST_TMPDIR/missing-os-user-bin"
+  mkdir -p "$bin"
+  export PATH="$bin:$PATH"
+  cat > "$bin/id" <<'STUB'
+#!/usr/bin/env bash
+exit 1
+STUB
+  chmod +x "$bin/id"
+}
+
 # --- Validation ---
 
 @test "wake errors on nonexistent session" {
@@ -35,6 +79,46 @@ teardown() {
   run sessions wake "$SESSION_1" --model "openai-codex/gpt-5.5" --context-file "/tmp/nonexistent-$$"
   [ "$status" -eq 1 ]
   echo "$output" | grep -q "not found"
+}
+
+@test "wake rejects invalid --os-user" {
+  run sessions wake "$SESSION_1" --model "openai-codex/gpt-5.5" --os-user "../bad"
+  [ "$status" -eq 2 ]
+  echo "$output" | grep -q "invalid --os-user"
+}
+
+@test "wake --os-user fails before recording wake when target user is missing" {
+  stub_missing_os_user_host
+  local src_file
+  src_file=$(find "$PROJECT_DIR" -name "*${SESSION_1}.jsonl")
+  local before
+  before=$(wc -l < "$src_file")
+
+  run sessions wake "$SESSION_1" --model "openai-codex/gpt-5.5" --os-user missingagent
+  [ "$status" -eq 1 ]
+  echo "$output" | grep -q "target OS user 'missingagent' does not exist"
+
+  local after
+  after=$(wc -l < "$src_file")
+  [ "$after" = "$before" ]
+}
+
+@test "wake --os-user fails before recording wake when run-as-user preflight fails" {
+  stub_os_user_host iris
+  export WAKE_OS_USER_SMOKE_FAIL=1
+  local src_file
+  src_file=$(find "$PROJECT_DIR" -name "*${SESSION_1}.jsonl")
+  local before
+  before=$(wc -l < "$src_file")
+
+  run sessions wake "$SESSION_1" --model "openai-codex/gpt-5.5" --os-user iris
+  [ "$status" -eq 1 ]
+  echo "$output" | grep -q "cannot run payload as OS user 'iris'"
+  echo "$output" | grep -q "host:doctor --os-user iris"
+
+  local after
+  after=$(wc -l < "$src_file")
+  [ "$after" = "$before" ]
 }
 
 # --- Background mode (shell/zmx) ---
@@ -144,6 +228,56 @@ STUB
   jq -e 'select(.type == "wake" and .harness == "pi" and .headless == false)' "$src_file"
 }
 
+@test "wake --os-user records os_user in wake event" {
+  stub_os_user_host iris
+  local stub_dir="$BATS_TEST_TMPDIR/stub-shell-os-user-record"
+  mkdir -p "$stub_dir"
+  cat > "$stub_dir/shell" <<'STUB'
+#!/usr/bin/env bash
+exit 0
+STUB
+  chmod +x "$stub_dir/shell"
+
+  PATH="$stub_dir:$PATH" run sessions wake "$SESSION_1" --background --model "openai-codex/gpt-5.5" --os-user iris
+  [ "$status" -eq 0 ]
+  src_file=$(find "$PROJECT_DIR" -name "*${SESSION_1}.jsonl")
+  jq -e 'select(.type == "wake" and .os_user == "iris")' "$src_file"
+}
+
+@test "wake defaults os_user from SHIMMER_OS_USER" {
+  stub_os_user_host iris
+  local stub_dir="$BATS_TEST_TMPDIR/stub-shell-os-user-env"
+  mkdir -p "$stub_dir"
+  cat > "$stub_dir/shell" <<'STUB'
+#!/usr/bin/env bash
+exit 0
+STUB
+  chmod +x "$stub_dir/shell"
+
+  export SHIMMER_OS_USER=iris
+  PATH="$stub_dir:$PATH" run sessions wake "$SESSION_1" --background --model "openai-codex/gpt-5.5"
+  [ "$status" -eq 0 ]
+  src_file=$(find "$PROJECT_DIR" -name "*${SESSION_1}.jsonl")
+  jq -e 'select(.type == "wake" and .os_user == "iris")' "$src_file"
+}
+
+@test "wake explicit --os-user overrides SHIMMER_OS_USER" {
+  stub_os_user_host iris
+  local stub_dir="$BATS_TEST_TMPDIR/stub-shell-os-user-override"
+  mkdir -p "$stub_dir"
+  cat > "$stub_dir/shell" <<'STUB'
+#!/usr/bin/env bash
+exit 0
+STUB
+  chmod +x "$stub_dir/shell"
+
+  export SHIMMER_OS_USER=bob
+  PATH="$stub_dir:$PATH" run sessions wake "$SESSION_1" --background --model "openai-codex/gpt-5.5" --os-user iris
+  [ "$status" -eq 0 ]
+  src_file=$(find "$PROJECT_DIR" -name "*${SESSION_1}.jsonl")
+  jq -e 'select(.type == "wake" and .os_user == "iris")' "$src_file"
+}
+
 # --- Foreground mode ---
 # Foreground calls `exec sessions run` which requires the Elixir CLI.
 # We test that the wake event is recorded and the right command would be called
@@ -194,6 +328,37 @@ STUB
   run sessions wake "$SESSION_1" --background --model "gpt-5.5"
   [ "$status" -ne 0 ]
   echo "$output" | grep -q -- "--model must be provider-qualified"
+}
+
+@test "wake --os-user wraps only the sessions run payload" {
+  command -v shell >/dev/null 2>&1 || skip "shell not installed"
+  stub_os_user_host iris
+
+  local stub_dir="$BATS_TEST_TMPDIR/stub-shell-os-user-argv"
+  local capture="$BATS_TEST_TMPDIR/shell-argv-os-user"
+  mkdir -p "$stub_dir"
+  cat > "$stub_dir/shell" <<STUB
+#!/usr/bin/env bash
+printf '%s\n' "\$@" > "$capture"
+exit 0
+STUB
+  chmod +x "$stub_dir/shell"
+
+  PATH="$stub_dir:$PATH" run sessions wake "${SESSION_1:0:8}" --background --model "openai-codex/gpt-5.5" --os-user iris
+  [ "$status" -eq 0 ]
+  [ -f "$capture" ]
+
+  [ "$(sed -n '1p' "$capture")" = "run" ]
+  [ "$(sed -n '3p' "$capture")" = "--cwd" ]
+
+  local run_as_line
+  run_as_line=$(grep -n '/libexec/run-as-user$' "$capture" | cut -d: -f1)
+  [ -n "$run_as_line" ]
+  [ "$(sed -n "$((run_as_line + 1))p" "$capture")" = "--user" ]
+  [ "$(sed -n "$((run_as_line + 2))p" "$capture")" = "iris" ]
+  [ "$(sed -n "$((run_as_line + 3))p" "$capture")" = "--" ]
+  [ "$(sed -n "$((run_as_line + 4))p" "$capture")" = "mise" ]
+  [ "$(sed -n "$((run_as_line + 5))p" "$capture")" = "-C" ]
 }
 
 @test "wake --model forwards --model to sessions run in RUN_CMD" {
@@ -369,4 +534,10 @@ STUB
   run sessions wake --help
   [ "$status" -eq 0 ]
   echo "$output" | grep -q -- "--model"
+}
+
+@test "wake --os-user is advertised in --help" {
+  run sessions wake --help
+  [ "$status" -eq 0 ]
+  echo "$output" | grep -q -- "--os-user"
 }

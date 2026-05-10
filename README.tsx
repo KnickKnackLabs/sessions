@@ -49,7 +49,7 @@ const lifecycle = [
   "$ sessions new review/pr-50 --cwd ~/agents/ikma/den --meta agent.name=ikma",
   "e96bd43a",
   "",
-  "$ sessions wake review/pr-50 --message \"review PR #50\"",
+  "$ sessions wake review/pr-50 --model openai-codex/gpt-5.5 --message \"review PR #50\"",
   "Woke session 'review/pr-50'",
   "",
   "$ sessions read review/pr-50 --last 3",
@@ -65,9 +65,10 @@ const lifecycle = [
 const stack = [
   "  sessions new              create session with metadata + context",
   "  sessions wake             wake an agent into it via shell",
-  "    └─ shell run            persistent zmx session",
-  "         └─ shimmer agent   identity + chat attribution",
-  "              └─ pi         harness — processes message, exits",
+  "    └─ shell run            persistent zmx session (caller-owned)",
+  "         └─ run-as-user     optional --os-user payload boundary",
+  "              └─ sessions run",
+  "                   └─ pi    harness — processes message, exits",
   "  sessions read             observe the transcript",
   "  sessions wake (again)     re-enter with corrections",
 ].join("\n");
@@ -161,14 +162,14 @@ sessions new review/pr-50 --cwd ~/agents/ikma/den \\
   --meta purpose=review \\
   --context "Background: this PR refactors the auth module"
 
-# Wake an agent into it (by name)
-sessions wake review/pr-50 --message "Review PR #50"
+# Wake an agent into it (by name). Model is required at wake time.
+sessions wake review/pr-50 --model openai-codex/gpt-5.5 --message "Review PR #50"
 
 # Watch what it does
 sessions read review/pr-50 --last 5
 
 # Something went wrong? Wake the same session again.
-sessions wake review/pr-50 --message "You missed the edge case in line 42"`}</CodeBlock>
+sessions wake review/pr-50 --model openai-codex/gpt-5.5 --message "You missed the edge case in line 42"`}</CodeBlock>
 
       <Paragraph>
         {"The spawning stack uses "}
@@ -181,6 +182,28 @@ sessions wake review/pr-50 --message "You missed the edge case in line 42"`}</Co
         <Code>{"eval $(shimmer as <agent>)"}</Code>
         {"."}
       </Paragraph>
+
+      <Paragraph>
+        <Code>--model</Code>
+        {" on "}
+        <Code>sessions wake</Code>
+        {" is required and is not remembered across wakes — pass a provider-qualified model (for example "}
+        <Code>openai-codex/gpt-5.5</Code>
+        {") on each wake."}
+      </Paragraph>
+
+      <Paragraph>
+        {"To run only the payload process as a local agent OS user, pass "}
+        <Code>--os-user</Code>
+        {" or set "}
+        <Code>SHIMMER_OS_USER</Code>
+        {". The shell/zmx session remains owned by the caller. This does not copy caller environment, secrets, or auth into the target account; the target user's session environment is a separate setup step."}
+      </Paragraph>
+
+      <CodeBlock lang="bash">{`sessions wake iris-first-wake \\
+  --model openai-codex/gpt-5.5 \\
+  --os-user iris \\
+  --message "Continue Iris onboarding"`}</CodeBlock>
     </Section>
 
     <Section title="Metadata">
@@ -212,6 +235,7 @@ sessions meta e96bd43a --field .meta.agent   # by ID prefix`}</CodeBlock>
       </Paragraph>
 
       <CodeBlock lang="bash">{`sessions wake review/pr-50 \\
+  --model openai-codex/gpt-5.5 \\
   --meta by.agent.name=ikma \\
   --message "check the CI results"`}</CodeBlock>
     </Section>
