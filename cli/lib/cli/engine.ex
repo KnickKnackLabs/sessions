@@ -108,12 +108,9 @@ defmodule Cli.Engine do
   end
 
   defp sanitized_path(path) do
-    home = System.get_env("HOME")
-
-    mise_installs =
-      if home, do: Path.join([home, ".local", "share", "mise", "installs"]), else: nil
-
-    mise_shims = if home, do: Path.join([home, ".local", "share", "mise", "shims"]), else: nil
+    mise_data_dir = mise_data_dir()
+    mise_installs = if mise_data_dir, do: Path.join(mise_data_dir, "installs"), else: nil
+    mise_shims = if mise_data_dir, do: Path.join(mise_data_dir, "shims"), else: nil
 
     entries =
       path
@@ -128,6 +125,30 @@ defmodule Cli.Engine do
       end
 
     Enum.join(entries, ":")
+  end
+
+  defp mise_data_dir do
+    cond do
+      data_dir = non_empty_env("MISE_DATA_DIR") ->
+        data_dir
+
+      xdg_data_home = non_empty_env("XDG_DATA_HOME") ->
+        Path.join(xdg_data_home, "mise")
+
+      home = non_empty_env("HOME") ->
+        Path.join([home, ".local", "share", "mise"])
+
+      true ->
+        nil
+    end
+  end
+
+  defp non_empty_env(name) do
+    case System.get_env(name) do
+      nil -> nil
+      "" -> nil
+      value -> value
+    end
   end
 
   defp mise_install_path?(_entry, nil), do: false
