@@ -43,6 +43,18 @@ esac
 EOF
   chmod +x "$BIN/dscl"
 
+  cat > "$BIN/visudo" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+[ "$1" = "-cf" ]
+[ -f "$2" ]
+if grep -Fxq INVALID "$2"; then
+  exit 1
+fi
+exit 0
+EOF
+  chmod +x "$BIN/visudo"
+
   mkdir -p "$(dirname "$SESSIONS_SUDOERS_FILE")"
   printf '%%humans ALL=(%%agents) NOPASSWD: ALL\n' > "$SESSIONS_SUDOERS_FILE"
 
@@ -71,6 +83,15 @@ teardown() {
   [ "$status" -eq 0 ]
   [[ "$output" == *"OK    group 'humans' exists"* ]]
   [[ "$output" == *"OK    run-as-user smoke test returned 'iris'"* ]]
+}
+
+@test "host:doctor fails when sudoers file syntax is invalid" {
+  printf 'INVALID\n' >> "$SESSIONS_SUDOERS_FILE"
+
+  run sessions host:doctor --os-user iris
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"OK    sudoers rule installed at $SESSIONS_SUDOERS_FILE"* ]]
+  [[ "$output" == *"FAIL  sudoers file syntax is invalid or cannot be validated: $SESSIONS_SUDOERS_FILE"* ]]
 }
 
 @test "host:fix --dry-run prints missing host changes" {

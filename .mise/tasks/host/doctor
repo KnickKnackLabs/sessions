@@ -58,6 +58,12 @@ else
   check_fail "sudoers rule missing from $HOST_SUDOERS_FILE"
 fi
 
+if host_sudoers_valid; then
+  check_ok "sudoers file syntax is valid"
+else
+  check_fail "sudoers file syntax is invalid or cannot be validated: $HOST_SUDOERS_FILE"
+fi
+
 if [ -x "$HOST_RUN_AS_USER" ]; then
   check_ok "run-as-user helper is executable"
 else
