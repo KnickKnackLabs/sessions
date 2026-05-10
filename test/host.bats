@@ -137,6 +137,16 @@ EOF
   [[ "$output" == *"sudo visudo -cf"* ]]
 }
 
+@test "host:fix --dry-run repairs installed sudoers file with invalid syntax" {
+  printf 'INVALID\n' >> "$SESSIONS_SUDOERS_FILE"
+
+  run sessions host:fix --os-user iris --dry-run
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"sudo tee $SESSIONS_SUDOERS_FILE"* ]]
+  [[ "$output" == *"sudo chmod 0440 $SESSIONS_SUDOERS_FILE"* ]]
+  [[ "$output" == *"sudo visudo -cf $SESSIONS_SUDOERS_FILE"* ]]
+}
+
 @test "host:fix without --dry-run refuses to mutate in first slice" {
   rm -f "$SESSIONS_SUDOERS_FILE"
   run sessions host:fix --os-user iris
