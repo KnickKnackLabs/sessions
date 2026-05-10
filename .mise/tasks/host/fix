@@ -1,0 +1,57 @@
+#!/usr/bin/env bash
+#MISE description="Repair host setup for local OS-user session execution"
+#USAGE flag "--os-user <os_user>" help="Target agent OS user to include in the agents group"
+#USAGE flag "--dry-run" help="Print planned host changes without applying them"
+set -euo pipefail
+
+OS_USER="${usage_os_user:-}"
+DRY_RUN="${usage_dry_run:-false}"
+
+# shellcheck source=../../../lib/host.sh
+source "$MISE_CONFIG_ROOT/lib/host.sh"
+
+host_validate_user_name "$OS_USER"
+
+current_user=$(id -un)
+planned=()
+
+if ! host_group_exists "$HOST_HUMANS_GROUP"; then
+  planned+=("$(host_create_group_command "$HOST_HUMANS_GROUP")")
+fi
+
+if ! host_group_exists "$HOST_AGENTS_GROUP"; then
+  planned+=("$(host_create_group_command "$HOST_AGENTS_GROUP")")
+fi
+
+if ! host_user_exists "$OS_USER"; then
+  echo "Error: target user '$OS_USER' does not exist; create the agent OS user first" >&2
+  exit 1
+fi
+
+if ! host_user_in_group "$current_user" "$HOST_HUMANS_GROUP"; then
+  planned+=("$(host_add_user_to_group_command "$current_user" "$HOST_HUMANS_GROUP")")
+fi
+
+if ! host_user_in_group "$OS_USER" "$HOST_AGENTS_GROUP"; then
+  planned+=("$(host_add_user_to_group_command "$OS_USER" "$HOST_AGENTS_GROUP")")
+fi
+
+if host_sudoers_needs_repair "$OS_USER"; then
+  while IFS= read -r cmd; do
+    [ -n "$cmd" ] && planned+=("$cmd")
+  done < <(host_install_sudoers_commands)
+fi
+
+if [ ${#planned[@]} -eq 0 ]; then
+  echo "Host setup already matches the sessions humans→agents policy."
+  exit 0
+fi
+
+if [ "$DRY_RUN" = "true" ]; then
+  echo "Would apply these host changes:"
+  printf '  %s\n' "${planned[@]}"
+  exit 0
+fi
+
+echo "Error: mutating host:fix is not implemented yet; rerun with --dry-run to inspect planned changes" >&2
+exit 2

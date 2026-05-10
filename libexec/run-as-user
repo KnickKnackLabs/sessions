@@ -1,0 +1,87 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+  echo "Usage: run-as-user --user <user> -- <command...>" >&2
+}
+
+user=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --user)
+      if [ $# -lt 2 ]; then
+        echo "Error: --user requires a value" >&2
+        usage
+        exit 2
+      fi
+      user="$2"
+      shift 2
+    ;;
+    --)
+      shift
+      break
+    ;;
+    *)
+      echo "Error: unexpected argument '$1'" >&2
+      usage
+      exit 2
+    ;;
+  esac
+done
+
+if [ -z "$user" ]; then
+  echo "Error: --user is required" >&2
+  usage
+  exit 2
+fi
+
+if [[ "$user" == -* ]]; then
+  echo "Error: --user value cannot start with a dash: '$user'" >&2
+  exit 2
+fi
+
+if ! [[ "$user" =~ ^[a-zA-Z_][a-zA-Z0-9._-]*[$]?$ ]]; then
+  echo "Error: invalid --user value '$user'" >&2
+  echo "  User names must start with a letter or underscore and contain only letters, numbers, dots, underscores, hyphens, or a trailing dollar" >&2
+  exit 2
+fi
+
+if [ $# -eq 0 ]; then
+  echo "Error: command required after --" >&2
+  usage
+  exit 2
+fi
+
+if ! id -u "$user" >/dev/null 2>&1; then
+  echo "Error: target user '$user' does not exist" >&2
+  exit 1
+fi
+
+home=""
+shell=""
+if command -v dscl >/dev/null 2>&1; then
+  if home_line=$(dscl . -read "/Users/$user" NFSHomeDirectory 2>/dev/null); then
+    home=$(awk '{print $2; exit}' <<< "$home_line")
+  fi
+  if shell_line=$(dscl . -read "/Users/$user" UserShell 2>/dev/null); then
+    shell=$(awk '{print $2; exit}' <<< "$shell_line")
+  fi
+elif command -v getent >/dev/null 2>&1; then
+  if passwd_line=$(getent passwd "$user" 2>/dev/null); then
+    home=$(awk -F: '{print $6; exit}' <<< "$passwd_line")
+    shell=$(awk -F: '{print $7; exit}' <<< "$passwd_line")
+  fi
+fi
+
+home="${home:-/Users/$user}"
+shell="${shell:-/bin/bash}"
+controlled_path="$home/.local/bin:$home/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+
+exec sudo -n -H -u "$user" -- \
+  env -i \
+    HOME="$home" \
+    USER="$user" \
+    LOGNAME="$user" \
+    SHELL="$shell" \
+    PATH="$controlled_path" \
+    "$@"
