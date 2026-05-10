@@ -352,7 +352,7 @@ STUB
   [ "$(sed -n '3p' "$capture")" = "--cwd" ]
 
   local run_as_line
-  run_as_line=$(grep -n '/libexec/run-as-user$' "$capture" | cut -d: -f1)
+  run_as_line=$(grep -n -Fx "$SESSIONS_RUN_AS_USER" "$capture" | cut -d: -f1)
   [ -n "$run_as_line" ]
   [ "$(sed -n "$((run_as_line + 1))p" "$capture")" = "--user" ]
   [ "$(sed -n "$((run_as_line + 2))p" "$capture")" = "iris" ]
