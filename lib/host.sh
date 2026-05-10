@@ -52,7 +52,7 @@ host_add_user_to_group_command() {
 host_install_sudoers_commands() {
   local rule
   rule=$(host_sudoers_rule)
-  printf 'printf %%s\\n %q | sudo tee %q >/dev/null\n' "$rule" "$HOST_SUDOERS_FILE"
+  printf "printf '%%s\\\\n' %q | sudo tee %q >/dev/null\n" "$rule" "$HOST_SUDOERS_FILE"
   printf 'sudo chmod 0440 %q\n' "$HOST_SUDOERS_FILE"
   printf 'sudo visudo -cf %q\n' "$HOST_SUDOERS_FILE"
 }
