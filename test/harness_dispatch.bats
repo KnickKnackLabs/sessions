@@ -377,6 +377,12 @@ JSONL
   echo "$output" | jq -e '.model == "claude-opus-4-7"'
 }
 
+@test "wake_entry records .os_user when 10th arg is non-empty" {
+  run wake_entry w1 parent1 "2026-04-22T10:00:00.000Z" shellA ikma pi true "{}" "claude-opus-4-7" iris
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.os_user == "iris"'
+}
+
 @test "wake_entry omits .model when 9th arg is absent or empty" {
   # Both absent (no 9th arg) and explicit empty string must produce no
   # `.model` field. `sessions wake` requires a model; this low-level
@@ -396,11 +402,25 @@ JSONL
   done
 }
 
-@test "wake_entry includes both .meta and .model when both are non-empty" {
-  # Second jq branch (meta present) with fragment concatenation for model.
-  run wake_entry w1 parent1 "2026-04-22T10:00:00.000Z" shellA ikma pi true '{"by":"zeke"}' "claude-opus-4-7"
+@test "wake_entry omits .os_user when 10th arg is absent or empty" {
+  for arg in absent empty; do
+    if [ "$arg" = "absent" ]; then
+      run wake_entry w1 parent1 "2026-04-22T10:00:00.000Z" shellA ikma pi true "{}" "claude-opus-4-7"
+    else
+      run wake_entry w1 parent1 "2026-04-22T10:00:00.000Z" shellA ikma pi true "{}" "claude-opus-4-7" ""
+    fi
+    [ "$status" -eq 0 ]
+    echo "$output" | jq -e 'has("os_user") | not' >/dev/null || {
+      echo "case=$arg leaked an .os_user field: $output" >&2
+      return 1
+    }
+  done
+}
+
+@test "wake_entry includes .meta .model and .os_user when all are non-empty" {
+  run wake_entry w1 parent1 "2026-04-22T10:00:00.000Z" shellA ikma pi true '{"by":"zeke"}' "claude-opus-4-7" iris
   [ "$status" -eq 0 ]
-  echo "$output" | jq -e '.meta.by == "zeke" and .model == "claude-opus-4-7"'
+  echo "$output" | jq -e '.meta.by == "zeke" and .model == "claude-opus-4-7" and .os_user == "iris"'
 }
 
 # --- harness_entry builder ---

@@ -5,6 +5,7 @@
 #USAGE flag "--context-file <context_file>" help="File containing context message to inject"
 #USAGE flag "--message <message>" help="Message to pass to the agent"
 #USAGE flag "--model <model>" help="Model to use (required; provider-qualified, e.g. openai-codex/gpt-5.5)"
+#USAGE flag "--os-user <os_user>" help="Run the session payload as this local OS user (default: $SHIMMER_OS_USER)"
 #USAGE flag "--headless" help="No human present — agent completes task and exits"
 #USAGE flag "--background" help="Launch in background via shell/zmx (default: foreground, blocks until done)"
 #USAGE flag "--meta <meta>" var=#true help="Metadata for the wake event (repeatable, dotted paths or jq expressions)"
@@ -17,6 +18,7 @@ WAKE_META_RAW="${usage_meta:-}"
 CONTEXT_FILE="${usage_context_file:-}"
 MESSAGE="${usage_message:-}"
 MODEL="${usage_model:-}"
+OS_USER="${usage_os_user:-}"
 HEADLESS="${usage_headless:-false}"
 BACKGROUND="${usage_background:-false}"
 
@@ -44,6 +46,19 @@ fi
 if [[ "$MODEL" != */* ]]; then
   echo "Error: --model must be provider-qualified (for example: openai-codex/gpt-5.5)" >&2
   exit 1
+fi
+
+# --- OS-user target ---
+
+if [ -z "$OS_USER" ]; then
+  OS_USER="${SHIMMER_OS_USER:-}"
+fi
+
+# shellcheck source=/dev/null
+source "$MISE_CONFIG_ROOT/lib/host.sh"
+
+if [ -n "$OS_USER" ]; then
+  host_validate_user_name "$OS_USER"
 fi
 
 # --- Dependencies ---
@@ -88,6 +103,22 @@ fi
 SESSION_NAME=$(head -1 "$SESSION_FILE" | jq -r '.name // empty')
 SHELL_NAME=$(derive_shell_name "$SESSION_NAME" "$FULL_SESSION_ID")
 
+# --- Preflight OS-user execution before mutating the session file ---
+
+if [ -n "$OS_USER" ]; then
+  if ! host_user_exists "$OS_USER"; then
+    echo "Error: target OS user '$OS_USER' does not exist" >&2
+    echo "Run: sessions host:doctor --os-user $OS_USER" >&2
+    exit 1
+  fi
+
+  if ! host_run_as_user_smoke "$OS_USER"; then
+    echo "Error: cannot run payload as OS user '$OS_USER'" >&2
+    echo "Run: sessions host:doctor --os-user $OS_USER" >&2
+    exit 1
+  fi
+fi
+
 # --- Resolve context from file ---
 
 if [ -n "$CONTEXT_FILE" ]; then
@@ -126,7 +157,7 @@ if [ -n "$WAKE_META_RAW" ]; then
   done < <(printf '%s' "$WAKE_META_RAW" | xargs printf '%s\n')
 fi
 
-# wake_entry args: entry_id parent_id ts shell_name agent harness headless meta_json model
+# wake_entry args: entry_id parent_id ts shell_name agent harness headless meta_json model os_user
 # (keep in sync with the signature in lib/harness/dispatch.sh — order matters
 # because they're positional; structural refactor to named args is tracked
 # alongside sessions#61)
@@ -139,7 +170,8 @@ wake_entry \
   "$HARNESS_NAME" \
   "$HEADLESS" \
   "$WAKE_META" \
-  "$MODEL" >> "$SESSION_FILE"
+  "$MODEL" \
+  "$OS_USER" >> "$SESSION_FILE"
 
 # --- Inject context into session file if provided ---
 
@@ -165,6 +197,10 @@ RUN_CMD=("${mise_run[@]}" run --session "$SESSION_FILE" --cwd "$SESSION_CWD" --m
 [ "$HEADLESS" = "true" ] && RUN_CMD+=(--headless)
 if [ -n "$MESSAGE" ]; then
   RUN_CMD+=("$MESSAGE")
+fi
+
+if [ -n "$OS_USER" ]; then
+  RUN_CMD=("$HOST_RUN_AS_USER" --user "$OS_USER" -- "${RUN_CMD[@]}")
 fi
 
 scrub_caller_pwd_env
