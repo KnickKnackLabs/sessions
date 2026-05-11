@@ -61,7 +61,7 @@ defmodule Cli.Engine do
       :exit_status,
       :stderr_to_stdout,
       {:args, args},
-      {:env, caller_pwd_env_scrub()}
+      {:env, harness_env()}
     ]
 
     port_opts = if cwd, do: [{:cd, cwd} | port_opts], else: port_opts
@@ -89,11 +89,72 @@ defmodule Cli.Engine do
     status
   end
 
+  defp harness_env do
+    caller_pwd_env_scrub() ++ path_env()
+  end
+
   defp caller_pwd_env_scrub do
     System.get_env()
     |> Map.keys()
     |> Enum.filter(&(&1 == "CALLER_PWD" or String.ends_with?(&1, "_CALLER_PWD")))
     |> Enum.map(&{String.to_charlist(&1), false})
+  end
+
+  defp path_env do
+    case System.get_env("PATH") do
+      nil -> []
+      path -> [{~c"PATH", path |> sanitized_path() |> String.to_charlist()}]
+    end
+  end
+
+  defp sanitized_path(path) do
+    mise_data_dir = mise_data_dir()
+    mise_installs = if mise_data_dir, do: Path.join(mise_data_dir, "installs"), else: nil
+    mise_shims = if mise_data_dir, do: Path.join(mise_data_dir, "shims"), else: nil
+
+    entries =
+      path
+      |> String.split(":", trim: false)
+      |> Enum.reject(&mise_install_path?(&1, mise_installs))
+
+    entries =
+      if mise_shims && mise_shims not in entries && File.dir?(mise_shims) do
+        [mise_shims | entries]
+      else
+        entries
+      end
+
+    Enum.join(entries, ":")
+  end
+
+  defp mise_data_dir do
+    cond do
+      data_dir = non_empty_env("MISE_DATA_DIR") ->
+        data_dir
+
+      xdg_data_home = non_empty_env("XDG_DATA_HOME") ->
+        Path.join(xdg_data_home, "mise")
+
+      home = non_empty_env("HOME") ->
+        Path.join([home, ".local", "share", "mise"])
+
+      true ->
+        nil
+    end
+  end
+
+  defp non_empty_env(name) do
+    case System.get_env(name) do
+      nil -> nil
+      "" -> nil
+      value -> value
+    end
+  end
+
+  defp mise_install_path?(_entry, nil), do: false
+
+  defp mise_install_path?(entry, mise_installs) do
+    String.starts_with?(entry, mise_installs <> "/")
   end
 
   defp stream_output(port, %{buffer: buffer} = state) do
