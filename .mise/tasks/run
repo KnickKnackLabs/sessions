@@ -1,16 +1,16 @@
 #!/usr/bin/env bash
 #MISE description="Run an agent session with streaming output, timeout, and ABORT detection"
 #MISE quiet=true
-#USAGE arg "<message>" help="Message for the agent"
+#USAGE arg "[message]" help="Message for the agent (required for --headless, optional for interactive)"
 #USAGE flag "--system-prompt-file <file>" help="Path to system prompt file"
 #USAGE flag "--timeout <seconds>" help="Timeout in seconds (default: no timeout)"
 #USAGE flag "--model <model>" help="Model to use (required; provider-qualified, e.g. openai-codex/gpt-5.5)"
 #USAGE flag "--session <session>" help="Session file for conversation continuity"
 #USAGE flag "--cwd <cwd>" help="Working directory for pi"
 #USAGE flag "--headless" help="Non-interactive mode (appends headless context to system prompt)"
-#USAGE flag "--extensions" help="Enable pi extensions (default: disabled)"
-#USAGE flag "--skills" help="Enable pi skills (default: disabled)"
-#USAGE flag "--prompt-templates" help="Enable pi prompt templates (default: disabled)"
+#USAGE flag "--extensions" help="Enable pi extensions for print-mode runs (interactive no-message runs use pi defaults)"
+#USAGE flag "--skills" help="Enable pi skills for print-mode runs (interactive no-message runs use pi defaults)"
+#USAGE flag "--prompt-templates" help="Enable pi prompt templates for print-mode runs (interactive no-message runs use pi defaults)"
 
 set -euo pipefail
 
@@ -26,9 +26,12 @@ EXTENSIONS="${usage_extensions:-false}"
 SKILLS="${usage_skills:-false}"
 PROMPT_TEMPLATES="${usage_prompt_templates:-false}"
 
-if [ -z "$MESSAGE" ]; then
-  echo "Error: message required" >&2
-  echo "Usage: sessions run --system-prompt-file <path> --model <provider/model> [options] \"message\"" >&2
+# shellcheck source=../../lib/harness-env.sh
+source "$MISE_CONFIG_ROOT/lib/harness-env.sh"
+
+if [ "$HEADLESS" = "true" ] && [ -z "$MESSAGE" ]; then
+  echo "Error: --headless requires a message" >&2
+  echo "Usage: sessions run --headless --system-prompt-file <path> --model <provider/model> [options] \"message\"" >&2
   exit 1
 fi
 
@@ -68,6 +71,62 @@ if [ "$HEADLESS" = "true" ] && [ -n "$SYSTEM_PROMPT_FILE" ]; then
 ## Session Context
 This is a headless session. No human is present. You are running non-interactively — complete the task and exit.
 HEADLESS_EOF
+fi
+
+run_interactive_without_message() {
+  if [ -z "$SYSTEM_PROMPT_FILE" ]; then
+    echo "Error: --system-prompt-file is required" >&2
+    exit 1
+  fi
+
+  if [ ! -f "$SYSTEM_PROMPT_FILE" ]; then
+    echo "Error: System prompt file not found: $SYSTEM_PROMPT_FILE" >&2
+    exit 1
+  fi
+
+  # shellcheck source=../../lib/harness/dispatch.sh
+  source "$MISE_CONFIG_ROOT/lib/harness/dispatch.sh"
+
+  local harness_name
+  if [ -n "$SESSION" ]; then
+    harness_name=$(harness_resolve --session "$SESSION") || exit 1
+  else
+    harness_name=$(harness_resolve) || exit 1
+  fi
+
+  if [ "$harness_name" != "pi" ]; then
+    echo "sessions: '$harness_name' harness does not support interactive no-message run yet" >&2
+    exit "$HARNESS_UNSUPPORTED_EXIT"
+  fi
+
+  sessions_prepare_harness_env
+
+  if ! command -v pi >/dev/null 2>&1; then
+    echo "Error: pi not found on PATH" >&2
+    exit 1
+  fi
+
+  local pi_args=(--append-system-prompt "$SYSTEM_PROMPT_FILE" --model "$MODEL")
+  if [ -n "$SESSION" ]; then
+    pi_args+=(--session "$SESSION")
+  else
+    pi_args+=(--no-session)
+  fi
+  cd "$CWD"
+
+  if [ -n "$TIMEOUT" ]; then
+    if ! command -v timeout >/dev/null 2>&1; then
+      echo "Error: timeout command is required for --timeout" >&2
+      exit 1
+    fi
+    exec timeout "$TIMEOUT" pi "${pi_args[@]}"
+  fi
+
+  exec pi "${pi_args[@]}"
+}
+
+if [ -z "$MESSAGE" ]; then
+  run_interactive_without_message
 fi
 
 CLI_DIR="$MISE_CONFIG_ROOT/cli"

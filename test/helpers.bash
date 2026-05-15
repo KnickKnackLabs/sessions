@@ -28,6 +28,100 @@ sessions() {
 }
 export -f sessions
 
+stub_pi_capture_argv_cwd() {
+  local stub_dir="$1"
+  local argv_capture="$2"
+  local cwd_capture="$3"
+
+  mkdir -p "$stub_dir"
+  cat > "$stub_dir/pi" <<STUB
+#!/usr/bin/env bash
+pwd -P > "$cwd_capture"
+printf '%s\n' "\$@" > "$argv_capture"
+exit 0
+STUB
+  chmod +x "$stub_dir/pi"
+}
+
+stub_pi_capture_env() {
+  local stub_dir="$1"
+  local env_capture="$2"
+
+  mkdir -p "$stub_dir"
+  cat > "$stub_dir/pi" <<STUB
+#!/usr/bin/env bash
+printf 'CALLER_PWD=%s\n' "\${CALLER_PWD-}" > "$env_capture"
+printf 'SESSIONS_CALLER_PWD=%s\n' "\${SESSIONS_CALLER_PWD-}" >> "$env_capture"
+printf 'OTHER_CALLER_PWD=%s\n' "\${OTHER_CALLER_PWD-}" >> "$env_capture"
+printf 'PATH=%s\n' "\$PATH" >> "$env_capture"
+exit 0
+STUB
+  chmod +x "$stub_dir/pi"
+}
+
+stub_shell_exec_payload() {
+  local stub_dir="$1"
+  local argv_capture="$2"
+
+  mkdir -p "$stub_dir"
+  cat > "$stub_dir/shell" <<STUB
+#!/usr/bin/env bash
+set -euo pipefail
+printf '%s\n' "\$@" > "$argv_capture"
+[ "\${1:-}" = "run" ]
+shift
+shell_name="\${1:-}"
+[ -n "\$shell_name" ]
+shift
+cwd=""
+while [ "\$#" -gt 0 ]; do
+  case "\$1" in
+    --cwd)
+      cwd="\$2"
+      shift 2
+      ;;
+    *)
+      break
+      ;;
+  esac
+done
+[ -n "\$cwd" ]
+cd "\$cwd"
+exec "\$@"
+STUB
+  chmod +x "$stub_dir/shell"
+}
+
+stub_shell_recording() {
+  local stub_dir="$1"
+  local argv_capture="$2"
+  local names_capture="$3"
+
+  mkdir -p "$stub_dir"
+  cat > "$stub_dir/shell" <<STUB
+#!/usr/bin/env bash
+set -euo pipefail
+case "\${1:-}" in
+  run)
+    printf '%s\n' "\$@" > "$argv_capture"
+    if [ "\$#" -ge 2 ]; then
+      printf '%s\n' "\$2" >> "$names_capture"
+    fi
+    ;;
+  list)
+    [ -f "$names_capture" ] && cat "$names_capture"
+    ;;
+  kill|status|wait|history|send)
+    ;;
+  *)
+    printf 'unexpected shell stub command: %s\n' "\${1:-}" >&2
+    exit 2
+    ;;
+esac
+STUB
+  chmod +x "$stub_dir/shell"
+}
+
 # Fixed UUIDs for reproducible tests
 SESSION_1="aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
 SESSION_2="11111111-2222-3333-4444-555555555555"

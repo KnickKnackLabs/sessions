@@ -8,7 +8,7 @@ Create sessions with structured metadata, wake agents into them,
 observe transcripts in real time, and query your history.
 
 ![lang: bash + python](https://img.shields.io/badge/lang-bash%20%2B%20python-4EAA25?style=flat&logo=gnubash&logoColor=white)
-[![tests: 232 passing](https://img.shields.io/badge/tests-232%20passing-brightgreen?style=flat)](test/)
+[![tests: 238 passing](https://img.shields.io/badge/tests-238%20passing-brightgreen?style=flat)](test/)
 ![commands: 14](https://img.shields.io/badge/commands-14-blue?style=flat)
 ![license: MIT](https://img.shields.io/badge/license-MIT-blue?style=flat)
 
@@ -60,7 +60,7 @@ Sessions aren't just transcript files agents leave behind — they're managed ar
     └─ shell run            persistent zmx session (caller-owned)
          └─ run-as-user     optional --os-user payload boundary
               └─ sessions run
-                   └─ pi    harness — processes message, exits
+                   └─ pi    harness — processes message or opens interactively
   sessions read             observe the transcript
   sessions wake (again)     re-enter with corrections
 ```
@@ -87,6 +87,8 @@ sessions wake review/pr-50 --model openai-codex/gpt-5.5 --message "You missed th
 The spawning stack uses [shell](https://github.com/KnickKnackLabs/shell) for persistent zmx sessions. `sessions wake` calls `sessions run` directly for execution — identity (AGENT_IDENTITY, etc.) must already be in the environment, typically set upstream via `eval $(shimmer as <agent>)`.
 
 `--model` on `sessions wake` is required and is not remembered across wakes — pass a provider-qualified model (for example `openai-codex/gpt-5.5`) on each wake.
+
+`--message` is optional for interactive wakes/runs; omit it to open the harness and let the human start the conversation. `--headless` still requires `--message`.
 
 To run only the payload process as a local agent OS user, pass `--os-user` or set `SHIMMER_OS_USER`. The shell/zmx session remains owned by the caller. This does not copy caller environment, secrets, or auth into the target account; the target user's session environment is a separate setup step.
 
@@ -175,7 +177,7 @@ cd sessions && mise trust && mise install
 mise run test
 ```
 
-**232 tests** across 15 suites, using [BATS 1.13.0](https://github.com/bats-core/bats-core). Tasks are bash scripts (session creation, wake, metadata) and Python scripts with [Rich](https://github.com/Textualize/rich) output (list, read, inspect, search). The JSONL parsing library is 485 lines of Python in `lib/`.
+**238 tests** across 16 suites, using [BATS 1.13.0](https://github.com/bats-core/bats-core). Tasks are bash scripts (session creation, wake, metadata) and Python scripts with [Rich](https://github.com/Textualize/rich) output (list, read, inspect, search). The JSONL parsing library is 485 lines of Python in `lib/`.
 
 <details>
 <summary><b>Project structure</b></summary>
@@ -205,7 +207,7 @@ sessions/
 │   ├── shell.sh        # Shell helpers
 │   └── harness/        # Per-harness adapters (pi, …)
 └── test/
-    └── *.bats          # 232 tests
+    └── *.bats          # 238 tests
 ```
 
 </details>

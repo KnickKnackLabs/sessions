@@ -68,7 +68,7 @@ const stack = [
   "    └─ shell run            persistent zmx session (caller-owned)",
   "         └─ run-as-user     optional --os-user payload boundary",
   "              └─ sessions run",
-  "                   └─ pi    harness — processes message, exits",
+  "                   └─ pi    harness — processes message or opens interactively",
   "  sessions read             observe the transcript",
   "  sessions wake (again)     re-enter with corrections",
 ].join("\n");
@@ -190,6 +190,15 @@ sessions wake review/pr-50 --model openai-codex/gpt-5.5 --message "You missed th
         {" is required and is not remembered across wakes — pass a provider-qualified model (for example "}
         <Code>openai-codex/gpt-5.5</Code>
         {") on each wake."}
+      </Paragraph>
+
+      <Paragraph>
+        <Code>--message</Code>
+        {" is optional for interactive wakes/runs; omit it to open the harness and let the human start the conversation. "}
+        <Code>--headless</Code>
+        {" still requires "}
+        <Code>--message</Code>
+        {"."}
       </Paragraph>
 
       <Paragraph>

@@ -7,6 +7,16 @@ setup() {
   # Isolate zmx sessions per-test to prevent bats FD hangs.
   export ZMX_DIR="/tmp/swk-$$"
   mkdir -p "$ZMX_DIR"
+
+  # Most wake tests care about the argv passed to shell, not about opening
+  # a real persistent zmx + pi process. Default to a recording shell stub;
+  # individual tests that need a different shell behavior prepend their own.
+  local shell_stub_dir="$BATS_TEST_TMPDIR/default-shell-stub"
+  stub_shell_recording \
+    "$shell_stub_dir" \
+    "$BATS_TEST_TMPDIR/default-shell-argv" \
+    "$BATS_TEST_TMPDIR/default-shell-names"
+  export PATH="$shell_stub_dir:$PATH"
 }
 teardown() {
   # Clean up shell sessions in our isolated dir
@@ -214,7 +224,7 @@ STUB
 
 @test "wake --headless records harness=pi and headless=true" {
   command -v shell >/dev/null 2>&1 || skip "shell not installed"
-  run sessions wake "$SESSION_1" --headless --background --model "openai-codex/gpt-5.5"
+  run sessions wake "$SESSION_1" --headless --background --model "openai-codex/gpt-5.5" --message "review this"
   [ "$status" -eq 0 ]
   src_file=$(find "$PROJECT_DIR" -name "*${SESSION_1}.jsonl")
   jq -e 'select(.type == "wake" and .harness == "pi" and .headless == true)' "$src_file"
@@ -528,6 +538,85 @@ STUB
     after_session && /^--cwd$/ { getline; print; exit }
   ' "$capture")
   [ "$run_cwd" = "$expected_cwd" ]
+}
+
+@test "wake --headless requires --message before recording wake" {
+  src_file=$(find "$PROJECT_DIR" -name "*${SESSION_1}.jsonl")
+  local before
+  before=$(wc -l < "$src_file")
+
+  run sessions wake "$SESSION_1" --headless --model "openai-codex/gpt-5.5"
+  [ "$status" -eq 1 ]
+  echo "$output" | grep -q -- "--headless requires --message"
+
+  local after
+  after=$(wc -l < "$src_file")
+  [ "$after" = "$before" ]
+}
+
+@test "wake interactive without --message records no synthetic message" {
+  local stub_dir="$BATS_TEST_TMPDIR/stub-shell-no-message"
+  local capture="$BATS_TEST_TMPDIR/shell-argv-no-message"
+  mkdir -p "$stub_dir"
+  cat > "$stub_dir/shell" <<STUB
+#!/usr/bin/env bash
+printf '%s\n' "\$@" > "$capture"
+exit 0
+STUB
+  chmod +x "$stub_dir/shell"
+
+  src_file=$(find "$PROJECT_DIR" -name "*${SESSION_1}.jsonl")
+  local before_messages
+  before_messages=$(jq -s '[.[] | select(.type == "message")] | length' "$src_file")
+
+  PATH="$stub_dir:$PATH" run sessions wake "$SESSION_1" --background --model "openai-codex/gpt-5.5"
+  [ "$status" -eq 0 ]
+  [ -f "$capture" ]
+
+  local after_messages
+  after_messages=$(jq -s '[.[] | select(.type == "message")] | length' "$src_file")
+  [ "$after_messages" = "$before_messages" ]
+  jq -e 'select(.type == "wake" and .headless == false)' "$src_file"
+
+  [ "$(tail -1 "$capture")" = "openai-codex/gpt-5.5" ]
+  ! grep -qx '' "$capture"
+}
+
+@test "wake interactive without --message executes nested run without print mode" {
+  local session_cwd="$BATS_TEST_TMPDIR/wake-session-cwd"
+  local expected_cwd
+  mkdir -p "$session_cwd"
+  expected_cwd=$(cd "$session_cwd" && pwd -P)
+
+  src_file=$(find "$PROJECT_DIR" -name "*${SESSION_1}.jsonl")
+  local updated_file="$BATS_TEST_TMPDIR/session-cwd-for-nested-run.jsonl"
+  jq -c --arg cwd "$session_cwd" 'if .type == "session" then .cwd = $cwd else . end' "$src_file" > "$updated_file"
+  mv "$updated_file" "$src_file"
+
+  local stub_dir="$BATS_TEST_TMPDIR/stub-shell-pi-no-message"
+  local shell_capture="$BATS_TEST_TMPDIR/shell-argv-nested-no-message"
+  local pi_argv_capture="$BATS_TEST_TMPDIR/pi-argv-nested-no-message"
+  local pi_cwd_capture="$BATS_TEST_TMPDIR/pi-cwd-nested-no-message"
+  stub_shell_exec_payload "$stub_dir" "$shell_capture"
+  stub_pi_capture_argv_cwd "$stub_dir" "$pi_argv_capture" "$pi_cwd_capture"
+
+  export AGENT_IDENTITY="test identity"
+  PATH="$stub_dir:$PATH" run sessions wake "${SESSION_1:0:8}" --background --model "openai-codex/gpt-5.5"
+  [ "$status" -eq 0 ]
+  [ -f "$shell_capture" ]
+  [ -f "$pi_argv_capture" ]
+  [ -f "$pi_cwd_capture" ]
+
+  [ "$(cat "$pi_cwd_capture")" = "$expected_cwd" ]
+  grep -qx -- "--append-system-prompt" "$pi_argv_capture"
+  grep -qx -- "--model" "$pi_argv_capture"
+  [ "$(awk '/^--model$/ { getline; print; exit }' "$pi_argv_capture")" = "openai-codex/gpt-5.5" ]
+  grep -qx -- "--session" "$pi_argv_capture"
+  [ "$(awk '/^--session$/ { getline; print; exit }' "$pi_argv_capture")" = "$src_file" ]
+
+  ! grep -qx -- "-p" "$pi_argv_capture"
+  ! grep -qx -- "--print" "$pi_argv_capture"
+  ! grep -qx '' "$pi_argv_capture"
 }
 
 @test "wake --model is advertised in --help" {

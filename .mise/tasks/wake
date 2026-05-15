@@ -3,7 +3,7 @@
 #USAGE arg "<session_id>" help="Session ID or name to wake into"
 #USAGE flag "--context <context>" help="Inject a context message into the session file before launching"
 #USAGE flag "--context-file <context_file>" help="File containing context message to inject"
-#USAGE flag "--message <message>" help="Message to pass to the agent"
+#USAGE flag "--message <message>" help="Message to pass to the agent (required for --headless, optional for interactive)"
 #USAGE flag "--model <model>" help="Model to use (required; provider-qualified, e.g. openai-codex/gpt-5.5)"
 #USAGE flag "--os-user <os_user>" help="Run the session payload as this local OS user (default: $SHIMMER_OS_USER)"
 #USAGE flag "--headless" help="No human present — agent completes task and exits"
@@ -45,6 +45,12 @@ fi
 
 if [[ "$MODEL" != */* ]]; then
   echo "Error: --model must be provider-qualified (for example: openai-codex/gpt-5.5)" >&2
+  exit 1
+fi
+
+if [ "$HEADLESS" = "true" ] && [ -z "$MESSAGE" ]; then
+  echo "Error: --headless requires --message" >&2
+  echo "Usage: sessions wake <name-or-id> --headless --model <provider/model> --message '...'" >&2
   exit 1
 fi
 
