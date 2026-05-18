@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 #MISE description="Wake an agent into a session"
 #USAGE arg "<session_id>" help="Session ID or name to wake into"
-#USAGE flag "--context <context>" help="Inject a context message into the session file before launching"
-#USAGE flag "--context-file <context_file>" help="File containing context message to inject"
-#USAGE flag "--message <message>" help="Message to pass to the agent"
-#USAGE flag "--model <model>" help="Model to use (required; provider-qualified, e.g. openai-codex/gpt-5.5)"
-#USAGE flag "--os-user <os_user>" help="Run the session payload as this local OS user (default: $SHIMMER_OS_USER)"
-#USAGE flag "--headless" help="No human present — agent completes task and exits"
-#USAGE flag "--background" help="Launch in background via shell/zmx (default: foreground, blocks until done)"
-#USAGE flag "--meta <meta>" var=#true help="Metadata for the wake event (repeatable, dotted paths or jq expressions)"
+#USAGE flag "--context <context>" default="" help="Inject a context message into the session file before launching"
+#USAGE flag "--context-file <context_file>" default="" help="File containing context message to inject"
+#USAGE flag "--message <message>" default="" help="Message to pass to the agent (required for --headless, optional for interactive)"
+#USAGE flag "--model <model>" default="" help="Model to use (required; provider-qualified, e.g. openai-codex/gpt-5.5)"
+#USAGE flag "--os-user <os_user>" default="" help="Run the session payload as this local OS user (default: $SHIMMER_OS_USER)"
+#USAGE flag "--headless" default=#false help="No human present — agent completes task and exits"
+#USAGE flag "--background" default=#false help="Launch in background via shell/zmx (default: foreground, blocks until done)"
+#USAGE flag "--meta <meta>" var=#true default="" help="Metadata for the wake event (repeatable, dotted paths or jq expressions)"
 
 set -euo pipefail
 
@@ -45,6 +45,12 @@ fi
 
 if [[ "$MODEL" != */* ]]; then
   echo "Error: --model must be provider-qualified (for example: openai-codex/gpt-5.5)" >&2
+  exit 1
+fi
+
+if [ "$HEADLESS" = "true" ] && [ -z "$MESSAGE" ]; then
+  echo "Error: --headless requires --message" >&2
+  echo "Usage: sessions wake <name-or-id> --headless --model <provider/model> --message '...'" >&2
   exit 1
 fi
 
@@ -92,6 +98,11 @@ SESSION_FILE=$(find_session_file "$SESSION_ID") || exit 1
 HARNESS_NAME=$(harness_resolve --session "$SESSION_FILE") || exit 1
 # shellcheck source=/dev/null
 source "$MISE_CONFIG_ROOT/lib/harness/$HARNESS_NAME.sh"
+
+if [ -z "$MESSAGE" ] && [ "$HARNESS_NAME" != "pi" ]; then
+  echo "sessions: '$HARNESS_NAME' harness does not support interactive no-message wake yet" >&2
+  exit "$HARNESS_UNSUPPORTED_EXIT"
+fi
 
 FULL_SESSION_ID=$(head -1 "$SESSION_FILE" | jq -r '.id // empty')
 if [ -z "$FULL_SESSION_ID" ]; then
