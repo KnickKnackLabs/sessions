@@ -14,17 +14,92 @@
 
 set -euo pipefail
 
-MESSAGE="${usage_message:-}"
-SYSTEM_PROMPT_FILE="${usage_system_prompt_file:-}"
-TIMEOUT="${usage_timeout:-}"
-MODEL="${usage_model:-}"
-SESSION="${usage_session:-}"
-CWD="${usage_cwd:-${SESSIONS_CALLER_PWD:-${CALLER_PWD:-.}}}"
-HEADLESS="${usage_headless:-false}"
+MESSAGE=""
+SYSTEM_PROMPT_FILE=""
+TIMEOUT=""
+MODEL=""
+SESSION=""
+CWD="${SESSIONS_CALLER_PWD:-${CALLER_PWD:-.}}"
+HEADLESS="false"
 # Extensions disabled by default (determinism for CI). Pass --extensions etc. to enable.
-EXTENSIONS="${usage_extensions:-false}"
-SKILLS="${usage_skills:-false}"
-PROMPT_TEMPLATES="${usage_prompt_templates:-false}"
+EXTENSIONS="false"
+SKILLS="false"
+PROMPT_TEMPLATES="false"
+
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --system-prompt-file)
+      SYSTEM_PROMPT_FILE="${2:-}"
+      shift 2
+      ;;
+    --system-prompt-file=*)
+      SYSTEM_PROMPT_FILE="${1#*=}"
+      shift
+      ;;
+    --timeout)
+      TIMEOUT="${2:-}"
+      shift 2
+      ;;
+    --timeout=*)
+      TIMEOUT="${1#*=}"
+      shift
+      ;;
+    --model)
+      MODEL="${2:-}"
+      shift 2
+      ;;
+    --model=*)
+      MODEL="${1#*=}"
+      shift
+      ;;
+    --session)
+      SESSION="${2:-}"
+      shift 2
+      ;;
+    --session=*)
+      SESSION="${1#*=}"
+      shift
+      ;;
+    --cwd)
+      CWD="${2:-}"
+      shift 2
+      ;;
+    --cwd=*)
+      CWD="${1#*=}"
+      shift
+      ;;
+    --headless)
+      HEADLESS="true"
+      shift
+      ;;
+    --extensions)
+      EXTENSIONS="true"
+      shift
+      ;;
+    --skills)
+      SKILLS="true"
+      shift
+      ;;
+    --prompt-templates)
+      PROMPT_TEMPLATES="true"
+      shift
+      ;;
+    --)
+      shift
+      if [ "$#" -gt 0 ]; then
+        MESSAGE="$1"
+      fi
+      break
+      ;;
+    --*)
+      shift
+      ;;
+    *)
+      MESSAGE="$1"
+      shift
+      ;;
+  esac
+done
 
 # shellcheck source=../../lib/harness-env.sh
 source "$MISE_CONFIG_ROOT/lib/harness-env.sh"

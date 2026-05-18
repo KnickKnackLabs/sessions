@@ -12,15 +12,97 @@
 
 set -euo pipefail
 
-SESSION_ID="${usage_session_id:-}"
-CONTEXT="${usage_context:-}"
-WAKE_META_RAW="${usage_meta:-}"
-CONTEXT_FILE="${usage_context_file:-}"
-MESSAGE="${usage_message:-}"
-MODEL="${usage_model:-}"
-OS_USER="${usage_os_user:-}"
-HEADLESS="${usage_headless:-false}"
-BACKGROUND="${usage_background:-false}"
+SESSION_ID=""
+CONTEXT=""
+WAKE_META_RAW=""
+CONTEXT_FILE=""
+MESSAGE=""
+MODEL=""
+OS_USER=""
+HEADLESS="false"
+BACKGROUND="false"
+WAKE_META_VALUES=()
+
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --context)
+      CONTEXT="${2:-}"
+      shift 2
+      ;;
+    --context=*)
+      CONTEXT="${1#*=}"
+      shift
+      ;;
+    --context-file)
+      CONTEXT_FILE="${2:-}"
+      shift 2
+      ;;
+    --context-file=*)
+      CONTEXT_FILE="${1#*=}"
+      shift
+      ;;
+    --message)
+      MESSAGE="${2:-}"
+      shift 2
+      ;;
+    --message=*)
+      MESSAGE="${1#*=}"
+      shift
+      ;;
+    --model)
+      MODEL="${2:-}"
+      shift 2
+      ;;
+    --model=*)
+      MODEL="${1#*=}"
+      shift
+      ;;
+    --os-user)
+      OS_USER="${2:-}"
+      shift 2
+      ;;
+    --os-user=*)
+      OS_USER="${1#*=}"
+      shift
+      ;;
+    --meta)
+      WAKE_META_VALUES+=("${2:-}")
+      shift 2
+      ;;
+    --meta=*)
+      WAKE_META_VALUES+=("${1#*=}")
+      shift
+      ;;
+    --headless)
+      HEADLESS="true"
+      shift
+      ;;
+    --background)
+      BACKGROUND="true"
+      shift
+      ;;
+    --)
+      shift
+      if [ "$#" -gt 0 ] && [ -z "$SESSION_ID" ]; then
+        SESSION_ID="$1"
+      fi
+      break
+      ;;
+    --*)
+      shift
+      ;;
+    *)
+      if [ -z "$SESSION_ID" ]; then
+        SESSION_ID="$1"
+      fi
+      shift
+      ;;
+  esac
+done
+
+if [ "${#WAKE_META_VALUES[@]}" -gt 0 ]; then
+  WAKE_META_RAW=$(printf '%s\n' "${WAKE_META_VALUES[@]}")
+fi
 
 scrub_caller_pwd_env() {
   local name

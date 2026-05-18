@@ -569,6 +569,9 @@ STUB
   local before_messages
   before_messages=$(jq -s '[.[] | select(.type == "message")] | length' "$src_file")
 
+  export usage_message="stale inherited message"
+  export usage_headless=true
+
   PATH="$stub_dir:$PATH" run sessions wake "$SESSION_1" --background --model "openai-codex/gpt-5.5"
   [ "$status" -eq 0 ]
   [ -f "$capture" ]
@@ -579,6 +582,8 @@ STUB
   jq -e 'select(.type == "wake" and .headless == false)' "$src_file"
 
   [ "$(tail -1 "$capture")" = "openai-codex/gpt-5.5" ]
+  ! grep -qx 'stale inherited message' "$capture"
+  ! grep -qx -- '--headless' "$capture"
   ! grep -qx '' "$capture"
 }
 

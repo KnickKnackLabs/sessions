@@ -27,6 +27,9 @@ teardown() {
   local session_file
   session_file=$(find "$PROJECT_DIR" -name "*${SESSION_1}.jsonl")
 
+  export usage_message="stale inherited message"
+  export usage_headless=true
+
   PATH="$stub_dir:$PATH" run sessions run \
     --system-prompt-file "$prompt" \
     --cwd "$run_cwd" \
