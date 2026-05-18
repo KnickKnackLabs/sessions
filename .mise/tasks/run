@@ -1,16 +1,16 @@
 #!/usr/bin/env bash
 #MISE description="Run an agent session with streaming output, timeout, and ABORT detection"
 #MISE quiet=true
-#USAGE arg "[message]" help="Message for the agent (required for --headless, optional for interactive)"
-#USAGE flag "--system-prompt-file <file>" help="Path to system prompt file"
-#USAGE flag "--timeout <seconds>" help="Timeout in seconds (default: no timeout)"
-#USAGE flag "--model <model>" help="Model to use (required; provider-qualified, e.g. openai-codex/gpt-5.5)"
-#USAGE flag "--session <session>" help="Session file for conversation continuity"
-#USAGE flag "--cwd <cwd>" help="Working directory for pi"
-#USAGE flag "--headless" help="Non-interactive mode (appends headless context to system prompt)"
-#USAGE flag "--extensions" help="Enable pi extensions for print-mode runs (interactive no-message runs use pi defaults)"
-#USAGE flag "--skills" help="Enable pi skills for print-mode runs (interactive no-message runs use pi defaults)"
-#USAGE flag "--prompt-templates" help="Enable pi prompt templates for print-mode runs (interactive no-message runs use pi defaults)"
+#USAGE arg "[message]" default="" help="Message for the agent (required for --headless, optional for interactive)"
+#USAGE flag "--system-prompt-file <file>" default="" help="Path to system prompt file"
+#USAGE flag "--timeout <seconds>" default="" help="Timeout in seconds (default: no timeout)"
+#USAGE flag "--model <model>" default="" help="Model to use (required; provider-qualified, e.g. openai-codex/gpt-5.5)"
+#USAGE flag "--session <session>" default="" help="Session file for conversation continuity"
+#USAGE flag "--cwd <cwd>" default="" help="Working directory for pi"
+#USAGE flag "--headless" default=#false help="Non-interactive mode (appends headless context to system prompt)"
+#USAGE flag "--extensions" default=#false help="Enable pi extensions for print-mode runs (interactive no-message runs use pi defaults)"
+#USAGE flag "--skills" default=#false help="Enable pi skills for print-mode runs (interactive no-message runs use pi defaults)"
+#USAGE flag "--prompt-templates" default=#false help="Enable pi prompt templates for print-mode runs (interactive no-message runs use pi defaults)"
 
 set -euo pipefail
 

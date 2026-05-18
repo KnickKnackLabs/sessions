@@ -554,6 +554,21 @@ STUB
   [ "$after" = "$before" ]
 }
 
+@test "wake interactive without --message rejects unsupported harness before recording wake" {
+  src_file=$(find "$PROJECT_DIR" -name "*${SESSION_1}.jsonl")
+  local before
+  before=$(wc -l < "$src_file" | tr -d ' ')
+  echo '{"type":"harness","id":"h-claude","parentId":"u4","timestamp":"2026-03-14T10:31:00.000Z","name":"claude"}' >> "$src_file"
+
+  run sessions wake "$SESSION_1" --background --model "openai-codex/gpt-5.5"
+  [ "$status" -eq 10 ]
+  echo "$output" | grep -q -- "claude.*does not support interactive no-message wake"
+
+  local after
+  after=$(wc -l < "$src_file" | tr -d ' ')
+  [ "$after" = "$((before + 1))" ]
+}
+
 @test "wake interactive without --message records no synthetic message" {
   local stub_dir="$BATS_TEST_TMPDIR/stub-shell-no-message"
   local capture="$BATS_TEST_TMPDIR/shell-argv-no-message"
@@ -569,6 +584,9 @@ STUB
   local before_messages
   before_messages=$(jq -s '[.[] | select(.type == "message")] | length' "$src_file")
 
+  export usage_message="stale inherited message"
+  export usage_headless=true
+
   PATH="$stub_dir:$PATH" run sessions wake "$SESSION_1" --background --model "openai-codex/gpt-5.5"
   [ "$status" -eq 0 ]
   [ -f "$capture" ]
@@ -579,6 +597,8 @@ STUB
   jq -e 'select(.type == "wake" and .headless == false)' "$src_file"
 
   [ "$(tail -1 "$capture")" = "openai-codex/gpt-5.5" ]
+  ! grep -qx 'stale inherited message' "$capture"
+  ! grep -qx -- '--headless' "$capture"
   ! grep -qx '' "$capture"
 }
 
