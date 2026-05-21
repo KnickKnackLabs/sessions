@@ -55,6 +55,133 @@ teardown() {
   ! grep -qx '' "$argv_capture"
 }
 
+@test "run interactive without message uses baked session system prompt" {
+  local stub_dir="$BATS_TEST_TMPDIR/stub-pi-baked-prompt"
+  local argv_capture="$BATS_TEST_TMPDIR/pi-argv-baked-prompt"
+  local prompt_capture="$BATS_TEST_TMPDIR/pi-prompt-baked-prompt"
+  mkdir -p "$stub_dir"
+  cat > "$stub_dir/pi" <<STUB
+#!/usr/bin/env bash
+set -euo pipefail
+printf '%s\n' "\$@" > "$argv_capture"
+prompt_file=""
+while [ "\$#" -gt 0 ]; do
+  if [ "\$1" = "--append-system-prompt" ]; then
+    prompt_file="\$2"
+    break
+  fi
+  shift
+done
+[ -n "\$prompt_file" ]
+cat "\$prompt_file" > "$prompt_capture"
+exit 0
+STUB
+  chmod +x "$stub_dir/pi"
+
+  run sessions new --cwd "$BATS_TEST_TMPDIR" --system-prompt "baked prompt from session"
+  [ "$status" -eq 0 ]
+  new_id=$(echo "$output" | head -1)
+  session_file=$(find "$PI_DIR/agent/sessions" -name "*${new_id}.jsonl")
+
+  unset AGENT_IDENTITY
+  PATH="$stub_dir:$PATH" run sessions run \
+    --cwd "$BATS_TEST_TMPDIR" \
+    --model "openai-codex/gpt-5.5" \
+    --session "$session_file"
+  [ "$status" -eq 0 ]
+  [ -f "$argv_capture" ]
+  [ -f "$prompt_capture" ]
+
+  grep -qx -- "--append-system-prompt" "$argv_capture"
+  grep -q "baked prompt from session" "$prompt_capture"
+  prompt_path=$(awk '/^--append-system-prompt$/ { getline; print; exit }' "$argv_capture")
+  [ -n "$prompt_path" ]
+  [ ! -e "$prompt_path" ]
+}
+
+@test "run headless with message uses baked session system prompt" {
+  local stub_dir="$BATS_TEST_TMPDIR/stub-mix-baked-prompt"
+  local argv_capture="$BATS_TEST_TMPDIR/mix-argv-baked-prompt"
+  local prompt_capture="$BATS_TEST_TMPDIR/mix-prompt-baked-prompt"
+  mkdir -p "$stub_dir"
+  cat > "$stub_dir/mix" <<STUB
+#!/usr/bin/env bash
+set -euo pipefail
+printf '%s\n' "\$@" > "$argv_capture"
+prompt_file=""
+while [ "\$#" -gt 0 ]; do
+  if [ "\$1" = "--system-prompt-file" ]; then
+    prompt_file="\$2"
+    break
+  fi
+  shift
+done
+[ -n "\$prompt_file" ]
+cat "\$prompt_file" > "$prompt_capture"
+exit 0
+STUB
+  chmod +x "$stub_dir/mix"
+
+  run sessions new --cwd "$BATS_TEST_TMPDIR" --system-prompt "headless baked prompt"
+  [ "$status" -eq 0 ]
+  new_id=$(echo "$output" | head -1)
+  session_file=$(find "$PI_DIR/agent/sessions" -name "*${new_id}.jsonl")
+
+  unset AGENT_IDENTITY
+  PATH="$stub_dir:$PATH" run sessions run \
+    --headless \
+    --cwd "$BATS_TEST_TMPDIR" \
+    --model "openai-codex/gpt-5.5" \
+    --session "$session_file" \
+    "do work"
+  [ "$status" -eq 0 ]
+  [ -f "$argv_capture" ]
+  [ -f "$prompt_capture" ]
+
+  grep -q "headless baked prompt" "$prompt_capture"
+  grep -q "This is a headless session" "$prompt_capture"
+  prompt_path=$(awk '/^--system-prompt-file$/ { getline; print; exit }' "$argv_capture")
+  [ -n "$prompt_path" ]
+  [ ! -e "$prompt_path" ]
+}
+
+@test "run interactive without message prefers explicit prompt file over baked prompt" {
+  local stub_dir="$BATS_TEST_TMPDIR/stub-pi-explicit-prompt"
+  local prompt_capture="$BATS_TEST_TMPDIR/pi-prompt-explicit-prompt"
+  mkdir -p "$stub_dir"
+  cat > "$stub_dir/pi" <<STUB
+#!/usr/bin/env bash
+set -euo pipefail
+prompt_file=""
+while [ "\$#" -gt 0 ]; do
+  if [ "\$1" = "--append-system-prompt" ]; then
+    prompt_file="\$2"
+    break
+  fi
+  shift
+done
+[ -n "\$prompt_file" ]
+cat "\$prompt_file" > "$prompt_capture"
+exit 0
+STUB
+  chmod +x "$stub_dir/pi"
+
+  run sessions new --cwd "$BATS_TEST_TMPDIR" --system-prompt "baked prompt"
+  [ "$status" -eq 0 ]
+  new_id=$(echo "$output" | head -1)
+  session_file=$(find "$PI_DIR/agent/sessions" -name "*${new_id}.jsonl")
+  echo "explicit prompt" > "$BATS_TEST_TMPDIR/explicit.md"
+
+  PATH="$stub_dir:$PATH" run sessions run \
+    --system-prompt-file "$BATS_TEST_TMPDIR/explicit.md" \
+    --cwd "$BATS_TEST_TMPDIR" \
+    --model "openai-codex/gpt-5.5" \
+    --session "$session_file"
+  [ "$status" -eq 0 ]
+  grep -q "explicit prompt" "$prompt_capture"
+  ! grep -q "baked prompt" "$prompt_capture"
+}
+
 @test "run interactive without message scrubs stale harness environment" {
   local mise_data="${MISE_DATA_DIR:-${XDG_DATA_HOME:-$HOME/.local/share}/mise}"
   local stale_bin="$mise_data/installs/sessions-test-stale/bin"

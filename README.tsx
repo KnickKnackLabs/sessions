@@ -46,7 +46,7 @@ const libLines = libFiles.reduce(
 // ── Visual hook ──────────────────────────────────────────────
 
 const lifecycle = [
-  "$ sessions new review/pr-50 --cwd ~/agents/ikma/den --meta agent.name=ikma",
+  "$ sessions new review/pr-50 --cwd ~/agents/ikma/den --system-prompt-file /tmp/review-profile.md --meta agent.name=ikma",
   "e96bd43a",
   "",
   "$ sessions wake review/pr-50 --model openai-codex/gpt-5.5 --message \"review PR #50\"",
@@ -63,7 +63,7 @@ const lifecycle = [
 // ── Spawning stack ───────────────────────────────────────────
 
 const stack = [
-  "  sessions new              create session with metadata + context",
+  "  sessions new              create session with prompt + metadata + context",
   "  sessions wake             wake an agent into it via shell",
   "    └─ shell run            persistent zmx session (caller-owned)",
   "         └─ run-as-user     optional --os-user payload boundary",
@@ -156,13 +156,14 @@ sessions inspect e96bd43a`}</CodeBlock>
         {" entries you can filter on. The full conversation history carries forward, so the agent sees everything that happened before."}
       </Paragraph>
 
-      <CodeBlock lang="bash">{`# Create a named session with metadata and context
+      <CodeBlock lang="bash">{`# Create a named session with a baked system prompt, metadata, and context
 sessions new review/pr-50 --cwd ~/agents/ikma/den \\
+  --system-prompt-file /tmp/review-profile.md \\
   --meta agent.name=ikma \\
   --meta purpose=review \\
   --context "Background: this PR refactors the auth module"
 
-# Wake an agent into it (by name). Model is required at wake time.
+# Wake the existing session. Model is required at wake time.
 sessions wake review/pr-50 --model openai-codex/gpt-5.5 --message "Review PR #50"
 
 # Watch what it does
@@ -178,9 +179,22 @@ sessions wake review/pr-50 --model openai-codex/gpt-5.5 --message "You missed th
         <Code>sessions wake</Code>
         {" calls "}
         <Code>sessions run</Code>
-        {" directly for execution \u2014 identity (AGENT_IDENTITY, etc.) must already be in the environment, typically set upstream via "}
-        <Code>{"eval $(shimmer as <agent>)"}</Code>
-        {"."}
+        {" as its low-level executor. For normal use, prefer "}
+        <Code>new</Code>
+        {" + "}
+        <Code>wake</Code>
+        {": bake identity or profile instructions into the session with "}
+        <Code>--system-prompt-file</Code>
+        {" at creation, then wake it with task messages."}
+      </Paragraph>
+
+      <Paragraph>
+        <Code>sessions run</Code>
+        {" still accepts an explicit "}
+        <Code>--system-prompt-file</Code>
+        {" and keeps the legacy "}
+        <Code>AGENT_IDENTITY</Code>
+        {" fallback, but sessions created with a system prompt no longer need identity in the environment at wake time."}
       </Paragraph>
 
       <Paragraph>
@@ -308,7 +322,7 @@ mise run test`}</CodeBlock>
       <Details summary="Project structure">
         <CodeBlock>{`sessions/
 ├── .mise/tasks/
-│   ├── new          # Create sessions with metadata + context
+│   ├── new          # Create sessions with prompt + metadata + context
 │   ├── wake         # Wake agents into sessions via shell
 │   ├── meta         # Read session header metadata
 │   ├── list         # List + filter sessions (Rich tables)

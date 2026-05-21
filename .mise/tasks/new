@@ -1,16 +1,20 @@
 #!/usr/bin/env bash
-#MISE description="Create a new session with optional injected context"
-#USAGE arg "[name]" help="Session name (human-readable label, also used for lookup)"
-#USAGE flag "--cwd <cwd>" help="Working directory for the session (default: current directory)"
-#USAGE flag "--context <context>" help="Initial context message to inject"
-#USAGE flag "--context-file <context_file>" help="File containing initial context message"
-#USAGE flag "--meta <meta>" var=#true help="Metadata key=value pairs (repeatable, supports dotted paths e.g. agent.name=ikma)"
-#USAGE flag "--harness <harness>" help="Harness adapter to use (default: pi, or value of SESSIONS_DEFAULT_HARNESS)"
+#MISE description="Create a new session with optional system prompt and injected context"
+#USAGE arg "[name]" default="" help="Session name (human-readable label, also used for lookup)"
+#USAGE flag "--cwd <cwd>" default="" help="Working directory for the session (default: current directory)"
+#USAGE flag "--system-prompt <prompt>" default="" help="System prompt content to bake into the session"
+#USAGE flag "--system-prompt-file <file>" default="" help="File containing system prompt content to bake into the session"
+#USAGE flag "--context <context>" default="" help="Initial context message to inject"
+#USAGE flag "--context-file <context_file>" default="" help="File containing context message"
+#USAGE flag "--meta <meta>" var=#true default="" help="Metadata key=value pairs (repeatable, supports dotted paths e.g. agent.name=ikma)"
+#USAGE flag "--harness <harness>" default="" help="Harness adapter to use (default: pi, or value of SESSIONS_DEFAULT_HARNESS)"
 
 set -euo pipefail
 
 NAME="${usage_name:-}"
 CWD="${usage_cwd:-}"
+SYSTEM_PROMPT="${usage_system_prompt:-}"
+SYSTEM_PROMPT_FILE="${usage_system_prompt_file:-}"
 CONTEXT="${usage_context:-}"
 CONTEXT_FILE="${usage_context_file:-}"
 META_RAW="${usage_meta:-}"
@@ -27,7 +31,17 @@ CWD_ABS=$(cd "$CWD" 2>/dev/null && pwd) || {
   exit 1
 }
 
-# Resolve context from file if provided
+# Resolve system prompt and context from files if provided. File flags mirror
+# the existing --context-file behavior: when both inline and file forms are
+# supplied, the file content wins.
+if [ -n "$SYSTEM_PROMPT_FILE" ]; then
+  if [ ! -f "$SYSTEM_PROMPT_FILE" ]; then
+    echo "Error: system prompt file not found: $SYSTEM_PROMPT_FILE" >&2
+    exit 1
+  fi
+  SYSTEM_PROMPT=$(cat "$SYSTEM_PROMPT_FILE")
+fi
+
 if [ -n "$CONTEXT_FILE" ]; then
   if [ ! -f "$CONTEXT_FILE" ]; then
     echo "Error: context file not found: $CONTEXT_FILE" >&2
@@ -99,10 +113,20 @@ harness_call "$HARNESS_NAME" header_entry "$SESSION_ID" "$NOW_ISO" "$CWD_ABS" "$
 HARNESS_ENTRY_ID=$(uuidgen | tr '[:upper:]' '[:lower:]' | cut -c1-8)
 harness_entry "$HARNESS_ENTRY_ID" "$SESSION_ID" "$NOW_ISO" "$HARNESS_NAME" >> "$SESSION_FILE"
 
+LAST_ENTRY_ID="$HARNESS_ENTRY_ID"
+
+# Bake the system prompt into the session if provided. `sessions wake` does not
+# accept prompt flags; wake/run resolve this entry from the session file.
+if [ -n "$SYSTEM_PROMPT" ]; then
+  PROMPT_ENTRY_ID=$(uuidgen | tr '[:upper:]' '[:lower:]' | cut -c1-8)
+  system_prompt_entry "$PROMPT_ENTRY_ID" "$LAST_ENTRY_ID" "$NOW_ISO" "$SYSTEM_PROMPT" >> "$SESSION_FILE"
+  LAST_ENTRY_ID="$PROMPT_ENTRY_ID"
+fi
+
 # Inject context as a user message if provided
 if [ -n "$CONTEXT" ]; then
   MSG_ID=$(uuidgen | tr '[:upper:]' '[:lower:]' | cut -c1-8)
-  harness_call "$HARNESS_NAME" user_message_entry "$MSG_ID" "$HARNESS_ENTRY_ID" "$NOW_ISO" "$CONTEXT" >> "$SESSION_FILE"
+  harness_call "$HARNESS_NAME" user_message_entry "$MSG_ID" "$LAST_ENTRY_ID" "$NOW_ISO" "$CONTEXT" >> "$SESSION_FILE"
 fi
 
 # --- Output ---
@@ -114,6 +138,9 @@ else
   echo "Created session ${SESSION_ID:0:8}" >&2
 fi
 echo "cwd: $CWD_ABS" >&2
+if [ -n "$SYSTEM_PROMPT" ]; then
+  echo "System prompt: $(echo "$SYSTEM_PROMPT" | head -1 | cut -c1-80)..." >&2
+fi
 if [ -n "$CONTEXT" ]; then
   echo "Context: $(echo "$CONTEXT" | head -1 | cut -c1-80)..." >&2
 fi

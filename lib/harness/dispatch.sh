@@ -235,6 +235,31 @@ harness_entry() {
     }'
 }
 
+# Session system-prompt entry — records the prompt baked into this managed
+# session. Harness binaries ignore this entry type; `sessions run --session`
+# resolves the latest one when no explicit `--system-prompt-file` is supplied.
+#
+#   $1 entry_id, $2 parent_id, $3 timestamp_iso, $4 content
+system_prompt_entry() {
+  local entry_id="$1"
+  local parent_id="$2"
+  local ts="$3"
+  local content="$4"
+
+  jq -nc \
+    --arg id "$entry_id" \
+    --arg parent_id "$parent_id" \
+    --arg ts "$ts" \
+    --arg content "$content" \
+    '{
+      type: "system_prompt",
+      id: $id,
+      parentId: $parent_id,
+      timestamp: $ts,
+      content: $content
+    }'
+}
+
 # Wake event entry — records that an agent was woken into a session.
 # Shape is uniform across harnesses: the harness binaries don't read
 # this entry type; we own the schema.

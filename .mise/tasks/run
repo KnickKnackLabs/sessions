@@ -29,6 +29,35 @@ PROMPT_TEMPLATES="${usage_prompt_templates:-false}"
 # shellcheck source=../../lib/harness-env.sh
 source "$MISE_CONFIG_ROOT/lib/harness-env.sh"
 
+PROMPT_TEMP_FILE=""
+# shellcheck disable=SC2329  # Invoked by EXIT trap below.
+cleanup_prompt_temp() {
+  if [ -n "$PROMPT_TEMP_FILE" ]; then
+    rm -f "$PROMPT_TEMP_FILE"
+  fi
+}
+trap cleanup_prompt_temp EXIT
+
+latest_session_system_prompt() {
+  local session_file="$1"
+  [ -f "$session_file" ] || return 0
+  jq -s -r '[.[] | select(.type == "system_prompt") | .content] | last // empty' "$session_file"
+}
+
+write_prompt_temp() {
+  PROMPT_TEMP_FILE=$(mktemp)
+  printf '%s\n' "$1" > "$PROMPT_TEMP_FILE"
+  SYSTEM_PROMPT_FILE="$PROMPT_TEMP_FILE"
+}
+
+run_and_exit() {
+  set +e
+  "$@"
+  local rc=$?
+  set -e
+  exit "$rc"
+}
+
 if [ "$HEADLESS" = "true" ] && [ -z "$MESSAGE" ]; then
   echo "Error: --headless requires a message" >&2
   echo "Usage: sessions run --headless --system-prompt-file <path> --model <provider/model> [options] \"message\"" >&2
@@ -46,12 +75,25 @@ if [[ "$MODEL" != */* ]]; then
   exit 1
 fi
 
-# If no system prompt file provided but AGENT_IDENTITY is in env, write it to a temp file
-if [ -z "$SYSTEM_PROMPT_FILE" ] && [ -n "${AGENT_IDENTITY:-}" ]; then
-  SYSTEM_PROMPT_FILE=$(mktemp)
-  echo "$AGENT_IDENTITY" > "$SYSTEM_PROMPT_FILE"
+# Prompt resolution order:
+#   1. Explicit --system-prompt-file
+#   2. Latest system_prompt entry baked into --session by `sessions new`
+#   3. Legacy AGENT_IDENTITY environment fallback
+if [ -z "$SYSTEM_PROMPT_FILE" ] && [ -n "$SESSION" ]; then
+  SESSION_SYSTEM_PROMPT=$(latest_session_system_prompt "$SESSION")
+  if [ -n "$SESSION_SYSTEM_PROMPT" ]; then
+    write_prompt_temp "$SESSION_SYSTEM_PROMPT"
+  fi
+  unset SESSION_SYSTEM_PROMPT
+fi
 
-  trap 'rm -f "$SYSTEM_PROMPT_FILE"' EXIT
+if [ -z "$SYSTEM_PROMPT_FILE" ] && [ -n "${AGENT_IDENTITY:-}" ]; then
+  write_prompt_temp "$AGENT_IDENTITY"
+fi
+
+if [ -z "$SYSTEM_PROMPT_FILE" ]; then
+  echo "Error: system prompt required (--system-prompt-file, session system_prompt, or AGENT_IDENTITY)" >&2
+  exit 1
 fi
 
 # Append dispatch context (outside the conditional — applies to any prompt file)
@@ -74,11 +116,6 @@ HEADLESS_EOF
 fi
 
 run_interactive_without_message() {
-  if [ -z "$SYSTEM_PROMPT_FILE" ]; then
-    echo "Error: --system-prompt-file is required" >&2
-    exit 1
-  fi
-
   if [ ! -f "$SYSTEM_PROMPT_FILE" ]; then
     echo "Error: System prompt file not found: $SYSTEM_PROMPT_FILE" >&2
     exit 1
@@ -119,10 +156,10 @@ run_interactive_without_message() {
       echo "Error: timeout command is required for --timeout" >&2
       exit 1
     fi
-    exec timeout "$TIMEOUT" pi "${pi_args[@]}"
+    run_and_exit timeout "$TIMEOUT" pi "${pi_args[@]}"
   fi
 
-  exec pi "${pi_args[@]}"
+  run_and_exit pi "${pi_args[@]}"
 }
 
 if [ -z "$MESSAGE" ]; then
@@ -149,4 +186,4 @@ source "$MISE_CONFIG_ROOT/lib/ensure-deps.sh"
 ensure_cli_deps "$CLI_DIR"
 
 cd "$CLI_DIR"
-exec mix sessions "${CLI_ARGS[@]}" "$MESSAGE"
+run_and_exit mix sessions "${CLI_ARGS[@]}" "$MESSAGE"

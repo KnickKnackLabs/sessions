@@ -8,14 +8,14 @@ Create sessions with structured metadata, wake agents into them,
 observe transcripts in real time, and query your history.
 
 ![lang: bash + python](https://img.shields.io/badge/lang-bash%20%2B%20python-4EAA25?style=flat&logo=gnubash&logoColor=white)
-[![tests: 239 passing](https://img.shields.io/badge/tests-239%20passing-brightgreen?style=flat)](test/)
+[![tests: 247 passing](https://img.shields.io/badge/tests-247%20passing-brightgreen?style=flat)](test/)
 ![commands: 14](https://img.shields.io/badge/commands-14-blue?style=flat)
 ![license: MIT](https://img.shields.io/badge/license-MIT-blue?style=flat)
 
 </div>
 
 ```
-$ sessions new review/pr-50 --cwd ~/agents/ikma/den --meta agent.name=ikma
+$ sessions new review/pr-50 --cwd ~/agents/ikma/den --system-prompt-file /tmp/review-profile.md --meta agent.name=ikma
 e96bd43a
 
 $ sessions wake review/pr-50 --model openai-codex/gpt-5.5 --message "review PR #50"
@@ -55,7 +55,7 @@ sessions inspect e96bd43a
 Sessions aren't just transcript files agents leave behind — they're managed artifacts with structure. A session starts with `new`, gets woken into with `wake`, and every event is recorded in the JSONL stream.
 
 ```
-  sessions new              create session with metadata + context
+  sessions new              create session with prompt + metadata + context
   sessions wake             wake an agent into it via shell
     └─ shell run            persistent zmx session (caller-owned)
          └─ run-as-user     optional --os-user payload boundary
@@ -68,13 +68,14 @@ Sessions aren't just transcript files agents leave behind — they're managed ar
 Each wake event is a first-class entry in the session file — timestamped, attributed, with its own metadata. A session that's been woken three times has three `wake` entries you can filter on. The full conversation history carries forward, so the agent sees everything that happened before.
 
 ```bash
-# Create a named session with metadata and context
+# Create a named session with a baked system prompt, metadata, and context
 sessions new review/pr-50 --cwd ~/agents/ikma/den \
+  --system-prompt-file /tmp/review-profile.md \
   --meta agent.name=ikma \
   --meta purpose=review \
   --context "Background: this PR refactors the auth module"
 
-# Wake an agent into it (by name). Model is required at wake time.
+# Wake the existing session. Model is required at wake time.
 sessions wake review/pr-50 --model openai-codex/gpt-5.5 --message "Review PR #50"
 
 # Watch what it does
@@ -84,7 +85,9 @@ sessions read review/pr-50 --last 5
 sessions wake review/pr-50 --model openai-codex/gpt-5.5 --message "You missed the edge case in line 42"
 ```
 
-The spawning stack uses [shell](https://github.com/KnickKnackLabs/shell) for persistent zmx sessions. `sessions wake` calls `sessions run` directly for execution — identity (AGENT_IDENTITY, etc.) must already be in the environment, typically set upstream via `eval $(shimmer as <agent>)`.
+The spawning stack uses [shell](https://github.com/KnickKnackLabs/shell) for persistent zmx sessions. `sessions wake` calls `sessions run` as its low-level executor. For normal use, prefer `new` + `wake`: bake identity or profile instructions into the session with `--system-prompt-file` at creation, then wake it with task messages.
+
+`sessions run` still accepts an explicit `--system-prompt-file` and keeps the legacy `AGENT_IDENTITY` fallback, but sessions created with a system prompt no longer need identity in the environment at wake time.
 
 `--model` on `sessions wake` is required and is not remembered across wakes — pass a provider-qualified model (for example `openai-codex/gpt-5.5`) on each wake.
 
@@ -177,7 +180,7 @@ cd sessions && mise trust && mise install
 mise run test
 ```
 
-**239 tests** across 16 suites, using [BATS 1.13.0](https://github.com/bats-core/bats-core). Tasks are bash scripts (session creation, wake, metadata) and Python scripts with [Rich](https://github.com/Textualize/rich) output (list, read, inspect, search). The JSONL parsing library is 485 lines of Python in `lib/`.
+**247 tests** across 16 suites, using [BATS 1.13.0](https://github.com/bats-core/bats-core). Tasks are bash scripts (session creation, wake, metadata) and Python scripts with [Rich](https://github.com/Textualize/rich) output (list, read, inspect, search). The JSONL parsing library is 485 lines of Python in `lib/`.
 
 <details>
 <summary><b>Project structure</b></summary>
@@ -185,7 +188,7 @@ mise run test
 ```
 sessions/
 ├── .mise/tasks/
-│   ├── new          # Create sessions with metadata + context
+│   ├── new          # Create sessions with prompt + metadata + context
 │   ├── wake         # Wake agents into sessions via shell
 │   ├── meta         # Read session header metadata
 │   ├── list         # List + filter sessions (Rich tables)
@@ -207,7 +210,7 @@ sessions/
 │   ├── shell.sh        # Shell helpers
 │   └── harness/        # Per-harness adapters (pi, …)
 └── test/
-    └── *.bats          # 239 tests
+    └── *.bats          # 247 tests
 ```
 
 </details>
