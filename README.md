@@ -85,9 +85,9 @@ sessions read review/pr-50 --last 5
 sessions wake review/pr-50 --model openai-codex/gpt-5.5 --message "You missed the edge case in line 42"
 ```
 
-The spawning stack uses [shell](https://github.com/KnickKnackLabs/shell) for persistent zmx sessions. `sessions wake` calls `sessions run` as its low-level executor. For normal use, prefer `new` + `wake`: bake identity or profile instructions into the session with `--system-prompt-file` at creation, then wake it with task messages.
+The spawning stack uses [shell](https://github.com/KnickKnackLabs/shell) for persistent zmx sessions. `sessions wake` calls `sessions run` as its hidden low-level executor. For normal use, prefer `new` + `wake`: bake identity or profile instructions into the session with `--system-prompt-file` at creation, then wake it with task messages.
 
-`sessions run` still accepts an explicit `--system-prompt-file` and keeps the legacy `AGENT_IDENTITY` fallback, but sessions created with a system prompt no longer need identity in the environment at wake time.
+`sessions run` remains available as an advanced/compatibility command. It accepts an explicit `--system-prompt-file` and keeps the legacy `AGENT_IDENTITY` fallback, but sessions created with a system prompt no longer need identity in the environment at wake time.
 
 `--model` on `sessions wake` is required and is not remembered across wakes — pass a provider-qualified model (for example `openai-codex/gpt-5.5`) on each wake.
 
@@ -197,7 +197,7 @@ sessions/
 │   ├── inspect      # Forensic metadata (duration, tools, model)
 │   ├── copy         # Duplicate sessions for handoff
 │   ├── remove       # Remove sessions (kill shell + delete file)
-│   ├── run          # Execute agent sessions (wraps Elixir CLI)
+│   ├── run          # Hidden low-level executor used by wake
 │   ├── cli/build    # Build Elixir CLI dependencies
 │   ├── export       # Portable bundles (JSONL + metadata)
 │   └── import       # Import exported sessions

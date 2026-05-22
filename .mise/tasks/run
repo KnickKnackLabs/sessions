@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-#MISE description="Run an agent session with streaming output, timeout, and ABORT detection"
+#MISE description="Internal executor for sessions wake (advanced/compatibility)"
 #MISE quiet=true
+#MISE hide=true
 #USAGE arg "[message]" default="" help="Message for the agent (required for --headless, optional for interactive)"
 #USAGE flag "--system-prompt-file <file>" default="" help="Path to system prompt file"
 #USAGE flag "--timeout <seconds>" default="" help="Timeout in seconds (default: no timeout)"

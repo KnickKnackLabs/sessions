@@ -179,7 +179,7 @@ sessions wake review/pr-50 --model openai-codex/gpt-5.5 --message "You missed th
         <Code>sessions wake</Code>
         {" calls "}
         <Code>sessions run</Code>
-        {" as its low-level executor. For normal use, prefer "}
+        {" as its hidden low-level executor. For normal use, prefer "}
         <Code>new</Code>
         {" + "}
         <Code>wake</Code>
@@ -190,7 +190,7 @@ sessions wake review/pr-50 --model openai-codex/gpt-5.5 --message "You missed th
 
       <Paragraph>
         <Code>sessions run</Code>
-        {" still accepts an explicit "}
+        {" remains available as an advanced/compatibility command. It accepts an explicit "}
         <Code>--system-prompt-file</Code>
         {" and keeps the legacy "}
         <Code>AGENT_IDENTITY</Code>
@@ -331,7 +331,7 @@ mise run test`}</CodeBlock>
 │   ├── inspect      # Forensic metadata (duration, tools, model)
 │   ├── copy         # Duplicate sessions for handoff
 │   ├── remove       # Remove sessions (kill shell + delete file)
-│   ├── run          # Execute agent sessions (wraps Elixir CLI)
+│   ├── run          # Hidden low-level executor used by wake
 │   ├── cli/build    # Build Elixir CLI dependencies
 │   ├── export       # Portable bundles (JSONL + metadata)
 │   └── import       # Import exported sessions
