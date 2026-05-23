@@ -55,6 +55,35 @@ teardown() {
   ! grep -qx '' "$argv_capture"
 }
 
+@test "run interactive without message preserves stdin for pi" {
+  local stub_dir="$BATS_TEST_TMPDIR/stub-pi-stdin"
+  local stdin_capture="$BATS_TEST_TMPDIR/pi-stdin-capture"
+  local prompt="$BATS_TEST_TMPDIR/prompt.md"
+  mkdir -p "$stub_dir"
+  echo "test prompt" > "$prompt"
+  cat > "$stub_dir/pi" <<STUB
+#!/usr/bin/env bash
+set -euo pipefail
+if read -r line; then
+  printf '%s' "\$line" > "$stdin_capture"
+else
+  printf 'stdin closed' > "$stdin_capture"
+  exit 1
+fi
+STUB
+  chmod +x "$stub_dir/pi"
+
+  run bash -c 'printf "%s\n" "typed input" | PATH="$1" PI_DIR="$2" mise -C "$3" run -q run --system-prompt-file "$4" --cwd "$5" --model "openai-codex/gpt-5.5"' \
+    bash \
+    "$stub_dir:$PATH" \
+    "$PI_DIR" \
+    "$REPO_DIR" \
+    "$prompt" \
+    "$BATS_TEST_TMPDIR"
+  [ "$status" -eq 0 ]
+  [ "$(cat "$stdin_capture")" = "typed input" ]
+}
+
 @test "run interactive without message uses baked session system prompt" {
   local stub_dir="$BATS_TEST_TMPDIR/stub-pi-baked-prompt"
   local argv_capture="$BATS_TEST_TMPDIR/pi-argv-baked-prompt"
@@ -180,6 +209,110 @@ STUB
   [ "$status" -eq 0 ]
   grep -q "explicit prompt" "$prompt_capture"
   ! grep -q "baked prompt" "$prompt_capture"
+}
+
+@test "run interactive without message treats an empty baked prompt as present" {
+  local stub_dir="$BATS_TEST_TMPDIR/stub-pi-empty-baked-prompt"
+  local prompt_capture="$BATS_TEST_TMPDIR/pi-prompt-empty-baked-prompt"
+  local prompt_path_capture="$BATS_TEST_TMPDIR/pi-prompt-path-empty-baked-prompt"
+  mkdir -p "$stub_dir"
+  cat > "$stub_dir/pi" <<STUB
+#!/usr/bin/env bash
+set -euo pipefail
+prompt_file=""
+while [ "\$#" -gt 0 ]; do
+  if [ "\$1" = "--append-system-prompt" ]; then
+    prompt_file="\$2"
+    break
+  fi
+  shift
+done
+[ -n "\$prompt_file" ]
+printf '%s\n' "\$prompt_file" > "$prompt_path_capture"
+cat "\$prompt_file" > "$prompt_capture"
+exit 0
+STUB
+  chmod +x "$stub_dir/pi"
+
+  : > "$BATS_TEST_TMPDIR/empty-prompt.md"
+  run sessions new --cwd "$BATS_TEST_TMPDIR" --system-prompt-file "$BATS_TEST_TMPDIR/empty-prompt.md"
+  [ "$status" -eq 0 ]
+  new_id=$(echo "$output" | head -1)
+  session_file=$(find "$PI_DIR/agent/sessions" -name "*${new_id}.jsonl")
+
+  export AGENT_IDENTITY="stale legacy identity"
+  PATH="$stub_dir:$PATH" run sessions run \
+    --cwd "$BATS_TEST_TMPDIR" \
+    --model "openai-codex/gpt-5.5" \
+    --session "$session_file"
+  [ "$status" -eq 0 ]
+  [ -f "$prompt_capture" ]
+  [ -f "$prompt_path_capture" ]
+  ! grep -q "stale legacy identity" "$prompt_capture"
+  [ ! -e "$(cat "$prompt_path_capture")" ]
+}
+
+@test "run forwards SIGTERM to child before cleaning generated prompt" {
+  local stub_dir="$BATS_TEST_TMPDIR/stub-pi-sigterm"
+  local pid_capture="$BATS_TEST_TMPDIR/pi-sigterm-pid"
+  local term_capture="$BATS_TEST_TMPDIR/pi-sigterm-seen"
+  local prompt_path_capture="$BATS_TEST_TMPDIR/pi-sigterm-prompt-path"
+  local stdout_capture="$BATS_TEST_TMPDIR/run-sigterm-stdout"
+  local stderr_capture="$BATS_TEST_TMPDIR/run-sigterm-stderr"
+  mkdir -p "$stub_dir"
+  cat > "$stub_dir/pi" <<STUB
+#!/usr/bin/env bash
+set -euo pipefail
+prompt_file=""
+while [ "\$#" -gt 0 ]; do
+  if [ "\$1" = "--append-system-prompt" ]; then
+    prompt_file="\$2"
+    break
+  fi
+  shift
+done
+[ -n "\$prompt_file" ]
+printf '%s\n' "\$prompt_file" > "$prompt_path_capture"
+printf '%s\n' "\$\$" > "$pid_capture"
+trap 'printf term > "$term_capture"; exit 143' TERM
+while :; do sleep 1; done
+STUB
+  chmod +x "$stub_dir/pi"
+
+  PATH="$stub_dir:$PATH" AGENT_IDENTITY="generated prompt" PI_DIR="$PI_DIR" \
+    mise -C "$REPO_DIR" run -q run --cwd "$BATS_TEST_TMPDIR" --model "openai-codex/gpt-5.5" \
+    >"$stdout_capture" 2>"$stderr_capture" &
+  local mise_pid=$!
+
+  for _ in $(seq 1 50); do
+    [ -s "$pid_capture" ] && [ -s "$prompt_path_capture" ] && break
+    sleep 0.1
+  done
+  [ -s "$pid_capture" ]
+  [ -s "$prompt_path_capture" ]
+
+  local child_pid
+  child_pid=$(cat "$pid_capture")
+  local runner_pid
+  runner_pid=$(ps -o ppid= -p "$child_pid" | tr -d ' ')
+  [ -n "$runner_pid" ]
+  local prompt_path
+  prompt_path=$(cat "$prompt_path_capture")
+  [ -e "$prompt_path" ]
+
+  kill -TERM "$runner_pid"
+  set +e
+  wait "$mise_pid"
+  local rc=$?
+  set -e
+
+  [ "$rc" -eq 143 ]
+  [ -f "$term_capture" ]
+  if kill -0 "$child_pid" 2>/dev/null; then
+    kill "$child_pid" 2>/dev/null || true
+    return 1
+  fi
+  [ ! -e "$prompt_path" ]
 }
 
 @test "run interactive without message scrubs stale harness environment" {

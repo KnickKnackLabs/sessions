@@ -41,8 +41,8 @@ trap cleanup_prompt_temp EXIT
 
 latest_session_system_prompt() {
   local session_file="$1"
-  [ -f "$session_file" ] || return 0
-  jq -s -r '[.[] | select(.type == "system_prompt") | .content] | last // empty' "$session_file"
+  [ -f "$session_file" ] || return 1
+  jq -s -e -r '[.[] | select(.type == "system_prompt") | .content] | if length == 0 then empty else last end' "$session_file"
 }
 
 write_prompt_temp() {
@@ -53,8 +53,37 @@ write_prompt_temp() {
 
 run_and_exit() {
   set +e
-  "$@"
+  (
+    trap - INT TERM HUP QUIT
+    exec "$@"
+  ) <&0 &
+  local child_pid=$!
+
+  # shellcheck disable=SC2329  # Invoked by signal traps below.
+  forward_child_signal() {
+    local sig="$1"
+    local sig_num
+    trap - INT TERM HUP QUIT
+    if ! kill -s "$sig" "$child_pid" 2>/dev/null; then
+      :
+    fi
+    wait "$child_pid"
+    local rc=$?
+    if [ "$rc" -eq 127 ]; then
+      sig_num=$(kill -l "$sig" 2>/dev/null || echo 0)
+      rc=$((128 + sig_num))
+    fi
+    exit "$rc"
+  }
+
+  trap 'forward_child_signal INT' INT
+  trap 'forward_child_signal TERM' TERM
+  trap 'forward_child_signal HUP' HUP
+  trap 'forward_child_signal QUIT' QUIT
+
+  wait "$child_pid"
   local rc=$?
+  trap - INT TERM HUP QUIT
   set -e
   exit "$rc"
 }
@@ -81,8 +110,7 @@ fi
 #   2. Latest system_prompt entry baked into --session by `sessions new`
 #   3. Legacy AGENT_IDENTITY environment fallback
 if [ -z "$SYSTEM_PROMPT_FILE" ] && [ -n "$SESSION" ]; then
-  SESSION_SYSTEM_PROMPT=$(latest_session_system_prompt "$SESSION")
-  if [ -n "$SESSION_SYSTEM_PROMPT" ]; then
+  if SESSION_SYSTEM_PROMPT=$(latest_session_system_prompt "$SESSION"); then
     write_prompt_temp "$SESSION_SYSTEM_PROMPT"
   fi
   unset SESSION_SYSTEM_PROMPT
