@@ -8,7 +8,7 @@ Create sessions with structured metadata, wake agents into them,
 observe transcripts in real time, and query your history.
 
 ![lang: bash + python](https://img.shields.io/badge/lang-bash%20%2B%20python-4EAA25?style=flat&logo=gnubash&logoColor=white)
-[![tests: 251 passing](https://img.shields.io/badge/tests-251%20passing-brightgreen?style=flat)](test/)
+[![tests: 252 passing](https://img.shields.io/badge/tests-252%20passing-brightgreen?style=flat)](test/)
 ![commands: 14](https://img.shields.io/badge/commands-14-blue?style=flat)
 ![license: MIT](https://img.shields.io/badge/license-MIT-blue?style=flat)
 
@@ -180,7 +180,7 @@ cd sessions && mise trust && mise install
 mise run test
 ```
 
-**251 tests** across 16 suites, using [BATS 1.13.0](https://github.com/bats-core/bats-core). Tasks are bash scripts (session creation, wake, metadata) and Python scripts with [Rich](https://github.com/Textualize/rich) output (list, read, inspect, search). The JSONL parsing library is 485 lines of Python in `lib/`.
+**252 tests** across 16 suites, using [BATS 1.13.0](https://github.com/bats-core/bats-core). Tasks are bash scripts (session creation, wake, metadata) and Python scripts with [Rich](https://github.com/Textualize/rich) output (list, read, inspect, search). The JSONL parsing library is 485 lines of Python in `lib/`.
 
 <details>
 <summary><b>Project structure</b></summary>
@@ -210,7 +210,7 @@ sessions/
 │   ├── shell.sh        # Shell helpers
 │   └── harness/        # Per-harness adapters (pi, …)
 └── test/
-    └── *.bats          # 251 tests
+    └── *.bats          # 252 tests
 ```
 
 </details>

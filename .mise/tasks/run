@@ -41,8 +41,28 @@ trap cleanup_prompt_temp EXIT
 
 latest_session_system_prompt() {
   local session_file="$1"
-  [ -f "$session_file" ] || return 1
-  jq -s -e -r '[.[] | select(.type == "system_prompt") | .content] | if length == 0 then empty else last end' "$session_file"
+  local jq_output
+  local jq_status
+
+  if [ ! -f "$session_file" ]; then
+    echo "Error: session file not found: $session_file" >&2
+    return 2
+  fi
+
+  if jq_output=$(jq -s -e -r '[.[] | select(.type == "system_prompt") | .content] | if length == 0 then empty else last end' "$session_file" 2>&1); then
+    printf '%s' "$jq_output"
+    return 0
+  else
+    jq_status=$?
+  fi
+
+  if [ "$jq_status" -eq 4 ]; then
+    return 1
+  fi
+
+  echo "Error: failed to read session system prompt from $session_file" >&2
+  printf '%s\n' "$jq_output" >&2
+  return 2
 }
 
 write_prompt_temp() {
@@ -112,8 +132,13 @@ fi
 if [ -z "$SYSTEM_PROMPT_FILE" ] && [ -n "$SESSION" ]; then
   if SESSION_SYSTEM_PROMPT=$(latest_session_system_prompt "$SESSION"); then
     write_prompt_temp "$SESSION_SYSTEM_PROMPT"
+  else
+    SESSION_PROMPT_STATUS=$?
+    if [ "$SESSION_PROMPT_STATUS" -ne 1 ]; then
+      exit "$SESSION_PROMPT_STATUS"
+    fi
   fi
-  unset SESSION_SYSTEM_PROMPT
+  unset SESSION_SYSTEM_PROMPT SESSION_PROMPT_STATUS
 fi
 
 if [ -z "$SYSTEM_PROMPT_FILE" ] && [ -n "${AGENT_IDENTITY:-}" ]; then

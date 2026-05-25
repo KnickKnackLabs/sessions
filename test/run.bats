@@ -252,6 +252,30 @@ STUB
   [ ! -e "$(cat "$prompt_path_capture")" ]
 }
 
+@test "run with malformed session does not fall back to stale AGENT_IDENTITY" {
+  local stub_dir="$BATS_TEST_TMPDIR/stub-pi-malformed-session"
+  local invoked_capture="$BATS_TEST_TMPDIR/pi-malformed-session-invoked"
+  local bad_session="$BATS_TEST_TMPDIR/malformed-session.jsonl"
+  mkdir -p "$stub_dir"
+  cat > "$stub_dir/pi" <<STUB
+#!/usr/bin/env bash
+printf invoked > "$invoked_capture"
+exit 0
+STUB
+  chmod +x "$stub_dir/pi"
+  printf '{"type":"session"\n' > "$bad_session"
+
+  export AGENT_IDENTITY="stale legacy identity"
+  PATH="$stub_dir:$PATH" run sessions run \
+    --cwd "$BATS_TEST_TMPDIR" \
+    --model "openai-codex/gpt-5.5" \
+    --session "$bad_session"
+  [ "$status" -ne 0 ]
+  echo "$output" | grep -q "failed to read session system prompt"
+  echo "$output" | grep -q "parse error"
+  [ ! -e "$invoked_capture" ]
+}
+
 @test "run forwards SIGTERM to child before cleaning generated prompt" {
   local stub_dir="$BATS_TEST_TMPDIR/stub-pi-sigterm"
   local pid_capture="$BATS_TEST_TMPDIR/pi-sigterm-pid"
