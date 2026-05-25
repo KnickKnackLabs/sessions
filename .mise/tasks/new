@@ -15,6 +15,8 @@ NAME="${usage_name:-}"
 CWD="${usage_cwd:-}"
 SYSTEM_PROMPT="${usage_system_prompt:-}"
 SYSTEM_PROMPT_FILE="${usage_system_prompt_file:-}"
+SYSTEM_PROMPT_PROVIDED=false
+[ -n "$SYSTEM_PROMPT" ] && SYSTEM_PROMPT_PROVIDED=true
 CONTEXT="${usage_context:-}"
 CONTEXT_FILE="${usage_context_file:-}"
 META_RAW="${usage_meta:-}"
@@ -35,6 +37,7 @@ CWD_ABS=$(cd "$CWD" 2>/dev/null && pwd) || {
 # the existing --context-file behavior: when both inline and file forms are
 # supplied, the file content wins.
 if [ -n "$SYSTEM_PROMPT_FILE" ]; then
+  SYSTEM_PROMPT_PROVIDED=true
   if [ ! -f "$SYSTEM_PROMPT_FILE" ]; then
     echo "Error: system prompt file not found: $SYSTEM_PROMPT_FILE" >&2
     exit 1
@@ -117,7 +120,7 @@ LAST_ENTRY_ID="$HARNESS_ENTRY_ID"
 
 # Bake the system prompt into the session if provided. `sessions wake` does not
 # accept prompt flags; wake/run resolve this entry from the session file.
-if [ -n "$SYSTEM_PROMPT" ]; then
+if [ "$SYSTEM_PROMPT_PROVIDED" = "true" ]; then
   PROMPT_ENTRY_ID=$(uuidgen | tr '[:upper:]' '[:lower:]' | cut -c1-8)
   system_prompt_entry "$PROMPT_ENTRY_ID" "$LAST_ENTRY_ID" "$NOW_ISO" "$SYSTEM_PROMPT" >> "$SESSION_FILE"
   LAST_ENTRY_ID="$PROMPT_ENTRY_ID"
@@ -138,7 +141,7 @@ else
   echo "Created session ${SESSION_ID:0:8}" >&2
 fi
 echo "cwd: $CWD_ABS" >&2
-if [ -n "$SYSTEM_PROMPT" ]; then
+if [ "$SYSTEM_PROMPT_PROVIDED" = "true" ]; then
   echo "System prompt: $(echo "$SYSTEM_PROMPT" | head -1 | cut -c1-80)..." >&2
 fi
 if [ -n "$CONTEXT" ]; then

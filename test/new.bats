@@ -139,6 +139,16 @@ EOF
   jq -r 'select(.type == "system_prompt") | .content' "$new_file" | grep -q "Keep output concise"
 }
 
+@test "new --system-prompt-file stores empty file as an explicit baked prompt" {
+  : > "$BATS_TEST_TMPDIR/empty-prompt.md"
+
+  run sessions new --cwd "$BATS_TEST_TMPDIR" --system-prompt-file "$BATS_TEST_TMPDIR/empty-prompt.md"
+  [ "$status" -eq 0 ]
+  new_id=$(echo "$output" | head -1)
+  new_file=$(find "$PI_DIR/agent/sessions" -name "*${new_id}.jsonl")
+  jq -e 'select(.type == "system_prompt" and .content == "")' "$new_file"
+}
+
 @test "new errors with nonexistent system prompt file" {
   run sessions new --cwd "$BATS_TEST_TMPDIR" --system-prompt-file "/tmp/nonexistent-$$"
   [ "$status" -eq 1 ]
