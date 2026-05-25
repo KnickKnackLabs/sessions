@@ -639,6 +639,45 @@ STUB
   ! grep -qx '' "$pi_argv_capture"
 }
 
+@test "wake interactive without --message uses baked session system prompt" {
+  local session_cwd="$BATS_TEST_TMPDIR/wake-baked-cwd"
+  mkdir -p "$session_cwd"
+
+  run sessions new wake-baked-prompt --cwd "$session_cwd" --system-prompt "wake baked prompt"
+  [ "$status" -eq 0 ]
+  new_id=$(echo "$output" | head -1)
+
+  local stub_dir="$BATS_TEST_TMPDIR/stub-shell-pi-baked-prompt"
+  local shell_capture="$BATS_TEST_TMPDIR/shell-argv-baked-prompt"
+  local prompt_capture="$BATS_TEST_TMPDIR/pi-prompt-baked-prompt"
+  stub_shell_exec_payload "$stub_dir" "$shell_capture"
+  mkdir -p "$stub_dir"
+  cat > "$stub_dir/pi" <<STUB
+#!/usr/bin/env bash
+set -euo pipefail
+prompt_file=""
+while [ "\$#" -gt 0 ]; do
+  if [ "\$1" = "--append-system-prompt" ]; then
+    prompt_file="\$2"
+    break
+  fi
+  shift
+done
+[ -n "\$prompt_file" ]
+cat "\$prompt_file" > "$prompt_capture"
+exit 0
+STUB
+  chmod +x "$stub_dir/pi"
+
+  unset AGENT_IDENTITY
+  PATH="$stub_dir:$PATH" run sessions wake wake-baked-prompt --background --model "openai-codex/gpt-5.5"
+  [ "$status" -eq 0 ]
+  [ -f "$shell_capture" ]
+  [ -f "$prompt_capture" ]
+  grep -q "wake baked prompt" "$prompt_capture"
+  jq -e 'select(.type == "wake" and .headless == false)' "$(find "$PI_DIR/agent/sessions" -name "*${new_id}.jsonl")"
+}
+
 @test "wake --model is advertised in --help" {
   run sessions wake --help
   [ "$status" -eq 0 ]

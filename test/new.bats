@@ -118,6 +118,52 @@ teardown() { teardown_test_sessions; }
   ! jq -e 'select(.type == "model_change")' "$new_file"
 }
 
+@test "new --system-prompt stores baked system prompt entry" {
+  run sessions new --cwd "$BATS_TEST_TMPDIR" --system-prompt "You are a stateless drone"
+  [ "$status" -eq 0 ]
+  new_id=$(echo "$output" | head -1)
+  new_file=$(find "$PI_DIR/agent/sessions" -name "*${new_id}.jsonl")
+  sed -n '3p' "$new_file" | jq -e '.type == "system_prompt" and .content == "You are a stateless drone"'
+}
+
+@test "new --system-prompt-file stores file content" {
+  cat > "$BATS_TEST_TMPDIR/prompt.md" <<'EOF'
+You are a profile-backed worker.
+Keep output concise.
+EOF
+  run sessions new --cwd "$BATS_TEST_TMPDIR" --system-prompt-file "$BATS_TEST_TMPDIR/prompt.md"
+  [ "$status" -eq 0 ]
+  new_id=$(echo "$output" | head -1)
+  new_file=$(find "$PI_DIR/agent/sessions" -name "*${new_id}.jsonl")
+  jq -r 'select(.type == "system_prompt") | .content' "$new_file" | grep -q "profile-backed worker"
+  jq -r 'select(.type == "system_prompt") | .content' "$new_file" | grep -q "Keep output concise"
+}
+
+@test "new --system-prompt-file stores empty file as an explicit baked prompt" {
+  : > "$BATS_TEST_TMPDIR/empty-prompt.md"
+
+  run sessions new --cwd "$BATS_TEST_TMPDIR" --system-prompt-file "$BATS_TEST_TMPDIR/empty-prompt.md"
+  [ "$status" -eq 0 ]
+  new_id=$(echo "$output" | head -1)
+  new_file=$(find "$PI_DIR/agent/sessions" -name "*${new_id}.jsonl")
+  jq -e 'select(.type == "system_prompt" and .content == "")' "$new_file"
+}
+
+@test "new errors with nonexistent system prompt file" {
+  run sessions new --cwd "$BATS_TEST_TMPDIR" --system-prompt-file "/tmp/nonexistent-$$"
+  [ "$status" -eq 1 ]
+  echo "$output" | grep -q "system prompt file not found"
+}
+
+@test "new with system prompt and context links context after prompt" {
+  run sessions new --cwd "$BATS_TEST_TMPDIR" --system-prompt "system" --context "context"
+  [ "$status" -eq 0 ]
+  new_id=$(echo "$output" | head -1)
+  new_file=$(find "$PI_DIR/agent/sessions" -name "*${new_id}.jsonl")
+  prompt_id=$(jq -r 'select(.type == "system_prompt") | .id' "$new_file")
+  jq -e --arg prompt_id "$prompt_id" 'select(.type == "message") | .parentId == $prompt_id' "$new_file"
+}
+
 @test "new rejects --model" {
   run sessions new --cwd "$BATS_TEST_TMPDIR" --model "openai-codex/gpt-5.5"
   [ "$status" -ne 0 ]

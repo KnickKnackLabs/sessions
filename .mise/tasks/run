@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-#MISE description="Run an agent session with streaming output, timeout, and ABORT detection"
+#MISE description="Internal executor for sessions wake (advanced/compatibility)"
 #MISE quiet=true
+#MISE hide=true
 #USAGE arg "[message]" default="" help="Message for the agent (required for --headless, optional for interactive)"
 #USAGE flag "--system-prompt-file <file>" default="" help="Path to system prompt file"
 #USAGE flag "--timeout <seconds>" default="" help="Timeout in seconds (default: no timeout)"
@@ -29,6 +30,84 @@ PROMPT_TEMPLATES="${usage_prompt_templates:-false}"
 # shellcheck source=../../lib/harness-env.sh
 source "$MISE_CONFIG_ROOT/lib/harness-env.sh"
 
+PROMPT_TEMP_FILE=""
+# shellcheck disable=SC2329  # Invoked by EXIT trap below.
+cleanup_prompt_temp() {
+  if [ -n "$PROMPT_TEMP_FILE" ]; then
+    rm -f "$PROMPT_TEMP_FILE"
+  fi
+}
+trap cleanup_prompt_temp EXIT
+
+latest_session_system_prompt() {
+  local session_file="$1"
+  local jq_output
+  local jq_status
+
+  if [ ! -f "$session_file" ]; then
+    echo "Error: session file not found: $session_file" >&2
+    return 2
+  fi
+
+  if jq_output=$(jq -s -e -r '[.[] | select(.type == "system_prompt") | .content] | if length == 0 then empty else last end' "$session_file" 2>&1); then
+    printf '%s' "$jq_output"
+    return 0
+  else
+    jq_status=$?
+  fi
+
+  if [ "$jq_status" -eq 4 ]; then
+    return 1
+  fi
+
+  echo "Error: failed to read session system prompt from $session_file" >&2
+  printf '%s\n' "$jq_output" >&2
+  return 2
+}
+
+write_prompt_temp() {
+  PROMPT_TEMP_FILE=$(mktemp)
+  printf '%s\n' "$1" > "$PROMPT_TEMP_FILE"
+  SYSTEM_PROMPT_FILE="$PROMPT_TEMP_FILE"
+}
+
+run_and_exit() {
+  set +e
+  (
+    trap - INT TERM HUP QUIT
+    exec "$@"
+  ) <&0 &
+  local child_pid=$!
+
+  # shellcheck disable=SC2329  # Invoked by signal traps below.
+  forward_child_signal() {
+    local sig="$1"
+    local sig_num
+    trap - INT TERM HUP QUIT
+    if ! kill -s "$sig" "$child_pid" 2>/dev/null; then
+      :
+    fi
+    wait "$child_pid"
+    local rc=$?
+    if [ "$rc" -eq 127 ]; then
+      sig_num=$(kill -l "$sig" 2>/dev/null || echo 0)
+      rc=$((128 + sig_num))
+    fi
+    exit "$rc"
+  }
+
+  trap 'forward_child_signal INT' INT
+  trap 'forward_child_signal TERM' TERM
+  trap 'forward_child_signal HUP' HUP
+  trap 'forward_child_signal QUIT' QUIT
+
+  wait "$child_pid"
+  local rc=$?
+  trap - INT TERM HUP QUIT
+  set -e
+  exit "$rc"
+}
+
 if [ "$HEADLESS" = "true" ] && [ -z "$MESSAGE" ]; then
   echo "Error: --headless requires a message" >&2
   echo "Usage: sessions run --headless --system-prompt-file <path> --model <provider/model> [options] \"message\"" >&2
@@ -46,12 +125,29 @@ if [[ "$MODEL" != */* ]]; then
   exit 1
 fi
 
-# If no system prompt file provided but AGENT_IDENTITY is in env, write it to a temp file
-if [ -z "$SYSTEM_PROMPT_FILE" ] && [ -n "${AGENT_IDENTITY:-}" ]; then
-  SYSTEM_PROMPT_FILE=$(mktemp)
-  echo "$AGENT_IDENTITY" > "$SYSTEM_PROMPT_FILE"
+# Prompt resolution order:
+#   1. Explicit --system-prompt-file
+#   2. Latest system_prompt entry baked into --session by `sessions new`
+#   3. Legacy AGENT_IDENTITY environment fallback
+if [ -z "$SYSTEM_PROMPT_FILE" ] && [ -n "$SESSION" ]; then
+  if SESSION_SYSTEM_PROMPT=$(latest_session_system_prompt "$SESSION"); then
+    write_prompt_temp "$SESSION_SYSTEM_PROMPT"
+  else
+    SESSION_PROMPT_STATUS=$?
+    if [ "$SESSION_PROMPT_STATUS" -ne 1 ]; then
+      exit "$SESSION_PROMPT_STATUS"
+    fi
+  fi
+  unset SESSION_SYSTEM_PROMPT SESSION_PROMPT_STATUS
+fi
 
-  trap 'rm -f "$SYSTEM_PROMPT_FILE"' EXIT
+if [ -z "$SYSTEM_PROMPT_FILE" ] && [ -n "${AGENT_IDENTITY:-}" ]; then
+  write_prompt_temp "$AGENT_IDENTITY"
+fi
+
+if [ -z "$SYSTEM_PROMPT_FILE" ]; then
+  echo "Error: system prompt required (--system-prompt-file, session system_prompt, or AGENT_IDENTITY)" >&2
+  exit 1
 fi
 
 # Append dispatch context (outside the conditional — applies to any prompt file)
@@ -74,11 +170,6 @@ HEADLESS_EOF
 fi
 
 run_interactive_without_message() {
-  if [ -z "$SYSTEM_PROMPT_FILE" ]; then
-    echo "Error: --system-prompt-file is required" >&2
-    exit 1
-  fi
-
   if [ ! -f "$SYSTEM_PROMPT_FILE" ]; then
     echo "Error: System prompt file not found: $SYSTEM_PROMPT_FILE" >&2
     exit 1
@@ -119,10 +210,10 @@ run_interactive_without_message() {
       echo "Error: timeout command is required for --timeout" >&2
       exit 1
     fi
-    exec timeout "$TIMEOUT" pi "${pi_args[@]}"
+    run_and_exit timeout "$TIMEOUT" pi "${pi_args[@]}"
   fi
 
-  exec pi "${pi_args[@]}"
+  run_and_exit pi "${pi_args[@]}"
 }
 
 if [ -z "$MESSAGE" ]; then
@@ -149,4 +240,4 @@ source "$MISE_CONFIG_ROOT/lib/ensure-deps.sh"
 ensure_cli_deps "$CLI_DIR"
 
 cd "$CLI_DIR"
-exec mix sessions "${CLI_ARGS[@]}" "$MESSAGE"
+run_and_exit mix sessions "${CLI_ARGS[@]}" "$MESSAGE"
