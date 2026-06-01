@@ -109,6 +109,28 @@ assert obj['sessions'][0]['session_id'] == '$USAGE_SESSION_2'
 "
 }
 
+@test "usage applies metadata filters before the default aggregate limit" {
+  for i in $(seq -w 1 20); do
+    cat > "${PROJECT_DIR}2026-03-16T12-${i}-00-000Z_other-${i}.jsonl" <<JSONL
+{"type":"session","version":3,"id":"other-${i}","timestamp":"2026-03-16T12:${i}:00.000Z","cwd":"/test/project","meta":{"agent":{"name":"other"}}}
+{"type":"model_change","id":"mc1","parentId":null,"timestamp":"2026-03-16T12:${i}:00.001Z","provider":"openai","modelId":"model-a"}
+{"type":"message","id":"a1","parentId":"mc1","timestamp":"2026-03-16T12:${i}:01.000Z","message":{"role":"assistant","content":[{"type":"text","text":"other"}],"provider":"openai","model":"model-a","stopReason":"stop","usage":{"input":1,"output":1,"cacheRead":0,"cacheWrite":0,"totalTokens":2,"cost":{"input":0,"output":0,"cacheRead":0,"cacheWrite":0,"total":0}}}}
+JSONL
+    touch "${PROJECT_DIR}2026-03-16T12-${i}-00-000Z_other-${i}.jsonl"
+  done
+
+  run sessions usage --filter session.meta.agent.name=usage-tester --json
+
+  [ "$status" -eq 0 ]
+  echo "$output" | python3 -c "
+import json, sys
+obj = json.load(sys.stdin)
+assert len(obj['sessions']) == 1
+assert obj['sessions'][0]['session_id'] == '$USAGE_SESSION'
+assert obj['totals']['calls'] == 3
+"
+}
+
 @test "usage clears inherited optional usage defaults" {
   run env \
     usage_today=true \
