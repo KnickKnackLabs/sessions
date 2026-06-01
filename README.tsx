@@ -56,6 +56,9 @@ const lifecycle = [
   "┃ assistant  Found 3 issues in error handling.",
   "┃ assistant  Posted review to #scout-report.",
   "",
+  "$ sessions wait review/pr-50 --assistant-only --timeout 120",
+  "┃ assistant  Re-ran CI; all checks are green.",
+  "",
   "$ sessions usage review/pr-50",
   "┃ total  1.2M tokens  $0.84",
   "",
@@ -73,6 +76,7 @@ const stack = [
   "              └─ sessions run",
   "                   └─ pi    harness — processes message or opens interactively",
   "  sessions read             observe the transcript",
+  "  sessions wait             block until new transcript messages arrive",
   "  sessions usage            inspect recorded tokens + costs",
   "  sessions wake (again)     re-enter with corrections",
 ].join("\n");
@@ -135,6 +139,9 @@ sessions list
 
 # Read a transcript (by name or ID prefix)
 sessions read review/pr-50
+
+# Wait for the next assistant message
+sessions wait review/pr-50 --assistant-only --timeout 120
 
 # Search across all sessions
 sessions search "error handling"
@@ -302,6 +309,18 @@ sessions read e96bd43a --from -5           # last 5 messages
 sessions read e96bd43a --tools             # include tool calls`}</CodeBlock>
 
       <Paragraph>
+        <Code>sessions wait</Code>
+        {" snapshots the current transcript and blocks until new matching messages arrive. It is useful for supervising long-running or parallel sessions without hand-written sleep loops."}
+      </Paragraph>
+
+      <CodeBlock lang="bash">{`sessions wait e96bd43a                         # next non-tool message
+sessions wait e96bd43a --count 10              # wait for 10 messages
+sessions wait e96bd43a --assistant-only        # ignore user/operator messages
+sessions wait e96bd43a --match "done|failed"   # wait for a regex match
+sessions wait e96bd43a --tools                 # include tool calls/results
+sessions wait e96bd43a --timeout 120 --json`}</CodeBlock>
+
+      <Paragraph>
         <Code>sessions usage</Code>
         {" reports recorded token usage and cost. It works for one session, or across recent/date-filtered sessions, and attributes usage by the model active at each turn so model switches are visible."}
       </Paragraph>
@@ -331,7 +350,7 @@ mise run test`}</CodeBlock>
         <Link href="https://github.com/bats-core/bats-core">{`BATS ${batsVersion}`}</Link>
         {`. Tasks are bash scripts (session creation, wake, metadata) and Python scripts with `}
         <Link href="https://github.com/Textualize/rich">Rich</Link>
-        {` output (list, read, usage, inspect, search). The JSONL parsing library is ${libLines} lines of Python in `}
+        {` output (list, read, wait, usage, inspect, search). The JSONL parsing library is ${libLines} lines of Python in `}
         <Code>lib/</Code>
         {"."}
       </Paragraph>
@@ -344,6 +363,7 @@ mise run test`}</CodeBlock>
 │   ├── meta         # Read session header metadata
 │   ├── list         # List + filter sessions (Rich tables)
 │   ├── read         # Windowed transcript reader
+│   ├── wait         # Wait for new transcript messages
 │   ├── usage        # Recorded token/cost aggregation
 │   ├── search       # Full-text regex across transcripts
 │   ├── inspect      # Forensic metadata (duration, tools, model)
