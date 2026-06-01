@@ -1,12 +1,12 @@
 #!/usr/bin/env -S uv run --script
 #MISE description="Read a session transcript (replaces show + tail)"
 #USAGE arg "<session_id>" help="Session ID (prefix match supported)"
-#USAGE flag "--from <n>" help="Start at message N (1-indexed, negative counts from end)"
-#USAGE flag "--to <n>" help="End at message N (inclusive, negative counts from end)"
-#USAGE flag "--last <n>" help="Show only the last N messages"
-#USAGE flag "--tools" help="Include tool_use/tool_result blocks (hidden by default)"
-#USAGE flag "--user-only" help="Show only user messages"
-#USAGE flag "--json" help="Output as JSON"
+#USAGE flag "--from <n>" default="" help="Start at message N (1-indexed, negative counts from end)"
+#USAGE flag "--to <n>" default="" help="End at message N (inclusive, negative counts from end)"
+#USAGE flag "--last <n>" default="" help="Show only the last N messages"
+#USAGE flag "--tools" default=#false help="Include tool_use/tool_result blocks (hidden by default)"
+#USAGE flag "--user-only" default=#false help="Show only user messages"
+#USAGE flag "--json" default=#false help="Output as JSON"
 # /// script
 # requires-python = ">=3.10"
 # dependencies = ["rich"]
@@ -30,6 +30,7 @@ from format import (
     format_time,
 )
 
+from messages import filter_text_messages, split_message
 from rich.text import Text
 
 session_id = os.environ.get("usage_session_id", "")
@@ -53,48 +54,13 @@ meta = session.metadata()
 messages = session.text_messages()
 
 
-def is_tool_line(line: str) -> bool:
-    """Check if a line is a tool_use or tool_result marker."""
-    stripped = line.strip()
-    return stripped.startswith("[tool_use:") or stripped.startswith("[tool_result:")
-
-
-def filter_message(text: str) -> str:
-    """Strip tool lines from message text. Returns empty string if nothing left."""
-    lines = text.split("\n")
-    lines = [l for l in lines if not is_tool_line(l)]
-    return "\n".join(lines).strip()
-
-
-def split_message(text: str) -> tuple[list[str], list[str]]:
-    """Split message text into (content_lines, tool_lines)."""
-    content = []
-    tools = []
-    for line in text.split("\n"):
-        if is_tool_line(line):
-            tools.append(line.strip())
-        else:
-            content.append(line)
-    return content, tools
-
-
 # --- Filter messages ---
 
-filtered = []
-for idx, role, ts, text in messages:
-    if user_only and role != "user":
-        continue
-
-    if include_tools:
-        # Keep everything, we'll style tool lines differently
-        if not text.strip():
-            continue
-        filtered.append((idx, role, ts, text))
-    else:
-        cleaned = filter_message(text)
-        if not cleaned:
-            continue
-        filtered.append((idx, role, ts, cleaned))
+filtered = filter_text_messages(
+    messages,
+    include_tools=include_tools,
+    user_only=user_only,
+)
 
 # --- Apply windowing (--from, --to, --last) ---
 

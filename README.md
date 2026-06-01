@@ -8,8 +8,8 @@ Create sessions with structured metadata, wake agents into them,
 observe transcripts in real time, and query your history.
 
 ![lang: bash + python](https://img.shields.io/badge/lang-bash%20%2B%20python-4EAA25?style=flat&logo=gnubash&logoColor=white)
-[![tests: 252 passing](https://img.shields.io/badge/tests-252%20passing-brightgreen?style=flat)](test/)
-![commands: 14](https://img.shields.io/badge/commands-14-blue?style=flat)
+[![tests: 262 passing](https://img.shields.io/badge/tests-262%20passing-brightgreen?style=flat)](test/)
+![commands: 15](https://img.shields.io/badge/commands-15-blue?style=flat)
 ![license: MIT](https://img.shields.io/badge/license-MIT-blue?style=flat)
 
 </div>
@@ -24,6 +24,9 @@ Woke session 'review/pr-50'
 $ sessions read review/pr-50 --last 3
 ┃ assistant  Found 3 issues in error handling.
 ┃ assistant  Posted review to #scout-report.
+
+$ sessions wait review/pr-50 --assistant-only --timeout 120
+┃ assistant  Re-ran CI; all checks are green.
 
 $ sessions list --filter session.meta.agent.name=ikma
   e96bd43a  review/pr-50   12m   3m ago   claude-sonnet-4   8
@@ -42,6 +45,9 @@ sessions list
 
 # Read a transcript (by name or ID prefix)
 sessions read review/pr-50
+
+# Wait for the next assistant message
+sessions wait review/pr-50 --assistant-only --timeout 120
 
 # Search across all sessions
 sessions search "error handling"
@@ -62,6 +68,7 @@ Sessions aren't just transcript files agents leave behind — they're managed ar
               └─ sessions run
                    └─ pi    harness — processes message or opens interactively
   sessions read             observe the transcript
+  sessions wait             block until new transcript messages arrive
   sessions wake (again)     re-enter with corrections
 ```
 
@@ -166,6 +173,17 @@ sessions read e96bd43a --from -5           # last 5 messages
 sessions read e96bd43a --tools             # include tool calls
 ```
 
+`sessions wait` snapshots the current transcript and blocks until new matching messages arrive. It is useful for supervising long-running or parallel sessions without hand-written sleep loops.
+
+```bash
+sessions wait e96bd43a                         # next non-tool message
+sessions wait e96bd43a --count 10              # wait for 10 messages
+sessions wait e96bd43a --assistant-only        # ignore user/operator messages
+sessions wait e96bd43a --match "done|failed"   # wait for a regex match
+sessions wait e96bd43a --tools                 # include tool calls/results
+sessions wait e96bd43a --timeout 120 --json
+```
+
 For existing sessions you want to work with elsewhere, `copy` duplicates a session with its full conversation history plus a fork notice. The copy gets a new ID and can be woken independently — useful for handing off context between agents.
 
 ```bash
@@ -180,7 +198,7 @@ cd sessions && mise trust && mise install
 mise run test
 ```
 
-**252 tests** across 16 suites, using [BATS 1.13.0](https://github.com/bats-core/bats-core). Tasks are bash scripts (session creation, wake, metadata) and Python scripts with [Rich](https://github.com/Textualize/rich) output (list, read, inspect, search). The JSONL parsing library is 485 lines of Python in `lib/`.
+**262 tests** across 17 suites, using [BATS 1.13.0](https://github.com/bats-core/bats-core). Tasks are bash scripts (session creation, wake, metadata) and Python scripts with [Rich](https://github.com/Textualize/rich) output (list, read, wait, inspect, search). The JSONL parsing library is 558 lines of Python in `lib/`.
 
 <details>
 <summary><b>Project structure</b></summary>
@@ -193,6 +211,7 @@ sessions/
 │   ├── meta         # Read session header metadata
 │   ├── list         # List + filter sessions (Rich tables)
 │   ├── read         # Windowed transcript reader
+│   ├── wait         # Wait for new transcript messages
 │   ├── search       # Full-text regex across transcripts
 │   ├── inspect      # Forensic metadata (duration, tools, model)
 │   ├── copy         # Duplicate sessions for handoff
@@ -210,7 +229,7 @@ sessions/
 │   ├── shell.sh        # Shell helpers
 │   └── harness/        # Per-harness adapters (pi, …)
 └── test/
-    └── *.bats          # 252 tests
+    └── *.bats          # 262 tests
 ```
 
 </details>

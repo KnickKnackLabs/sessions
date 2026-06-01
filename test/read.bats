@@ -46,6 +46,21 @@ teardown() { teardown_test_sessions; }
   ! echo "$output" | grep -q "\[tool_result:"
 }
 
+@test "read clears inherited optional usage defaults" {
+  run env \
+    usage_tools=true \
+    usage_user_only=true \
+    usage_json=true \
+    usage_last=1 \
+    bash -c 'sessions read "$1"' _ "$SESSION_1"
+
+  [ "$status" -eq 0 ]
+  echo "$output" | grep -q "Assistant"
+  echo "$output" | grep -q "hello.*help"
+  ! echo "$output" | grep -q "\[tool_use:"
+  ! echo "$output" | python3 -m json.tool >/dev/null 2>&1
+}
+
 @test "read --tools shows tool blocks" {
   run sessions read "$SESSION_1" --tools
   [ "$status" -eq 0 ]

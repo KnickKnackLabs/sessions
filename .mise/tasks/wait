@@ -1,0 +1,198 @@
+#!/usr/bin/env -S uv run --script
+#MISE description="Wait for new messages in a session transcript"
+#USAGE arg "<session_id>" help="Session ID (prefix match supported)"
+#USAGE flag "--count <n>" default="1" help="Number of new matching messages to wait for (default: 1)"
+#USAGE flag "--timeout <seconds>" default="0" help="Maximum seconds to wait; 0 means no timeout"
+#USAGE flag "--interval <seconds>" default="1" help="Polling interval in seconds (default: 1)"
+#USAGE flag "--tools" default=#false help="Include tool_use/tool_result blocks (hidden by default)"
+#USAGE flag "--user-only" default=#false help="Wait only for user messages"
+#USAGE flag "--assistant-only" default=#false help="Wait only for assistant messages"
+#USAGE flag "--match <regex>" default="" help="Wait only for messages matching a regex"
+#USAGE flag "--json" default=#false help="Output as JSON"
+# /// script
+# requires-python = ">=3.10"
+# dependencies = ["rich"]
+# ///
+
+import json
+import os
+import re
+import sys
+import time
+
+sys.path.insert(0, os.environ["MISE_CONFIG_ROOT"] + "/lib")
+import parse
+from format import (
+    STYLE_DIM,
+    STYLE_ID,
+    STYLE_ROLE_ASSISTANT,
+    STYLE_ROLE_USER,
+    STYLE_TOOL,
+    console,
+    format_time,
+)
+from messages import filter_text_messages, split_message
+from rich.text import Text
+
+session_id = os.environ.get("usage_session_id", "")
+if not session_id:
+    print("Usage: sessions wait <session_id>", file=sys.stderr)
+    sys.exit(1)
+
+try:
+    target_count = int(os.environ.get("usage_count", "1"))
+except ValueError:
+    print("Error: --count must be an integer", file=sys.stderr)
+    sys.exit(1)
+if target_count < 1:
+    print("Error: --count must be at least 1", file=sys.stderr)
+    sys.exit(1)
+
+try:
+    timeout_seconds = float(os.environ.get("usage_timeout", "0"))
+except ValueError:
+    print("Error: --timeout must be a number", file=sys.stderr)
+    sys.exit(1)
+if timeout_seconds < 0:
+    print("Error: --timeout must be non-negative", file=sys.stderr)
+    sys.exit(1)
+
+try:
+    interval_seconds = float(os.environ.get("usage_interval", "1"))
+except ValueError:
+    print("Error: --interval must be a number", file=sys.stderr)
+    sys.exit(1)
+if interval_seconds <= 0:
+    print("Error: --interval must be greater than 0", file=sys.stderr)
+    sys.exit(1)
+
+include_tools = os.environ.get("usage_tools", "") == "true"
+user_only = os.environ.get("usage_user_only", "") == "true"
+assistant_only = os.environ.get("usage_assistant_only", "") == "true"
+match_raw = os.environ.get("usage_match", "")
+output_json = os.environ.get("usage_json", "") == "true"
+
+if user_only and assistant_only:
+    print("Error: --user-only and --assistant-only are mutually exclusive", file=sys.stderr)
+    sys.exit(1)
+
+pattern = None
+if match_raw:
+    try:
+        pattern = re.compile(match_raw, re.IGNORECASE)
+    except re.error as e:
+        print(f"Invalid regex: {e}", file=sys.stderr)
+        sys.exit(1)
+
+filepath = parse.find_session(session_id)
+
+
+def load_text_messages():
+    return parse.load(filepath).text_messages()
+
+
+def latest_index(messages):
+    if not messages:
+        return -1
+    return max(idx for idx, _role, _ts, _text in messages)
+
+
+def filter_new_messages(messages, cursor):
+    new_messages = [m for m in messages if m[0] > cursor]
+    return filter_text_messages(
+        new_messages,
+        include_tools=include_tools,
+        user_only=user_only,
+        assistant_only=assistant_only,
+        pattern=pattern,
+    )
+
+
+def message_to_dict(message):
+    idx, role, ts, text = message
+    return {
+        "index": idx,
+        "role": role,
+        "timestamp": ts,
+        "text": text,
+    }
+
+
+def print_json(messages):
+    print(json.dumps({
+        "session_id": session_id_full,
+        "messages": [message_to_dict(m) for m in messages],
+    }, indent=2))
+
+
+def print_text(messages):
+    title = Text()
+    title.append(session_id_full[:8], style=STYLE_ID)
+    title.append(f"  waited for {len(messages)} new message", style=STYLE_DIM)
+    if len(messages) != 1:
+        title.append("s", style=STYLE_DIM)
+
+    console.print()
+    console.print(title)
+    console.rule(style="dim")
+    console.print()
+
+    for i, (_idx, role, ts, text) in enumerate(messages):
+        time_str = format_time(ts)
+        header = Text()
+        if role == "user":
+            header.append("👤 ", style=STYLE_ROLE_USER)
+            header.append("User", style=f"bold {STYLE_ROLE_USER}")
+        else:
+            header.append("🤖 ", style=STYLE_ROLE_ASSISTANT)
+            header.append("Assistant", style=f"bold {STYLE_ROLE_ASSISTANT}")
+        header.append(f"  {time_str}", style=STYLE_DIM)
+        console.print(header)
+
+        if include_tools:
+            content_lines, tool_lines = split_message(text)
+            content_text = "\n".join(content_lines).strip()
+            if content_text:
+                console.print(content_text, soft_wrap=True)
+            for tool_line in tool_lines:
+                console.print(Text(tool_line, style=STYLE_TOOL))
+        else:
+            console.print(text, soft_wrap=True)
+
+        if i < len(messages) - 1:
+            console.print()
+
+
+initial_messages = load_text_messages()
+cursor = latest_index(initial_messages)
+session_id_full = parse.load(filepath).session_id
+matched = []
+deadline = time.monotonic() + timeout_seconds if timeout_seconds > 0 else None
+
+while len(matched) < target_count:
+    sleep_for = interval_seconds
+    if deadline is not None:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            print(
+                f"Timed out waiting for {target_count} new matching message(s) in {session_id_full[:8]}",
+                file=sys.stderr,
+            )
+            sys.exit(124)
+        sleep_for = min(interval_seconds, remaining)
+
+    time.sleep(sleep_for)
+
+    messages = load_text_messages()
+    new_matches = filter_new_messages(messages, cursor)
+    if messages:
+        cursor = max(cursor, latest_index(messages))
+
+    if new_matches:
+        remaining = target_count - len(matched)
+        matched.extend(new_matches[:remaining])
+
+if output_json:
+    print_json(matched)
+else:
+    print_text(matched)
