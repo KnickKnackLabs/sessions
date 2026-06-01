@@ -59,6 +59,9 @@ const lifecycle = [
   "$ sessions wait review/pr-50 --assistant-only --timeout 120",
   "┃ assistant  Re-ran CI; all checks are green.",
   "",
+  "$ sessions ps",
+  "  e96bd43a  ikma/den  12345  live  3m ago  openai-codex/gpt-5.5",
+  "",
   "$ sessions usage review/pr-50",
   "┃ total  1.2M tokens  $0.84",
   "",
@@ -77,6 +80,7 @@ const stack = [
   "                   └─ pi    harness — processes message or opens interactively",
   "  sessions read             observe the transcript",
   "  sessions wait             block until new transcript messages arrive",
+  "  sessions ps               show live local session processes",
   "  sessions usage            inspect recorded tokens + costs",
   "  sessions wake (again)     re-enter with corrections",
 ].join("\n");
@@ -146,6 +150,9 @@ sessions wait review/pr-50 --assistant-only --timeout 120
 # Search across all sessions
 sessions search "error handling"
 
+# Show live local session processes
+sessions ps
+
 # Show recorded token usage and cost
 sessions usage review/pr-50
 
@@ -168,6 +175,17 @@ sessions inspect e96bd43a`}</CodeBlock>
         {"Each wake event is a first-class entry in the session file — timestamped, attributed, with its own metadata. A session that's been woken three times has three "}
         <Code>wake</Code>
         {" entries you can filter on. The full conversation history carries forward, so the agent sees everything that happened before."}
+      </Paragraph>
+
+      <Paragraph>
+        <Code>sessions run</Code>
+        {" also records generic "}
+        <Code>process_start</Code>
+        {" / "}
+        <Code>process_exit</Code>
+        {" entries for managed sessions. "}
+        <Code>sessions ps</Code>
+        {" uses those entries plus PID start-time verification, so a missing exit entry from a crash does not make a stale or reused PID look live."}
       </Paragraph>
 
       <CodeBlock lang="bash">{`# Create a named session with a baked system prompt, metadata, and context
@@ -321,6 +339,19 @@ sessions wait e96bd43a --tools                 # include tool calls/results
 sessions wait e96bd43a --timeout 120 --json`}</CodeBlock>
 
       <Paragraph>
+        <Code>sessions ps</Code>
+        {" shows currently-live local session processes recorded by "}
+        <Code>sessions run</Code>
+        {". By default it hides exited processes and dead missing-exit records; pass "}
+        <Code>--all</Code>
+        {" to inspect those records too."}
+      </Paragraph>
+
+      <CodeBlock lang="bash">{`sessions ps                  # live managed session processes
+sessions ps --project k7r2   # filter by project/session path
+sessions ps --all --json     # include exited/dead records`}</CodeBlock>
+
+      <Paragraph>
         <Code>sessions usage</Code>
         {" reports recorded token usage and cost. It works for one session, or across recent/date-filtered sessions, and attributes usage by the model active at each turn so model switches are visible."}
       </Paragraph>
@@ -350,7 +381,7 @@ mise run test`}</CodeBlock>
         <Link href="https://github.com/bats-core/bats-core">{`BATS ${batsVersion}`}</Link>
         {`. Tasks are bash scripts (session creation, wake, metadata) and Python scripts with `}
         <Link href="https://github.com/Textualize/rich">Rich</Link>
-        {` output (list, read, wait, usage, inspect, search). The JSONL parsing library is ${libLines} lines of Python in `}
+        {` output (list, read, wait, usage, inspect, search). The shared Python support library is ${libLines} lines in `}
         <Code>lib/</Code>
         {"."}
       </Paragraph>
@@ -364,6 +395,7 @@ mise run test`}</CodeBlock>
 │   ├── list         # List + filter sessions (Rich tables)
 │   ├── read         # Windowed transcript reader
 │   ├── wait         # Wait for new transcript messages
+│   ├── ps           # Live local process view
 │   ├── usage        # Recorded token/cost aggregation
 │   ├── search       # Full-text regex across transcripts
 │   ├── inspect      # Forensic metadata (duration, tools, model)

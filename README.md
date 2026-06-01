@@ -8,8 +8,8 @@ Create sessions with structured metadata, wake agents into them,
 observe transcripts in real time, and query your history.
 
 ![lang: bash + python](https://img.shields.io/badge/lang-bash%20%2B%20python-4EAA25?style=flat&logo=gnubash&logoColor=white)
-[![tests: 270 passing](https://img.shields.io/badge/tests-270%20passing-brightgreen?style=flat)](test/)
-![commands: 16](https://img.shields.io/badge/commands-16-blue?style=flat)
+[![tests: 278 passing](https://img.shields.io/badge/tests-278%20passing-brightgreen?style=flat)](test/)
+![commands: 17](https://img.shields.io/badge/commands-17-blue?style=flat)
 ![license: MIT](https://img.shields.io/badge/license-MIT-blue?style=flat)
 
 </div>
@@ -27,6 +27,9 @@ $ sessions read review/pr-50 --last 3
 
 $ sessions wait review/pr-50 --assistant-only --timeout 120
 ┃ assistant  Re-ran CI; all checks are green.
+
+$ sessions ps
+  e96bd43a  ikma/den  12345  live  3m ago  openai-codex/gpt-5.5
 
 $ sessions usage review/pr-50
 ┃ total  1.2M tokens  $0.84
@@ -55,6 +58,9 @@ sessions wait review/pr-50 --assistant-only --timeout 120
 # Search across all sessions
 sessions search "error handling"
 
+# Show live local session processes
+sessions ps
+
 # Show recorded token usage and cost
 sessions usage review/pr-50
 
@@ -75,11 +81,14 @@ Sessions aren't just transcript files agents leave behind — they're managed ar
                    └─ pi    harness — processes message or opens interactively
   sessions read             observe the transcript
   sessions wait             block until new transcript messages arrive
+  sessions ps               show live local session processes
   sessions usage            inspect recorded tokens + costs
   sessions wake (again)     re-enter with corrections
 ```
 
 Each wake event is a first-class entry in the session file — timestamped, attributed, with its own metadata. A session that's been woken three times has three `wake` entries you can filter on. The full conversation history carries forward, so the agent sees everything that happened before.
+
+`sessions run` also records generic `process_start` / `process_exit` entries for managed sessions. `sessions ps` uses those entries plus PID start-time verification, so a missing exit entry from a crash does not make a stale or reused PID look live.
 
 ```bash
 # Create a named session with a baked system prompt, metadata, and context
@@ -191,6 +200,14 @@ sessions wait e96bd43a --tools                 # include tool calls/results
 sessions wait e96bd43a --timeout 120 --json
 ```
 
+`sessions ps` shows currently-live local session processes recorded by `sessions run`. By default it hides exited processes and dead missing-exit records; pass `--all` to inspect those records too.
+
+```bash
+sessions ps                  # live managed session processes
+sessions ps --project k7r2   # filter by project/session path
+sessions ps --all --json     # include exited/dead records
+```
+
 `sessions usage` reports recorded token usage and cost. It works for one session, or across recent/date-filtered sessions, and attributes usage by the model active at each turn so model switches are visible.
 
 ```bash
@@ -214,7 +231,7 @@ cd sessions && mise trust && mise install
 mise run test
 ```
 
-**270 tests** across 18 suites, using [BATS 1.13.0](https://github.com/bats-core/bats-core). Tasks are bash scripts (session creation, wake, metadata) and Python scripts with [Rich](https://github.com/Textualize/rich) output (list, read, wait, usage, inspect, search). The JSONL parsing library is 632 lines of Python in `lib/`.
+**278 tests** across 20 suites, using [BATS 1.13.0](https://github.com/bats-core/bats-core). Tasks are bash scripts (session creation, wake, metadata) and Python scripts with [Rich](https://github.com/Textualize/rich) output (list, read, wait, usage, inspect, search). The shared Python support library is 826 lines in `lib/`.
 
 <details>
 <summary><b>Project structure</b></summary>
@@ -228,6 +245,7 @@ sessions/
 │   ├── list         # List + filter sessions (Rich tables)
 │   ├── read         # Windowed transcript reader
 │   ├── wait         # Wait for new transcript messages
+│   ├── ps           # Live local process view
 │   ├── usage        # Recorded token/cost aggregation
 │   ├── search       # Full-text regex across transcripts
 │   ├── inspect      # Forensic metadata (duration, tools, model)
@@ -246,7 +264,7 @@ sessions/
 │   ├── shell.sh        # Shell helpers
 │   └── harness/        # Per-harness adapters (pi, …)
 └── test/
-    └── *.bats          # 270 tests
+    └── *.bats          # 278 tests
 ```
 
 </details>
