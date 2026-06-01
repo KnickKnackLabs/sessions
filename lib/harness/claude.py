@@ -62,6 +62,10 @@ def text_messages(entries: list) -> list:
     raise Unsupported("text_messages", harness="claude")
 
 
+def usage_records(entries: list) -> list:
+    raise Unsupported("usage", harness="claude")
+
+
 # --- Location / lookup ---
 
 def sessions_dir() -> str:

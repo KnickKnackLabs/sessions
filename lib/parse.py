@@ -102,6 +102,9 @@ class Session:
     def text_messages(self) -> list:
         return self._h.text_messages(self.entries)
 
+    def usage_records(self) -> list:
+        return self._h.usage_records(self.entries)
+
 
 # --- Generic helpers (harness-agnostic) ---
 
