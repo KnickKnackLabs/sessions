@@ -12,7 +12,7 @@ process_start_token_for_pid() {
   local pid="$1"
   local token=""
   if [ -r "/proc/$pid/stat" ]; then
-    token=$(awk '{print $22}' "/proc/$pid/stat")
+    token=$(awk '{ stat=$0; sub(/^.*\) /, "", stat); split(stat, fields, " "); print fields[20] }' "/proc/$pid/stat")
     if [ -n "$token" ]; then
       printf 'linux:%s\n' "$token"
       return 0
@@ -50,6 +50,39 @@ assert row["process_start_id"] == "p-live", row
 assert row["status"] == "live", row
 assert row["pid"] > 0, row
 '
+}
+
+@test "ps handles Linux process names containing spaces" {
+  if [ ! -d /proc ]; then
+    skip "Linux /proc-only regression"
+  fi
+
+  local session_file sleep_bin spaced_sleep pid token
+  session_file=$(session_file_for "$SESSION_1")
+  sleep_bin=$(command -v sleep)
+  spaced_sleep="$BATS_TEST_TMPDIR/sleep space"
+  ln -s "$sleep_bin" "$spaced_sleep"
+  "$spaced_sleep" 5 &
+  pid=$!
+  token=$(process_start_token_for_pid "$pid")
+  [ -n "$token" ]
+
+  cat >> "$session_file" <<JSONL
+{"type":"process_start","id":"p-spaced","parentId":"u4","timestamp":"2026-03-14T10:31:00.000Z","pid":$pid,"pid_start_time":"$token","cwd":"$BATS_TEST_TMPDIR","command":"sleep space","harness":"pi","model":"openai-codex/gpt-5.5","headless":false}
+JSONL
+
+  run sessions ps --json
+  [ "$status" -eq 0 ]
+  echo "$output" | python3 -c '
+import json, sys
+rows = json.load(sys.stdin)
+assert len(rows) == 1, rows
+assert rows[0]["process_start_id"] == "p-spaced", rows
+assert rows[0]["status"] == "live", rows
+'
+
+  kill "$pid"
+  wait "$pid" 2>/dev/null || true
 }
 
 @test "ps hides dead missing-exit processes by default" {

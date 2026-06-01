@@ -57,10 +57,16 @@ def process_start_time_token(pid: int) -> str:
     proc_stat = f"/proc/{pid}/stat"
     try:
         with open(proc_stat, encoding="utf-8") as f:
-            fields = f.read().split()
-        if len(fields) >= 22 and fields[21]:
-            return f"linux:{fields[21]}"
-    except OSError:
+            stat = f.read()
+        # /proc/<pid>/stat field 2 (comm) is parenthesized and may contain
+        # spaces, so plain split() shifts field 22 for executables like
+        # "sleep space". Strip through the final ") " first; the remainder
+        # starts at field 3 (state), making starttime field 22 index 19.
+        _, rest = stat.rsplit(") ", 1)
+        fields = rest.split()
+        if len(fields) >= 20 and fields[19]:
+            return f"linux:{fields[19]}"
+    except (OSError, ValueError):
         pass
 
     try:
