@@ -91,6 +91,71 @@ def model(entries: list) -> str:
     return "unknown"
 
 
+def usage_records(entries: list) -> list:
+    """Normalize pi per-assistant-message usage records.
+
+    Pi stores usage on assistant message entries as ``message.usage``. Model
+    attribution is per record because sessions can switch models midway.
+    Prefer the assistant message's explicit model/provider, falling back to the
+    latest preceding model_change entry, then ``unknown``.
+    """
+    records = []
+    current_model = "unknown"
+    current_provider = ""
+
+    for idx, entry in enumerate(entries):
+        etype = entry.get("type")
+        if etype == "model_change":
+            current_model = entry.get("modelId") or current_model or "unknown"
+            current_provider = entry.get("provider") or current_provider
+            continue
+
+        if etype != "message":
+            continue
+        msg = entry.get("message", {})
+        if msg.get("role") != "assistant":
+            continue
+        usage = msg.get("usage")
+        if not isinstance(usage, dict):
+            continue
+
+        cost = usage.get("cost") if isinstance(usage.get("cost"), dict) else {}
+        records.append({
+            "index": idx,
+            "timestamp": entry.get("timestamp", ""),
+            "provider": msg.get("provider") or current_provider or "",
+            "model": msg.get("model") or current_model or "unknown",
+            "input": _number(usage.get("input")),
+            "output": _number(usage.get("output")),
+            "cacheRead": _number(usage.get("cacheRead")),
+            "cacheWrite": _number(usage.get("cacheWrite")),
+            "totalTokens": _number(usage.get("totalTokens")),
+            "cost": {
+                "input": _float(cost.get("input")),
+                "output": _float(cost.get("output")),
+                "cacheRead": _float(cost.get("cacheRead")),
+                "cacheWrite": _float(cost.get("cacheWrite")),
+                "total": _float(cost.get("total")),
+            },
+        })
+
+    return records
+
+
+def _number(value) -> int:
+    try:
+        return int(value or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _float(value) -> float:
+    try:
+        return float(value or 0.0)
+    except (TypeError, ValueError):
+        return 0.0
+
+
 def project(filepath: str) -> str:
     """Decode pi's project directory name into a readable owner/repo path.
 

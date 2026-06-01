@@ -1,0 +1,304 @@
+#!/usr/bin/env -S uv run --script
+#MISE description="Show recorded token usage and cost for sessions"
+#USAGE arg "[session_id]" default="" help="Session ID/name (optional; omit for aggregate view)"
+#USAGE flag "--today" default=#false help="Aggregate records from today (UTC)"
+#USAGE flag "--after <date>" default="" help="Only include usage records on/after YYYY-MM-DD"
+#USAGE flag "--before <date>" default="" help="Only include usage records on/before YYYY-MM-DD"
+#USAGE flag "--limit <n>" default="" help="Max sessions to scan in aggregate mode (default: 20 unless date filters/--all)"
+#USAGE flag "--project <filter>" default="" help="Filter aggregate sessions by project directory substring"
+#USAGE flag "--filter <filter>" var=#true default="" help="Filter sessions (same syntax as sessions list --filter)"
+#USAGE flag "--all" default=#false help="Scan all sessions in aggregate mode"
+#USAGE flag "--turns" default=#false help="Show per-turn usage records"
+#USAGE flag "--json" default=#false help="Output as JSON"
+# /// script
+# requires-python = ">=3.10"
+# dependencies = ["rich"]
+# ///
+
+import json
+import os
+import sys
+from datetime import datetime, timezone
+
+sys.path.insert(0, os.environ["MISE_CONFIG_ROOT"] + "/lib")
+import harness
+import parse
+from format import STYLE_DIM, STYLE_ID, console, format_duration, make_table
+from usage import (
+    aggregate,
+    aggregate_by_model,
+    avg,
+    filter_records_by_date,
+    format_cost,
+    format_tokens,
+)
+
+session_query = os.environ.get("usage_session_id", "")
+today = os.environ.get("usage_today", "false") == "true"
+after = os.environ.get("usage_after", "")
+before = os.environ.get("usage_before", "")
+limit_raw = os.environ.get("usage_limit", "")
+project_filter = os.environ.get("usage_project", "")
+filter_raw = os.environ.get("usage_filter", "")
+scan_all = os.environ.get("usage_all", "false") == "true"
+show_turns = os.environ.get("usage_turns", "false") == "true"
+output_json = os.environ.get("usage_json", "false") == "true"
+
+if today:
+    after = before = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+
+try:
+    limit = int(limit_raw) if limit_raw else None
+except ValueError:
+    print("Error: --limit must be an integer", file=sys.stderr)
+    sys.exit(1)
+if limit is not None and limit < 1:
+    print("Error: --limit must be at least 1", file=sys.stderr)
+    sys.exit(1)
+
+filters = parse.parse_filters(filter_raw) if filter_raw else []
+
+
+def records_for_session(session, *, exit_on_unsupported=True):
+    try:
+        records = session.usage_records()
+    except harness.Unsupported as e:
+        if exit_on_unsupported:
+            harness.exit_unsupported(e.harness or "unknown", e.op)
+        return None
+    return filter_records_by_date(records, after=after, before=before)
+
+
+def session_summary(session, records):
+    meta = session.metadata()
+    totals = aggregate(records)
+    by_model = aggregate_by_model(records)
+    return {
+        "session_id": meta["session_id"],
+        "name": meta.get("name", ""),
+        "project": meta.get("project", ""),
+        "first_timestamp": meta.get("first_timestamp", ""),
+        "last_timestamp": meta.get("last_timestamp", ""),
+        "duration": format_duration(meta.get("first_timestamp", ""), meta.get("last_timestamp", "")),
+        "totals": totals,
+        "by_model": by_model,
+        "turns": records if show_turns else [],
+    }
+
+
+def usage_files():
+    files = []
+    for harness_name in harness.available():
+        adapter = harness.adapter(harness_name)
+        try:
+            root = adapter.sessions_dir()
+        except harness.Unsupported:
+            continue
+        if not os.path.isdir(root):
+            continue
+        for project_dir in os.listdir(root):
+            project_path = os.path.join(root, project_dir)
+            if not os.path.isdir(project_path):
+                continue
+            if project_filter and project_filter not in project_dir:
+                continue
+            for fname in os.listdir(project_path):
+                if not fname.endswith(".jsonl"):
+                    continue
+                if fname.startswith("agent-") and not scan_all:
+                    continue
+                filepath = os.path.join(project_path, fname)
+                files.append((os.path.getmtime(filepath), filepath))
+    files.sort(key=lambda item: -item[0])
+
+    if session_query or scan_all or today or after or before:
+        return [path for _mtime, path in files]
+    bounded = limit if limit is not None else 20
+    return [path for _mtime, path in files[:bounded]]
+
+
+def aggregate_summaries():
+    summaries = []
+    for filepath in usage_files():
+        try:
+            session = parse.load(filepath)
+            if filters and not parse.session_matches_filters(session, filters):
+                continue
+            records = records_for_session(session, exit_on_unsupported=False)
+            if not records:
+                continue
+            summaries.append(session_summary(session, records))
+        except harness.Unsupported:
+            continue
+        except Exception:
+            continue
+        if limit is not None and len(summaries) >= limit:
+            break
+    return summaries
+
+
+def combine_summaries(summaries):
+    combined = aggregate([])
+    combined_by_model = {}
+    for summary in summaries:
+        totals = summary["totals"]
+        combined["calls"] += totals["calls"]
+        for key in ("input", "output", "cacheRead", "cacheWrite", "totalTokens"):
+            combined[key] += totals[key]
+        for key, value in totals["cost"].items():
+            combined["cost"][key] += value
+
+        for key, group in summary["by_model"].items():
+            if key not in combined_by_model:
+                combined_by_model[key] = aggregate([])
+                combined_by_model[key]["model"] = group.get("model", "unknown")
+                combined_by_model[key]["provider"] = group.get("provider", "")
+            dest = combined_by_model[key]
+            dest["calls"] += group["calls"]
+            for token_key in ("input", "output", "cacheRead", "cacheWrite", "totalTokens"):
+                dest[token_key] += group[token_key]
+            for cost_key, value in group["cost"].items():
+                dest["cost"][cost_key] += value
+    return combined, combined_by_model
+
+
+def print_totals_table(totals):
+    table = make_table()
+    table.add_column("Metric", style="bold")
+    table.add_column("Value", justify="right")
+    table.add_row("Calls", format_tokens(totals["calls"]))
+    table.add_row("Input", format_tokens(totals["input"]))
+    table.add_row("Output", format_tokens(totals["output"]))
+    table.add_row("Cache read", format_tokens(totals["cacheRead"]))
+    table.add_row("Cache write", format_tokens(totals["cacheWrite"]))
+    table.add_row("Total tokens", format_tokens(totals["totalTokens"]))
+    table.add_row("Cost input", format_cost(totals["cost"]["input"]))
+    table.add_row("Cost output", format_cost(totals["cost"]["output"]))
+    table.add_row("Cost cache read", format_cost(totals["cost"]["cacheRead"]))
+    table.add_row("Cost cache write", format_cost(totals["cost"]["cacheWrite"]))
+    table.add_row("Cost total", format_cost(totals["cost"]["total"]))
+    if totals["calls"]:
+        table.add_row("Avg tokens/call", format_tokens(round(avg(totals["totalTokens"], totals["calls"]))))
+        table.add_row("Avg cost/call", format_cost(avg(totals["cost"]["total"], totals["calls"])))
+    console.print(table)
+
+
+def print_model_table(by_model):
+    if not by_model:
+        return
+    table = make_table()
+    table.add_column("Model", style="cyan")
+    table.add_column("Calls", justify="right")
+    table.add_column("Input", justify="right")
+    table.add_column("Output", justify="right")
+    table.add_column("Cache read", justify="right")
+    table.add_column("Total", justify="right")
+    table.add_column("Cost", justify="right")
+    for key, totals in sorted(by_model.items(), key=lambda item: -item[1]["cost"]["total"]):
+        table.add_row(
+            key,
+            format_tokens(totals["calls"]),
+            format_tokens(totals["input"]),
+            format_tokens(totals["output"]),
+            format_tokens(totals["cacheRead"]),
+            format_tokens(totals["totalTokens"]),
+            format_cost(totals["cost"]["total"]),
+        )
+    console.print(table)
+
+
+def print_turns_table(records):
+    if not records:
+        return
+    table = make_table()
+    table.add_column("Time", no_wrap=True)
+    table.add_column("Model", style="cyan")
+    table.add_column("Input", justify="right")
+    table.add_column("Output", justify="right")
+    table.add_column("Cache read", justify="right")
+    table.add_column("Total", justify="right")
+    table.add_column("Cost", justify="right")
+    for record in records:
+        provider = record.get("provider") or ""
+        model = record.get("model") or "unknown"
+        label = f"{provider}/{model}" if provider else model
+        table.add_row(
+            (record.get("timestamp") or "")[:19],
+            label,
+            format_tokens(record.get("input", 0)),
+            format_tokens(record.get("output", 0)),
+            format_tokens(record.get("cacheRead", 0)),
+            format_tokens(record.get("totalTokens", 0)),
+            format_cost((record.get("cost") or {}).get("total", 0.0)),
+        )
+    console.print(table)
+
+
+def print_session(summary):
+    console.print()
+    title = f"{summary['session_id'][:8]}  {summary['project']}"
+    console.print(title, style=STYLE_ID)
+    console.print(f"{summary['duration']}  ·  {summary['totals']['calls']} model calls", style=STYLE_DIM)
+    if not summary["totals"]["calls"]:
+        console.print("No recorded usage.", style=STYLE_DIM)
+        return
+    console.print("\nTotals", style="bold")
+    print_totals_table(summary["totals"])
+    console.print("\nBy model", style="bold")
+    print_model_table(summary["by_model"])
+    if show_turns:
+        console.print("\nTurns", style="bold")
+        print_turns_table(summary["turns"])
+
+
+def print_aggregate(summaries):
+    console.print()
+    console.print(f"Usage across {len(summaries)} session(s)", style=STYLE_ID)
+    if not summaries:
+        console.print("No recorded usage.", style=STYLE_DIM)
+        return
+
+    table = make_table()
+    table.add_column("ID", style="cyan", no_wrap=True)
+    table.add_column("Project")
+    table.add_column("Calls", justify="right")
+    table.add_column("Input", justify="right")
+    table.add_column("Output", justify="right")
+    table.add_column("Cache read", justify="right")
+    table.add_column("Total", justify="right")
+    table.add_column("Cost", justify="right")
+    for summary in summaries:
+        totals = summary["totals"]
+        table.add_row(
+            summary["session_id"][:8],
+            summary["project"],
+            format_tokens(totals["calls"]),
+            format_tokens(totals["input"]),
+            format_tokens(totals["output"]),
+            format_tokens(totals["cacheRead"]),
+            format_tokens(totals["totalTokens"]),
+            format_cost(totals["cost"]["total"]),
+        )
+    console.print(table)
+
+    totals, by_model = combine_summaries(summaries)
+    console.print("\nTotals", style="bold")
+    print_totals_table(totals)
+    console.print("\nBy model", style="bold")
+    print_model_table(by_model)
+
+
+if session_query:
+    session = parse.load(parse.find_session(session_query))
+    summary = session_summary(session, records_for_session(session))
+    if output_json:
+        print(json.dumps(summary, indent=2))
+    else:
+        print_session(summary)
+else:
+    summaries = aggregate_summaries()
+    if output_json:
+        totals, by_model = combine_summaries(summaries)
+        print(json.dumps({"sessions": summaries, "totals": totals, "by_model": by_model}, indent=2))
+    else:
+        print_aggregate(summaries)
