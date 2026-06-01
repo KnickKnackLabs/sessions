@@ -56,6 +56,9 @@ const lifecycle = [
   "┃ assistant  Found 3 issues in error handling.",
   "┃ assistant  Posted review to #scout-report.",
   "",
+  "$ sessions wait review/pr-50 --assistant-only --timeout 120",
+  "┃ assistant  Re-ran CI; all checks are green.",
+  "",
   "$ sessions list --filter session.meta.agent.name=ikma",
   "  e96bd43a  review/pr-50   12m   3m ago   claude-sonnet-4   8",
 ].join("\n");
@@ -70,6 +73,7 @@ const stack = [
   "              └─ sessions run",
   "                   └─ pi    harness — processes message or opens interactively",
   "  sessions read             observe the transcript",
+  "  sessions wait             block until new transcript messages arrive",
   "  sessions wake (again)     re-enter with corrections",
 ].join("\n");
 
@@ -131,6 +135,9 @@ sessions list
 
 # Read a transcript (by name or ID prefix)
 sessions read review/pr-50
+
+# Wait for the next assistant message
+sessions wait review/pr-50 --assistant-only --timeout 120
 
 # Search across all sessions
 sessions search "error handling"
@@ -295,6 +302,18 @@ sessions read e96bd43a --from -5           # last 5 messages
 sessions read e96bd43a --tools             # include tool calls`}</CodeBlock>
 
       <Paragraph>
+        <Code>sessions wait</Code>
+        {" snapshots the current transcript and blocks until new matching messages arrive. It is useful for supervising long-running or parallel sessions without hand-written sleep loops."}
+      </Paragraph>
+
+      <CodeBlock lang="bash">{`sessions wait e96bd43a                         # next non-tool message
+sessions wait e96bd43a --count 10              # wait for 10 messages
+sessions wait e96bd43a --assistant-only        # ignore user/operator messages
+sessions wait e96bd43a --match "done|failed"   # wait for a regex match
+sessions wait e96bd43a --tools                 # include tool calls/results
+sessions wait e96bd43a --timeout 120 --json`}</CodeBlock>
+
+      <Paragraph>
         {"For existing sessions you want to work with elsewhere, "}
         <Code>copy</Code>
         {" duplicates a session with its full conversation history plus a fork notice. The copy gets a new ID and can be woken independently — useful for handing off context between agents."}
@@ -314,7 +333,7 @@ mise run test`}</CodeBlock>
         <Link href="https://github.com/bats-core/bats-core">{`BATS ${batsVersion}`}</Link>
         {`. Tasks are bash scripts (session creation, wake, metadata) and Python scripts with `}
         <Link href="https://github.com/Textualize/rich">Rich</Link>
-        {` output (list, read, inspect, search). The JSONL parsing library is ${libLines} lines of Python in `}
+        {` output (list, read, wait, inspect, search). The JSONL parsing library is ${libLines} lines of Python in `}
         <Code>lib/</Code>
         {"."}
       </Paragraph>
@@ -327,6 +346,7 @@ mise run test`}</CodeBlock>
 │   ├── meta         # Read session header metadata
 │   ├── list         # List + filter sessions (Rich tables)
 │   ├── read         # Windowed transcript reader
+│   ├── wait         # Wait for new transcript messages
 │   ├── search       # Full-text regex across transcripts
 │   ├── inspect      # Forensic metadata (duration, tools, model)
 │   ├── copy         # Duplicate sessions for handoff
