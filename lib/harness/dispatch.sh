@@ -371,3 +371,86 @@ wake_entry() {
       }'"$model_fragment""$os_user_fragment"
   fi
 }
+
+# Process lifecycle entries — records the local process that `sessions run`
+# started for a managed session. Shape is uniform across harnesses: the
+# harness binaries ignore these entries; sessions owns the schema.
+#
+# Liveness rule for readers: a process is live only if both `.pid` exists and
+# the current OS process reports the same `.pid_start_time` token. This avoids
+# treating a reused PID as live after a wrapper crash or missing exit entry.
+#
+#   $1 entry_id, $2 parent_id, $3 timestamp_iso, $4 pid,
+#   $5 pid_start_time, $6 cwd, $7 command, $8 argv_json,
+#   $9 harness_name, $10 model, $11 headless ("true" | "false")
+process_start_entry() {
+  local entry_id="$1"
+  local parent_id="$2"
+  local ts="$3"
+  local pid="$4"
+  local pid_start_time="$5"
+  local cwd="$6"
+  local command="$7"
+  local argv_json="$8"
+  local harness_name="$9"
+  local model="${10:-}"
+  local headless="${11:-false}"
+
+  local headless_bool=false
+  [ "$headless" = "true" ] && headless_bool=true
+
+  jq -nc \
+    --arg id "$entry_id" \
+    --arg parent_id "$parent_id" \
+    --arg ts "$ts" \
+    --argjson pid "$pid" \
+    --arg pid_start_time "$pid_start_time" \
+    --arg cwd "$cwd" \
+    --arg command "$command" \
+    --argjson argv "$argv_json" \
+    --arg harness "$harness_name" \
+    --arg model "$model" \
+    --argjson headless "$headless_bool" \
+    '{
+      type: "process_start",
+      id: $id,
+      parentId: $parent_id,
+      timestamp: $ts,
+      pid: $pid,
+      pid_start_time: $pid_start_time,
+      cwd: $cwd,
+      command: $command,
+      argv: $argv,
+      harness: $harness,
+      model: $model,
+      headless: $headless
+    }'
+}
+
+#   $1 entry_id, $2 parent_id, $3 timestamp_iso, $4 process_start_id,
+#   $5 pid, $6 exit_code
+process_exit_entry() {
+  local entry_id="$1"
+  local parent_id="$2"
+  local ts="$3"
+  local process_start_id="$4"
+  local pid="$5"
+  local exit_code="$6"
+
+  jq -nc \
+    --arg id "$entry_id" \
+    --arg parent_id "$parent_id" \
+    --arg ts "$ts" \
+    --arg process_start_id "$process_start_id" \
+    --argjson pid "$pid" \
+    --argjson exit_code "$exit_code" \
+    '{
+      type: "process_exit",
+      id: $id,
+      parentId: $parent_id,
+      timestamp: $ts,
+      process_start_id: $process_start_id,
+      pid: $pid,
+      exit_code: $exit_code
+    }'
+}

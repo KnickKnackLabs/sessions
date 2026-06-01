@@ -29,8 +29,11 @@ PROMPT_TEMPLATES="${usage_prompt_templates:-false}"
 
 # shellcheck source=../../lib/harness-env.sh
 source "$MISE_CONFIG_ROOT/lib/harness-env.sh"
+# shellcheck source=../../lib/harness/dispatch.sh
+source "$MISE_CONFIG_ROOT/lib/harness/dispatch.sh"
 
 PROMPT_TEMP_FILE=""
+PROCESS_START_ID=""
 # shellcheck disable=SC2329  # Invoked by EXIT trap below.
 cleanup_prompt_temp() {
   if [ -n "$PROMPT_TEMP_FILE" ]; then
@@ -71,6 +74,104 @@ write_prompt_temp() {
   SYSTEM_PROMPT_FILE="$PROMPT_TEMP_FILE"
 }
 
+entry_id() {
+  uuidgen | tr '[:upper:]' '[:lower:]' | cut -c1-8
+}
+
+now_iso() {
+  date -u +"%Y-%m-%dT%H:%M:%S.000Z"
+}
+
+latest_session_entry_id() {
+  local session_file="$1"
+  local entry_id=""
+  [ -f "$session_file" ] || return 0
+  if entry_id=$(tail -n 1 "$session_file" | jq -r '.id // empty' 2>/dev/null); then
+    printf '%s\n' "$entry_id"
+  fi
+}
+
+process_start_time_token_once() {
+  local pid="$1"
+  local token=""
+
+  if [ -r "/proc/$pid/stat" ]; then
+    if token=$(awk '{print $22}' "/proc/$pid/stat" 2>/dev/null); then
+      if [ -n "$token" ]; then
+        printf 'linux:%s\n' "$token"
+        return 0
+      fi
+    fi
+  fi
+
+  if command -v ps >/dev/null 2>&1; then
+    if token=$(ps -p "$pid" -o lstart= 2>/dev/null | awk '{$1=$1; print}'); then
+      if [ -n "$token" ]; then
+        printf 'ps:%s\n' "$token"
+        return 0
+      fi
+    fi
+  fi
+}
+
+process_start_time_token() {
+  local pid="$1"
+  local token=""
+  local attempt
+  for attempt in 1 2 3 4 5; do
+    token=$(process_start_time_token_once "$pid")
+    if [ -n "$token" ]; then
+      printf '%s\n' "$token"
+      return 0
+    fi
+    sleep 0.05
+  done
+}
+
+record_process_start() {
+  local child_pid="$1"
+  shift
+  [ -n "$SESSION" ] || return 0
+  [ -f "$SESSION" ] || return 0
+
+  local parent_id ts pid_start_time harness_name command_text argv_json
+  parent_id=$(latest_session_entry_id "$SESSION")
+  ts=$(now_iso)
+  pid_start_time=$(process_start_time_token "$child_pid")
+  harness_name=$(harness_resolve --session "$SESSION" 2>/dev/null || echo "unknown")
+  argv_json=$(jq -nc --args '$ARGS.positional' -- "$@")
+  command_text=$(printf '%s ' "$@")
+  command_text="${command_text% }"
+  PROCESS_START_ID=$(entry_id)
+
+  process_start_entry \
+    "$PROCESS_START_ID" \
+    "$parent_id" \
+    "$ts" \
+    "$child_pid" \
+    "$pid_start_time" \
+    "$CWD" \
+    "$command_text" \
+    "$argv_json" \
+    "$harness_name" \
+    "$MODEL" \
+    "$HEADLESS" >> "$SESSION"
+}
+
+record_process_exit() {
+  local child_pid="$1"
+  local rc="$2"
+  [ -n "$SESSION" ] || return 0
+  [ -f "$SESSION" ] || return 0
+  [ -n "$PROCESS_START_ID" ] || return 0
+
+  local parent_id ts exit_id
+  parent_id=$(latest_session_entry_id "$SESSION")
+  ts=$(now_iso)
+  exit_id=$(entry_id)
+  process_exit_entry "$exit_id" "$parent_id" "$ts" "$PROCESS_START_ID" "$child_pid" "$rc" >> "$SESSION"
+}
+
 run_and_exit() {
   set +e
   (
@@ -78,6 +179,17 @@ run_and_exit() {
     exec "$@"
   ) <&0 &
   local child_pid=$!
+
+  if ! record_process_start "$child_pid" "$@"; then
+    echo "Error: failed to record process_start for session $SESSION" >&2
+    if ! kill "$child_pid" 2>/dev/null; then
+      :
+    fi
+    if ! wait "$child_pid" 2>/dev/null; then
+      :
+    fi
+    exit 1
+  fi
 
   # shellcheck disable=SC2329  # Invoked by signal traps below.
   forward_child_signal() {
@@ -93,6 +205,7 @@ run_and_exit() {
       sig_num=$(kill -l "$sig" 2>/dev/null || echo 0)
       rc=$((128 + sig_num))
     fi
+    record_process_exit "$child_pid" "$rc" || echo "Warning: failed to record process_exit for session $SESSION" >&2
     exit "$rc"
   }
 
@@ -104,6 +217,7 @@ run_and_exit() {
   wait "$child_pid"
   local rc=$?
   trap - INT TERM HUP QUIT
+  record_process_exit "$child_pid" "$rc" || echo "Warning: failed to record process_exit for session $SESSION" >&2
   set -e
   exit "$rc"
 }

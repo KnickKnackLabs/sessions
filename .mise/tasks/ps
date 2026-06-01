@@ -1,0 +1,67 @@
+#!/usr/bin/env -S uv run --script
+#MISE description="Show live session processes"
+#USAGE flag "--limit <n>" default="20" help="Max process rows to show"
+#USAGE flag "--project <filter>" default="" help="Filter by project directory/name substring"
+#USAGE flag "--all" default=#false help="Include exited and dead process records"
+#USAGE flag "--json" default=#false help="Output as JSON"
+# /// script
+# requires-python = ">=3.10"
+# dependencies = ["rich"]
+# ///
+
+import json
+import os
+import sys
+
+sys.path.insert(0, os.environ["MISE_CONFIG_ROOT"] + "/lib")
+from format import console, format_model, format_relative, make_table
+from processes import collect_process_rows
+
+limit = int(os.environ.get("usage_limit", "20"))
+project_filter = os.environ.get("usage_project", "")
+include_all = os.environ.get("usage_all", "") == "true"
+output_json = os.environ.get("usage_json", "") == "true"
+
+rows = collect_process_rows(
+    limit=limit,
+    project_filter=project_filter,
+    include_all=include_all,
+)
+
+if output_json:
+    print(json.dumps([row.as_dict() for row in rows], indent=2))
+    sys.exit(0)
+
+if not rows:
+    print("No live session processes." if not include_all else "No session processes found.")
+    sys.exit(0)
+
+any_named = any(row.session.name for row in rows)
+
+table = make_table()
+table.add_column("ID", style="cyan", no_wrap=True)
+if any_named:
+    table.add_column("Name", style="green", no_wrap=True)
+table.add_column("Project", no_wrap=True)
+table.add_column("PID", justify="right", no_wrap=True)
+table.add_column("Status", no_wrap=True)
+table.add_column("Started", no_wrap=True)
+table.add_column("Model", style="dim", no_wrap=True)
+table.add_column("Command", style="dim")
+
+for row in rows:
+    data = row.as_dict()
+    row_values = [data["session_id"][:8]]
+    if any_named:
+        row_values.append(data.get("name") or "")
+    row_values.extend([
+        data["project"],
+        str(data.get("pid") or ""),
+        data["status"],
+        format_relative(data["started_at"]),
+        format_model(data.get("model", "")),
+        data.get("command", ""),
+    ])
+    table.add_row(*row_values)
+
+console.print(table)
