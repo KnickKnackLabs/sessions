@@ -111,7 +111,7 @@ def usage_files():
                 files.append((os.path.getmtime(filepath), filepath))
     files.sort(key=lambda item: -item[0])
 
-    if session_query or scan_all or today or after or before:
+    if session_query or scan_all or today or after or before or filters:
         return [path for _mtime, path in files]
     bounded = limit if limit is not None else 20
     return [path for _mtime, path in files[:bounded]]
