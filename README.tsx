@@ -215,7 +215,7 @@ sessions wake review/pr-50 --model openai-codex/gpt-5.5 --message "You missed th
         <Code>new</Code>
         {" + "}
         <Code>wake</Code>
-        {": bake identity or task profile instructions into the session with "}
+        {": bake profile or task instructions into the session with "}
         <Code>--system-prompt-file</Code>
         {" at creation, then wake it with task messages. If no explicit or baked prompt exists, the harness starts without an appended prompt and can rely on its native cwd context discovery."}
       </Paragraph>
@@ -224,11 +224,9 @@ sessions wake review/pr-50 --model openai-codex/gpt-5.5 --message "You missed th
         <Code>sessions run</Code>
         {" remains available as an advanced/compatibility command. It accepts an explicit "}
         <Code>--system-prompt-file</Code>
-        {", uses any prompt baked into the session, and keeps the legacy "}
-        <Code>AGENT_IDENTITY</Code>
-        {" fallback. "}
-        <Code>AGENT_IDENTITY</Code>
-        {" is no longer required for promptless sessions."}
+        {", uses any prompt baked into the session, and otherwise starts without appending a system prompt. Caller-provided context belongs to the caller, not to "}
+        <Code>sessions</Code>
+        {"."}
       </Paragraph>
 
       <Paragraph>

@@ -620,7 +620,6 @@ STUB
   stub_shell_exec_payload "$stub_dir" "$shell_capture"
   stub_pi_capture_argv_cwd "$stub_dir" "$pi_argv_capture" "$pi_cwd_capture"
 
-  unset AGENT_IDENTITY
   PATH="$stub_dir:$PATH" run sessions wake "${SESSION_1:0:8}" --background --model "openai-codex/gpt-5.5"
   [ "$status" -eq 0 ]
   [ -f "$shell_capture" ]
@@ -669,7 +668,6 @@ exit 0
 STUB
   chmod +x "$stub_dir/pi"
 
-  unset AGENT_IDENTITY
   PATH="$stub_dir:$PATH" run sessions wake wake-baked-prompt --background --model "openai-codex/gpt-5.5"
   [ "$status" -eq 0 ]
   [ -f "$shell_capture" ]

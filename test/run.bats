@@ -66,7 +66,6 @@ teardown() {
   local expected_cwd
   expected_cwd=$(cd "$run_cwd" && pwd -P)
 
-  unset AGENT_IDENTITY
   PATH="$stub_dir:$PATH" run sessions run \
     --cwd "$run_cwd" \
     --model "openai-codex/gpt-5.5"
@@ -96,7 +95,6 @@ exit 0
 STUB
   chmod +x "$stub_dir/mix"
 
-  unset AGENT_IDENTITY
   PATH="$stub_dir:$PATH" run sessions run \
     --cwd "$BATS_TEST_TMPDIR" \
     --model "openai-codex/gpt-5.5" \
@@ -186,7 +184,6 @@ STUB
   new_id=$(echo "$output" | head -1)
   session_file=$(find "$PI_DIR/agent/sessions" -name "*${new_id}.jsonl")
 
-  unset AGENT_IDENTITY
   PATH="$stub_dir:$PATH" run sessions run \
     --cwd "$BATS_TEST_TMPDIR" \
     --model "openai-codex/gpt-5.5" \
@@ -230,7 +227,6 @@ STUB
   new_id=$(echo "$output" | head -1)
   session_file=$(find "$PI_DIR/agent/sessions" -name "*${new_id}.jsonl")
 
-  unset AGENT_IDENTITY
   PATH="$stub_dir:$PATH" run sessions run \
     --headless \
     --cwd "$BATS_TEST_TMPDIR" \
@@ -248,10 +244,10 @@ STUB
   [ ! -e "$prompt_path" ]
 }
 
-@test "run headless with message creates runtime context prompt without identity" {
-  local stub_dir="$BATS_TEST_TMPDIR/stub-mix-headless-no-identity"
-  local argv_capture="$BATS_TEST_TMPDIR/mix-argv-headless-no-identity"
-  local prompt_capture="$BATS_TEST_TMPDIR/mix-prompt-headless-no-identity"
+@test "run headless with message creates runtime context prompt without profile prompt" {
+  local stub_dir="$BATS_TEST_TMPDIR/stub-mix-headless-no-profile"
+  local argv_capture="$BATS_TEST_TMPDIR/mix-argv-headless-no-profile"
+  local prompt_capture="$BATS_TEST_TMPDIR/mix-prompt-headless-no-profile"
   mkdir -p "$stub_dir"
   cat > "$stub_dir/mix" <<STUB
 #!/usr/bin/env bash
@@ -271,7 +267,6 @@ exit 0
 STUB
   chmod +x "$stub_dir/mix"
 
-  unset AGENT_IDENTITY
   PATH="$stub_dir:$PATH" run sessions run \
     --headless \
     --cwd "$BATS_TEST_TMPDIR" \
@@ -283,7 +278,6 @@ STUB
 
   grep -qx -- "--system-prompt-file" "$argv_capture"
   grep -q "This is a headless session" "$prompt_capture"
-  ! grep -q "AGENT_IDENTITY" "$prompt_capture"
   prompt_path=$(awk '/^--system-prompt-file$/ { getline; print; exit }' "$argv_capture")
   [ -n "$prompt_path" ]
   [ ! -e "$prompt_path" ]
@@ -355,7 +349,6 @@ STUB
   new_id=$(echo "$output" | head -1)
   session_file=$(find "$PI_DIR/agent/sessions" -name "*${new_id}.jsonl")
 
-  export AGENT_IDENTITY="stale legacy identity"
   PATH="$stub_dir:$PATH" run sessions run \
     --cwd "$BATS_TEST_TMPDIR" \
     --model "openai-codex/gpt-5.5" \
@@ -363,11 +356,10 @@ STUB
   [ "$status" -eq 0 ]
   [ -f "$prompt_capture" ]
   [ -f "$prompt_path_capture" ]
-  ! grep -q "stale legacy identity" "$prompt_capture"
   [ ! -e "$(cat "$prompt_path_capture")" ]
 }
 
-@test "run with malformed session does not fall back to stale AGENT_IDENTITY" {
+@test "run with malformed session fails before launch" {
   local stub_dir="$BATS_TEST_TMPDIR/stub-pi-malformed-session"
   local invoked_capture="$BATS_TEST_TMPDIR/pi-malformed-session-invoked"
   local bad_session="$BATS_TEST_TMPDIR/malformed-session.jsonl"
@@ -380,7 +372,6 @@ STUB
   chmod +x "$stub_dir/pi"
   printf '{"type":"session"\n' > "$bad_session"
 
-  export AGENT_IDENTITY="stale legacy identity"
   PATH="$stub_dir:$PATH" run sessions run \
     --cwd "$BATS_TEST_TMPDIR" \
     --model "openai-codex/gpt-5.5" \
@@ -418,7 +409,7 @@ while :; do sleep 1; done
 STUB
   chmod +x "$stub_dir/pi"
 
-  PATH="$stub_dir:$PATH" AGENT_IDENTITY="generated prompt" PI_DIR="$PI_DIR" \
+  PATH="$stub_dir:$PATH" DISPATCH_CONTEXT="generated prompt" PI_DIR="$PI_DIR" \
     mise -C "$REPO_DIR" run -q run --cwd "$BATS_TEST_TMPDIR" --model "openai-codex/gpt-5.5" \
     >"$stdout_capture" 2>"$stderr_capture" &
   local mise_pid=$!

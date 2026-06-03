@@ -108,9 +108,9 @@ sessions read review/pr-50 --last 5
 sessions wake review/pr-50 --model openai-codex/gpt-5.5 --message "You missed the edge case in line 42"
 ```
 
-The spawning stack uses [shell](https://github.com/KnickKnackLabs/shell) for persistent zmx sessions. `sessions wake` calls `sessions run` as its hidden low-level executor. For profile-specific sessions, use `new` + `wake`: bake identity or task profile instructions into the session with `--system-prompt-file` at creation, then wake it with task messages. If no explicit or baked prompt exists, the harness starts without an appended prompt and can rely on its native cwd context discovery.
+The spawning stack uses [shell](https://github.com/KnickKnackLabs/shell) for persistent zmx sessions. `sessions wake` calls `sessions run` as its hidden low-level executor. For profile-specific sessions, use `new` + `wake`: bake profile or task instructions into the session with `--system-prompt-file` at creation, then wake it with task messages. If no explicit or baked prompt exists, the harness starts without an appended prompt and can rely on its native cwd context discovery.
 
-`sessions run` remains available as an advanced/compatibility command. It accepts an explicit `--system-prompt-file`, uses any prompt baked into the session, and keeps the legacy `AGENT_IDENTITY` fallback. `AGENT_IDENTITY` is no longer required for promptless sessions.
+`sessions run` remains available as an advanced/compatibility command. It accepts an explicit `--system-prompt-file`, uses any prompt baked into the session, and otherwise starts without appending a system prompt. Caller-provided context belongs to the caller, not to `sessions`.
 
 `--model` on `sessions wake` is required and is not remembered across wakes — pass a provider-qualified model (for example `openai-codex/gpt-5.5`) on each wake.
 

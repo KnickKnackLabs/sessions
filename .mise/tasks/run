@@ -207,8 +207,7 @@ fi
 # Prompt resolution order:
 #   1. Explicit --system-prompt-file
 #   2. Latest system_prompt entry baked into --session by `sessions new`
-#   3. Legacy AGENT_IDENTITY environment fallback
-#   4. No prompt — let the harness load cwd context files naturally
+#   3. No prompt — let the harness load cwd context files naturally
 if [ -z "$SYSTEM_PROMPT_FILE" ] && [ -n "$SESSION" ]; then
   if SESSION_SYSTEM_PROMPT=$(latest_session_system_prompt "$SESSION"); then
     write_prompt_temp "$SESSION_SYSTEM_PROMPT"
@@ -219,10 +218,6 @@ if [ -z "$SYSTEM_PROMPT_FILE" ] && [ -n "$SESSION" ]; then
     fi
   fi
   unset SESSION_SYSTEM_PROMPT SESSION_PROMPT_STATUS
-fi
-
-if [ -z "$SYSTEM_PROMPT_FILE" ] && [ -n "${AGENT_IDENTITY:-}" ]; then
-  write_prompt_temp "$AGENT_IDENTITY"
 fi
 
 if [ -n "$SYSTEM_PROMPT_FILE" ] && [ ! -f "$SYSTEM_PROMPT_FILE" ]; then
@@ -236,8 +231,8 @@ ensure_prompt_temp() {
   fi
 }
 
-# Append dispatch context when present. If no identity/profile prompt exists,
-# create a tiny session-context prompt rather than requiring AGENT_IDENTITY.
+# Append dispatch context when present. If no explicit/baked prompt exists,
+# create a tiny runtime-context prompt.
 if [ -n "${DISPATCH_CONTEXT:-}" ]; then
   ensure_prompt_temp
   {
@@ -247,8 +242,8 @@ if [ -n "${DISPATCH_CONTEXT:-}" ]; then
   } >> "$SYSTEM_PROMPT_FILE"
 fi
 
-# Append headless session context. This is runtime context, not agent identity;
-# promptless headless runs still get the no-human cue without AGENT_IDENTITY.
+# Append headless session context. This is runtime context, not a profile prompt;
+# promptless headless runs still get the no-human cue.
 if [ "$HEADLESS" = "true" ]; then
   ensure_prompt_temp
   cat >> "$SYSTEM_PROMPT_FILE" <<'HEADLESS_EOF'

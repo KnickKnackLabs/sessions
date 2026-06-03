@@ -2,10 +2,9 @@ defmodule Cli do
   @moduledoc """
   `sessions run` — entry point, argument parsing, and help output.
 
-  Identity-agnostic: optionally receives a system prompt file, doesn't know
-  or care what's in it. Prompt composition (identity, passphrase, context) is
-  the caller's responsibility; absent prompts let the harness load its native
-  cwd context.
+  Prompt-agnostic: optionally receives a system prompt file, doesn't know
+  or care what's in it. Prompt content is the caller's responsibility;
+  absent prompts let the harness load its native cwd context.
 
   Run execution (port spawning, streaming, timeout) lives in
   `Cli.Engine`; usage reporting lives in `Cli.UsageReport`; harness

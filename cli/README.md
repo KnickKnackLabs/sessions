@@ -4,7 +4,7 @@ Session execution engine — runs pi with streaming output, timeout, ABORT detec
 
 ## Overview
 
-Identity-agnostic Elixir wrapper around pi. It:
+Prompt-agnostic Elixir wrapper around pi. It:
 
 - Optionally reads appended system prompt text from a file (`--system-prompt-file`)
 - Executes pi via Erlang Port with optional timeout
@@ -13,7 +13,7 @@ Identity-agnostic Elixir wrapper around pi. It:
 - Reports usage metrics (tokens, cost, turns) at session end
 - Supports session files for conversation continuity (`--session`)
 
-**This CLI does not handle identity, passphrase injection, or prompt composition.** Those are the caller's responsibility. The `sessions run` task handles optional prompt assembly and delegates here; when no prompt is provided, the harness can rely on native cwd context discovery.
+**This CLI does not interpret prompt contents or compose caller context.** Those are the caller's responsibility. The `sessions run` task handles optional runtime prompt additions and delegates here; when no prompt is provided, the harness can rely on native cwd context discovery.
 
 ## Usage
 
