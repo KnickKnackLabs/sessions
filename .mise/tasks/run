@@ -3,7 +3,7 @@
 #MISE quiet=true
 #MISE hide=true
 #USAGE arg "[message]" default="" help="Message for the agent (required for --headless, optional for interactive)"
-#USAGE flag "--system-prompt-file <file>" default="" help="Path to system prompt file"
+#USAGE flag "--system-prompt-file <file>" default="" help="Optional path to appended system prompt text"
 #USAGE flag "--timeout <seconds>" default="" help="Timeout in seconds (default: no timeout)"
 #USAGE flag "--model <model>" default="" help="Model to use (required; provider-qualified, e.g. openai-codex/gpt-5.5)"
 #USAGE flag "--session <session>" default="" help="Session file for conversation continuity"
@@ -189,13 +189,13 @@ run_and_exit() {
 
 if [ "$HEADLESS" = "true" ] && [ -z "$MESSAGE" ]; then
   echo "Error: --headless requires a message" >&2
-  echo "Usage: sessions run --headless --system-prompt-file <path> --model <provider/model> [options] \"message\"" >&2
+  echo "Usage: sessions run --headless --model <provider/model> [options] \"message\"" >&2
   exit 1
 fi
 
 if [ -z "$MODEL" ]; then
   echo "Error: --model is required" >&2
-  echo "Usage: sessions run --system-prompt-file <path> --model <provider/model> [options] \"message\"" >&2
+  echo "Usage: sessions run --model <provider/model> [options] \"message\"" >&2
   exit 1
 fi
 
@@ -208,6 +208,7 @@ fi
 #   1. Explicit --system-prompt-file
 #   2. Latest system_prompt entry baked into --session by `sessions new`
 #   3. Legacy AGENT_IDENTITY environment fallback
+#   4. No prompt — let the harness load cwd context files naturally
 if [ -z "$SYSTEM_PROMPT_FILE" ] && [ -n "$SESSION" ]; then
   if SESSION_SYSTEM_PROMPT=$(latest_session_system_prompt "$SESSION"); then
     write_prompt_temp "$SESSION_SYSTEM_PROMPT"
@@ -224,13 +225,21 @@ if [ -z "$SYSTEM_PROMPT_FILE" ] && [ -n "${AGENT_IDENTITY:-}" ]; then
   write_prompt_temp "$AGENT_IDENTITY"
 fi
 
-if [ -z "$SYSTEM_PROMPT_FILE" ]; then
-  echo "Error: system prompt required (--system-prompt-file, session system_prompt, or AGENT_IDENTITY)" >&2
+if [ -n "$SYSTEM_PROMPT_FILE" ] && [ ! -f "$SYSTEM_PROMPT_FILE" ]; then
+  echo "Error: System prompt file not found: $SYSTEM_PROMPT_FILE" >&2
   exit 1
 fi
 
-# Append dispatch context (outside the conditional — applies to any prompt file)
-if [ -n "${DISPATCH_CONTEXT:-}" ] && [ -n "$SYSTEM_PROMPT_FILE" ]; then
+ensure_prompt_temp() {
+  if [ -z "$SYSTEM_PROMPT_FILE" ]; then
+    write_prompt_temp ""
+  fi
+}
+
+# Append dispatch context when present. If no identity/profile prompt exists,
+# create a tiny session-context prompt rather than requiring AGENT_IDENTITY.
+if [ -n "${DISPATCH_CONTEXT:-}" ]; then
+  ensure_prompt_temp
   {
     echo ""
     echo "## Dispatch Context"
@@ -238,9 +247,10 @@ if [ -n "${DISPATCH_CONTEXT:-}" ] && [ -n "$SYSTEM_PROMPT_FILE" ]; then
   } >> "$SYSTEM_PROMPT_FILE"
 fi
 
-# Append headless session context (outside the conditional — applies whether
-# the prompt was auto-generated from AGENT_IDENTITY or user-provided via --system-prompt-file)
-if [ "$HEADLESS" = "true" ] && [ -n "$SYSTEM_PROMPT_FILE" ]; then
+# Append headless session context. This is runtime context, not agent identity;
+# promptless headless runs still get the no-human cue without AGENT_IDENTITY.
+if [ "$HEADLESS" = "true" ]; then
+  ensure_prompt_temp
   cat >> "$SYSTEM_PROMPT_FILE" <<'HEADLESS_EOF'
 
 ## Session Context
@@ -249,11 +259,6 @@ HEADLESS_EOF
 fi
 
 run_interactive_without_message() {
-  if [ ! -f "$SYSTEM_PROMPT_FILE" ]; then
-    echo "Error: System prompt file not found: $SYSTEM_PROMPT_FILE" >&2
-    exit 1
-  fi
-
   # shellcheck source=../../lib/harness/dispatch.sh
   source "$MISE_CONFIG_ROOT/lib/harness/dispatch.sh"
 
@@ -276,7 +281,10 @@ run_interactive_without_message() {
     exit 1
   fi
 
-  local pi_args=(--append-system-prompt "$SYSTEM_PROMPT_FILE" --model "$MODEL")
+  local pi_args=(--model "$MODEL")
+  if [ -n "$SYSTEM_PROMPT_FILE" ]; then
+    pi_args=(--append-system-prompt "$SYSTEM_PROMPT_FILE" "${pi_args[@]}")
+  fi
   if [ -n "$SESSION" ]; then
     pi_args+=(--session "$SESSION")
   else
@@ -302,7 +310,8 @@ fi
 CLI_DIR="$MISE_CONFIG_ROOT/cli"
 
 # Build CLI args
-CLI_ARGS=(--system-prompt-file "$SYSTEM_PROMPT_FILE" --cwd "$CWD")
+CLI_ARGS=(--cwd "$CWD")
+[ -n "$SYSTEM_PROMPT_FILE" ] && CLI_ARGS+=(--system-prompt-file "$SYSTEM_PROMPT_FILE")
 
 [ -n "$TIMEOUT" ] && CLI_ARGS+=(--timeout "$TIMEOUT")
 CLI_ARGS+=(--model "$MODEL")

@@ -55,6 +55,80 @@ teardown() {
   ! grep -qx '' "$argv_capture"
 }
 
+@test "run interactive without message works without any system prompt" {
+  local stub_dir="$BATS_TEST_TMPDIR/stub-pi-no-prompt"
+  local argv_capture="$BATS_TEST_TMPDIR/pi-argv-no-prompt"
+  local cwd_capture="$BATS_TEST_TMPDIR/pi-cwd-no-prompt"
+  stub_pi_capture_argv_cwd "$stub_dir" "$argv_capture" "$cwd_capture"
+
+  local run_cwd="$BATS_TEST_TMPDIR/run-cwd-no-prompt"
+  mkdir -p "$run_cwd"
+  local expected_cwd
+  expected_cwd=$(cd "$run_cwd" && pwd -P)
+
+  unset AGENT_IDENTITY
+  PATH="$stub_dir:$PATH" run sessions run \
+    --cwd "$run_cwd" \
+    --model "openai-codex/gpt-5.5"
+  [ "$status" -eq 0 ]
+  [ -f "$argv_capture" ]
+  [ -f "$cwd_capture" ]
+
+  [ "$(cat "$cwd_capture")" = "$expected_cwd" ]
+  ! grep -qx -- "--append-system-prompt" "$argv_capture"
+  grep -qx -- "--model" "$argv_capture"
+  [ "$(awk '/^--model$/ { getline; print; exit }' "$argv_capture")" = "openai-codex/gpt-5.5" ]
+  grep -qx -- "--no-session" "$argv_capture"
+  ! grep -qx -- "-p" "$argv_capture"
+  ! grep -qx -- "--print" "$argv_capture"
+  ! grep -qx '' "$argv_capture"
+}
+
+@test "run with message works without any system prompt" {
+  local stub_dir="$BATS_TEST_TMPDIR/stub-mix-no-prompt"
+  local argv_capture="$BATS_TEST_TMPDIR/mix-argv-no-prompt"
+  mkdir -p "$stub_dir"
+  cat > "$stub_dir/mix" <<STUB
+#!/usr/bin/env bash
+set -euo pipefail
+printf '%s\n' "\$@" > "$argv_capture"
+exit 0
+STUB
+  chmod +x "$stub_dir/mix"
+
+  unset AGENT_IDENTITY
+  PATH="$stub_dir:$PATH" run sessions run \
+    --cwd "$BATS_TEST_TMPDIR" \
+    --model "openai-codex/gpt-5.5" \
+    "do work"
+  [ "$status" -eq 0 ]
+  [ -f "$argv_capture" ]
+
+  ! grep -qx -- "--system-prompt-file" "$argv_capture"
+  grep -qx -- "--model" "$argv_capture"
+  [ "$(awk '/^--model$/ { getline; print; exit }' "$argv_capture")" = "openai-codex/gpt-5.5" ]
+}
+
+@test "run rejects a missing explicit system prompt file before launch" {
+  local stub_dir="$BATS_TEST_TMPDIR/stub-pi-missing-prompt"
+  local invoked_capture="$BATS_TEST_TMPDIR/pi-missing-prompt-invoked"
+  mkdir -p "$stub_dir"
+  cat > "$stub_dir/pi" <<STUB
+#!/usr/bin/env bash
+printf invoked > "$invoked_capture"
+exit 0
+STUB
+  chmod +x "$stub_dir/pi"
+
+  PATH="$stub_dir:$PATH" run sessions run \
+    --system-prompt-file "$BATS_TEST_TMPDIR/missing-prompt.md" \
+    --cwd "$BATS_TEST_TMPDIR" \
+    --model "openai-codex/gpt-5.5"
+  [ "$status" -eq 1 ]
+  echo "$output" | grep -q "System prompt file not found"
+  [ ! -e "$invoked_capture" ]
+}
+
 @test "run interactive without message preserves stdin for pi" {
   local stub_dir="$BATS_TEST_TMPDIR/stub-pi-stdin"
   local stdin_capture="$BATS_TEST_TMPDIR/pi-stdin-capture"
@@ -169,6 +243,47 @@ STUB
 
   grep -q "headless baked prompt" "$prompt_capture"
   grep -q "This is a headless session" "$prompt_capture"
+  prompt_path=$(awk '/^--system-prompt-file$/ { getline; print; exit }' "$argv_capture")
+  [ -n "$prompt_path" ]
+  [ ! -e "$prompt_path" ]
+}
+
+@test "run headless with message creates runtime context prompt without identity" {
+  local stub_dir="$BATS_TEST_TMPDIR/stub-mix-headless-no-identity"
+  local argv_capture="$BATS_TEST_TMPDIR/mix-argv-headless-no-identity"
+  local prompt_capture="$BATS_TEST_TMPDIR/mix-prompt-headless-no-identity"
+  mkdir -p "$stub_dir"
+  cat > "$stub_dir/mix" <<STUB
+#!/usr/bin/env bash
+set -euo pipefail
+printf '%s\n' "\$@" > "$argv_capture"
+prompt_file=""
+while [ "\$#" -gt 0 ]; do
+  if [ "\$1" = "--system-prompt-file" ]; then
+    prompt_file="\$2"
+    break
+  fi
+  shift
+done
+[ -n "\$prompt_file" ]
+cat "\$prompt_file" > "$prompt_capture"
+exit 0
+STUB
+  chmod +x "$stub_dir/mix"
+
+  unset AGENT_IDENTITY
+  PATH="$stub_dir:$PATH" run sessions run \
+    --headless \
+    --cwd "$BATS_TEST_TMPDIR" \
+    --model "openai-codex/gpt-5.5" \
+    "do work"
+  [ "$status" -eq 0 ]
+  [ -f "$argv_capture" ]
+  [ -f "$prompt_capture" ]
+
+  grep -qx -- "--system-prompt-file" "$argv_capture"
+  grep -q "This is a headless session" "$prompt_capture"
+  ! grep -q "AGENT_IDENTITY" "$prompt_capture"
   prompt_path=$(awk '/^--system-prompt-file$/ { getline; print; exit }' "$argv_capture")
   [ -n "$prompt_path" ]
   [ ! -e "$prompt_path" ]
