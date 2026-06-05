@@ -602,7 +602,7 @@ STUB
   ! grep -qx '' "$capture"
 }
 
-@test "wake interactive without --message executes nested run without print mode" {
+@test "wake interactive without --message executes nested run without a system prompt" {
   local session_cwd="$BATS_TEST_TMPDIR/wake-session-cwd"
   local expected_cwd
   mkdir -p "$session_cwd"
@@ -620,7 +620,6 @@ STUB
   stub_shell_exec_payload "$stub_dir" "$shell_capture"
   stub_pi_capture_argv_cwd "$stub_dir" "$pi_argv_capture" "$pi_cwd_capture"
 
-  export AGENT_IDENTITY="test identity"
   PATH="$stub_dir:$PATH" run sessions wake "${SESSION_1:0:8}" --background --model "openai-codex/gpt-5.5"
   [ "$status" -eq 0 ]
   [ -f "$shell_capture" ]
@@ -628,7 +627,7 @@ STUB
   [ -f "$pi_cwd_capture" ]
 
   [ "$(cat "$pi_cwd_capture")" = "$expected_cwd" ]
-  grep -qx -- "--append-system-prompt" "$pi_argv_capture"
+  ! grep -qx -- "--append-system-prompt" "$pi_argv_capture"
   grep -qx -- "--model" "$pi_argv_capture"
   [ "$(awk '/^--model$/ { getline; print; exit }' "$pi_argv_capture")" = "openai-codex/gpt-5.5" ]
   grep -qx -- "--session" "$pi_argv_capture"
@@ -669,7 +668,6 @@ exit 0
 STUB
   chmod +x "$stub_dir/pi"
 
-  unset AGENT_IDENTITY
   PATH="$stub_dir:$PATH" run sessions wake wake-baked-prompt --background --model "openai-codex/gpt-5.5"
   [ "$status" -eq 0 ]
   [ -f "$shell_capture" ]

@@ -4,14 +4,21 @@ defmodule Cli.Harness.Pi.CommandTest do
   alias Cli.Harness.Pi.Command
 
   describe "build_command/6 — shell script" do
-    test "builds a basic invocation with no timeout, session, or flags" do
+    test "builds a basic invocation with no prompt, timeout, session, or flags" do
+      {script, _args} =
+        Command.build_command("hi", "claude-sonnet-4-5", nil, nil, nil)
+
+      assert script =~ "echo | pi -p \"$1\""
+      refute script =~ "--append-system-prompt"
+      assert script =~ ~s( --model "$2")
+      assert script =~ " --mode json"
+    end
+
+    test "adds --append-system-prompt when a prompt file is provided" do
       {script, _args} =
         Command.build_command("hi", "claude-sonnet-4-5", "/tmp/prompt.txt", nil, nil)
 
-      assert script =~ "echo | pi -p \"$1\""
       assert script =~ ~s( --append-system-prompt "$3")
-      assert script =~ ~s( --model "$2")
-      assert script =~ " --mode json"
     end
 
     test "wraps the command in `timeout <N>` when timeout is given" do
@@ -21,7 +28,7 @@ defmodule Cli.Harness.Pi.CommandTest do
       assert script =~ "echo | timeout 300 pi -p"
     end
 
-    test "uses --session when a session path is given" do
+    test "uses --session at the next positional index after prompt args" do
       {script, _} =
         Command.build_command(
           "hi",
@@ -32,6 +39,21 @@ defmodule Cli.Harness.Pi.CommandTest do
         )
 
       assert script =~ ~s( --session "$4")
+      refute script =~ " --no-session"
+    end
+
+    test "uses --session at $3 when no prompt file is provided" do
+      {script, _} =
+        Command.build_command(
+          "hi",
+          "claude-sonnet-4-5",
+          nil,
+          "/tmp/session.jsonl",
+          nil
+        )
+
+      assert script =~ ~s( --session "$3")
+      refute script =~ "--append-system-prompt"
       refute script =~ " --no-session"
     end
 
@@ -96,14 +118,21 @@ defmodule Cli.Harness.Pi.CommandTest do
   end
 
   describe "build_command/6 — positional args" do
-    test "returns [message, model, system_prompt_file] without session" do
+    test "returns [message, model] without prompt or session" do
+      {_script, args} =
+        Command.build_command("hello world", "openai-codex/gpt-5.5", nil, nil, nil)
+
+      assert args == ["hello world", "openai-codex/gpt-5.5"]
+    end
+
+    test "returns [message, model, system_prompt_file] when prompt is present" do
       {_script, args} =
         Command.build_command("hello world", "openai-codex/gpt-5.5", "/tmp/p.txt", nil, nil)
 
       assert args == ["hello world", "openai-codex/gpt-5.5", "/tmp/p.txt"]
     end
 
-    test "appends session path to positional args when given" do
+    test "appends session path after prompt when both are given" do
       {_script, args} =
         Command.build_command(
           "hello",
@@ -114,6 +143,19 @@ defmodule Cli.Harness.Pi.CommandTest do
         )
 
       assert args == ["hello", "openai-codex/gpt-5.5", "/tmp/p.txt", "/tmp/s.jsonl"]
+    end
+
+    test "appends session path after model when prompt is absent" do
+      {_script, args} =
+        Command.build_command(
+          "hello",
+          "openai-codex/gpt-5.5",
+          nil,
+          "/tmp/s.jsonl",
+          nil
+        )
+
+      assert args == ["hello", "openai-codex/gpt-5.5", "/tmp/s.jsonl"]
     end
   end
 

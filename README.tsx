@@ -211,22 +211,22 @@ sessions wake review/pr-50 --model openai-codex/gpt-5.5 --message "You missed th
         <Code>sessions wake</Code>
         {" calls "}
         <Code>sessions run</Code>
-        {" as its hidden low-level executor. For normal use, prefer "}
+        {" as its hidden low-level executor. For profile-specific sessions, use "}
         <Code>new</Code>
         {" + "}
         <Code>wake</Code>
-        {": bake identity or profile instructions into the session with "}
+        {": bake profile or task instructions into the session with "}
         <Code>--system-prompt-file</Code>
-        {" at creation, then wake it with task messages."}
+        {" at creation, then wake it with task messages. If no explicit or baked prompt exists, the harness starts without an appended prompt and can rely on its native cwd context discovery."}
       </Paragraph>
 
       <Paragraph>
         <Code>sessions run</Code>
         {" remains available as an advanced/compatibility command. It accepts an explicit "}
         <Code>--system-prompt-file</Code>
-        {" and keeps the legacy "}
-        <Code>AGENT_IDENTITY</Code>
-        {" fallback, but sessions created with a system prompt no longer need identity in the environment at wake time."}
+        {", uses any prompt baked into the session, and otherwise starts without appending a system prompt. Caller-provided context belongs to the caller, not to "}
+        <Code>sessions</Code>
+        {"."}
       </Paragraph>
 
       <Paragraph>

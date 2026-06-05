@@ -36,7 +36,7 @@ defmodule Cli.Engine do
   @spec run(
           harness :: module(),
           message :: String.t(),
-          system_prompt_file :: String.t(),
+          system_prompt_file :: String.t() | nil,
           timeout :: non_neg_integer() | nil,
           model :: String.t(),
           cwd :: String.t() | nil,

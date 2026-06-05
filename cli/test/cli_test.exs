@@ -52,7 +52,9 @@ defmodule CliTest do
     end
 
     test "requires model" do
-      prompt = System.tmp_dir!() <> "/sessions-cli-test-prompt-#{System.unique_integer([:positive])}.txt"
+      prompt =
+        System.tmp_dir!() <> "/sessions-cli-test-prompt-#{System.unique_integer([:positive])}.txt"
+
       File.write!(prompt, "prompt")
 
       try do
@@ -65,11 +67,15 @@ defmodule CliTest do
     end
 
     test "requires provider-qualified model" do
-      prompt = System.tmp_dir!() <> "/sessions-cli-test-prompt-#{System.unique_integer([:positive])}.txt"
+      prompt =
+        System.tmp_dir!() <> "/sessions-cli-test-prompt-#{System.unique_integer([:positive])}.txt"
+
       File.write!(prompt, "prompt")
 
       try do
-        {output, exit_code} = run_cli(["--system-prompt-file", prompt, "--model", "gpt-5.5", "hello"])
+        {output, exit_code} =
+          run_cli(["--system-prompt-file", prompt, "--model", "gpt-5.5", "hello"])
+
         assert exit_code == 1
         assert output =~ "--model must be provider-qualified"
       after
@@ -77,23 +83,32 @@ defmodule CliTest do
       end
     end
 
-    test "requires system-prompt-file" do
-      {output, exit_code} = run_cli(["--timeout", "60", "--model", "openai-codex/gpt-5.5", "hello"])
-      assert exit_code == 1
-      assert output =~ "--system-prompt-file is required"
-    end
-
     test "rejects non-existent system-prompt-file" do
       {output, exit_code} =
-        run_cli(["--system-prompt-file", "/nonexistent/path.txt", "--model", "openai-codex/gpt-5.5", "--timeout", "60", "hello"])
+        run_cli([
+          "--system-prompt-file",
+          "/nonexistent/path.txt",
+          "--model",
+          "openai-codex/gpt-5.5",
+          "--timeout",
+          "60",
+          "hello"
+        ])
 
       assert exit_code == 1
       assert output =~ "System prompt file not found"
     end
 
     test "timeout is optional" do
-      # Should not error on missing timeout — only on missing prompt.
-      {output, exit_code} = run_cli(["--system-prompt-file", "/nonexistent/path.txt", "--model", "openai-codex/gpt-5.5", "hello"])
+      {output, exit_code} =
+        run_cli([
+          "--system-prompt-file",
+          "/nonexistent/path.txt",
+          "--model",
+          "openai-codex/gpt-5.5",
+          "hello"
+        ])
+
       assert exit_code == 1
       assert output =~ "System prompt file not found"
     end

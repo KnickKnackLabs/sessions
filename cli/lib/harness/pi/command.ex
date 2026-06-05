@@ -11,7 +11,6 @@ defmodule Cli.Harness.Pi.Command do
   multi-harness plan.
   """
 
-
   @typep build_opts :: [
            extensions: boolean(),
            skills: boolean(),
@@ -30,7 +29,7 @@ defmodule Cli.Harness.Pi.Command do
   @spec build_command(
           message :: String.t(),
           model :: String.t(),
-          system_prompt_file :: String.t(),
+          system_prompt_file :: String.t() | nil,
           session :: String.t() | nil,
           timeout :: non_neg_integer() | nil,
           opts :: build_opts()
@@ -42,12 +41,25 @@ defmodule Cli.Harness.Pi.Command do
 
     qualified_model = model
 
-    session_flag =
-      if session, do: ~s( --session "$4"), else: " --no-session"
+    {prompt_flag, positional_after_prompt} =
+      if system_prompt_file && system_prompt_file != "" do
+        positional = [message, qualified_model, system_prompt_file]
+        {~s( --append-system-prompt "$3"), positional}
+      else
+        {"", [message, qualified_model]}
+      end
+
+    {session_flag, positional} =
+      if session do
+        session_arg = "$#{length(positional_after_prompt) + 1}"
+        {~s( --session "#{session_arg}"), positional_after_prompt ++ [session]}
+      else
+        {" --no-session", positional_after_prompt}
+      end
 
     pi_flags =
       [
-        ~s( --append-system-prompt "$3"),
+        prompt_flag,
         ~s( --model "$2"),
         " --mode json",
         session_flag,
@@ -66,9 +78,6 @@ defmodule Cli.Harness.Pi.Command do
       else
         "echo | #{pi_cmd}"
       end
-
-    positional = [message, qualified_model, system_prompt_file]
-    positional = if session, do: positional ++ [session], else: positional
 
     {shell_script, positional}
   end

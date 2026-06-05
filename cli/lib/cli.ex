@@ -2,9 +2,9 @@ defmodule Cli do
   @moduledoc """
   `sessions run` — entry point, argument parsing, and help output.
 
-  Identity-agnostic: receives a system prompt file, doesn't know or care
-  what's in it. Prompt composition (identity, passphrase, context) is the
-  caller's responsibility.
+  Prompt-agnostic: optionally receives a system prompt file, doesn't know
+  or care what's in it. Prompt content is the caller's responsibility;
+  absent prompts let the harness load its native cwd context.
 
   Run execution (port spawning, streaming, timeout) lives in
   `Cli.Engine`; usage reporting lives in `Cli.UsageReport`; harness
@@ -91,6 +91,7 @@ defmodule Cli do
 
   defp validate_args(message, opts) do
     system_prompt_file = opts[:system_prompt_file]
+
     cond do
       String.trim(message) == "" ->
         {:error, "No message provided"}
@@ -101,10 +102,8 @@ defmodule Cli do
       not String.contains?(opts[:model], "/") ->
         {:error, "--model must be provider-qualified (for example: openai-codex/gpt-5.5)"}
 
-      system_prompt_file == nil or system_prompt_file == "" ->
-        {:error, "--system-prompt-file is required"}
-
-      not File.exists?(system_prompt_file) ->
+      system_prompt_file != nil and system_prompt_file != "" and
+          not File.exists?(system_prompt_file) ->
         {:error, "System prompt file not found: #{system_prompt_file}"}
 
       true ->
@@ -145,15 +144,15 @@ defmodule Cli do
 
   defp print_help do
     IO.puts("""
-    Usage: sessions run --system-prompt-file <path> --model <provider/model> [options] <message>
+    Usage: sessions run --model <provider/model> [options] <message>
 
     Run a pi agent session with streaming output, timeout, and ABORT detection.
 
     Required:
-      --system-prompt-file <path>  Path to the system prompt file
       --model <provider/model>     Provider-qualified model to use
 
     Options:
+      --system-prompt-file <path>  Optional path to appended system prompt text
       --timeout <seconds>          Maximum runtime in seconds (default: no timeout)
       --cwd <path>                 Working directory for pi
       --session <path>             Session file for conversation continuity
@@ -163,9 +162,9 @@ defmodule Cli do
       -h, --help                   Show this help message
 
     Examples:
-      sessions run --system-prompt-file /tmp/prompt.txt --model openai-codex/gpt-5.5 "Fix the bug"
+      sessions run --model openai-codex/gpt-5.5 "Fix the bug"
       sessions run --system-prompt-file ./prompt.txt --model openai-codex/gpt-5.5 --timeout 300 "Explore"
-      sessions run --session ./session.jsonl --system-prompt-file ./prompt.txt --model openai-codex/gpt-5.5 "Continue"
+      sessions run --session ./session.jsonl --model openai-codex/gpt-5.5 "Continue"
     """)
   end
 end

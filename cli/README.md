@@ -4,35 +4,35 @@ Session execution engine — runs pi with streaming output, timeout, ABORT detec
 
 ## Overview
 
-Identity-agnostic Elixir wrapper around pi. It:
+Prompt-agnostic Elixir wrapper around pi. It:
 
-- Reads a system prompt from a file (`--system-prompt-file`)
+- Optionally reads appended system prompt text from a file (`--system-prompt-file`)
 - Executes pi via Erlang Port with optional timeout
 - Streams JSON output in real-time, showing tool invocations with formatted inputs
 - Detects `[[ABORT]]` signals across streaming chunk boundaries
 - Reports usage metrics (tokens, cost, turns) at session end
 - Supports session files for conversation continuity (`--session`)
 
-**This CLI does not handle identity, passphrase injection, or prompt composition.** Those are the caller's responsibility. The `sessions run` task handles prompt assembly from environment variables and delegates here.
+**This CLI does not interpret prompt contents or compose caller context.** Those are the caller's responsibility. The `sessions run` task handles optional runtime prompt additions and delegates here; when no prompt is provided, the harness can rely on native cwd context discovery.
 
 ## Usage
 
 ```bash
 # Via the sessions run task (typical)
-sessions run --system-prompt-file /tmp/prompt.txt --model openai-codex/gpt-5.5 --timeout 300 "Your message"
+sessions run --model openai-codex/gpt-5.5 --timeout 300 "Your message"
 
 # Direct CLI invocation (rare)
-cd cli && mix sessions --system-prompt-file /tmp/prompt.txt --model openai-codex/gpt-5.5 "Your message"
+cd cli && mix sessions --model openai-codex/gpt-5.5 "Your message"
 
 # With session file for conversation continuity
-mix sessions --system-prompt-file ./prompt.txt --model openai-codex/gpt-5.5 --session ./session.jsonl "Continue"
+mix sessions --model openai-codex/gpt-5.5 --session ./session.jsonl "Continue"
 ```
 
 ## Options
 
 | Option | Description |
 |--------|-------------|
-| `--system-prompt-file <path>` | Required. Path to system prompt file |
+| `--system-prompt-file <path>` | Optional. Path to appended system prompt text |
 | `--timeout <seconds>` | Optional. Timeout in seconds (default: no timeout) |
 | `--model <provider/model>` | Required. Provider-qualified model to use |
 | `--session <path>` | Optional. Session file for conversation continuity |

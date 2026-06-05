@@ -5,12 +5,12 @@ defmodule Mix.Tasks.Sessions do
 
   ## Usage
 
-      mix sessions --system-prompt-file <path> [options] <message>
+      mix sessions --model <provider/model> [options] <message>
 
   ## Examples
 
-      mix sessions --system-prompt-file /tmp/prompt.txt --timeout 300 "Fix the bug"
-      mix sessions --system-prompt-file ./prompt.txt --session ./session.jsonl "Continue"
+      mix sessions --model openai-codex/gpt-5.5 --timeout 300 "Fix the bug"
+      mix sessions --model openai-codex/gpt-5.5 --session ./session.jsonl "Continue"
 
   """
   use Mix.Task
