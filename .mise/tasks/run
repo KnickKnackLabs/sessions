@@ -9,9 +9,10 @@
 #USAGE flag "--session <session>" default="" help="Session file for conversation continuity"
 #USAGE flag "--cwd <cwd>" default="" help="Working directory for pi"
 #USAGE flag "--headless" default=#false help="Non-interactive mode (appends headless context to system prompt)"
-#USAGE flag "--extensions" default=#false help="Enable pi extensions for print-mode runs (interactive no-message runs use pi defaults)"
-#USAGE flag "--skills" default=#false help="Enable pi skills for print-mode runs (interactive no-message runs use pi defaults)"
-#USAGE flag "--prompt-templates" default=#false help="Enable pi prompt templates for print-mode runs (interactive no-message runs use pi defaults)"
+#USAGE flag "--interactive" default=#false help="Open a persistent interactive harness even when a message is provided"
+#USAGE flag "--extensions" default=#false help="Enable pi extensions for print-mode runs (interactive runs use pi defaults)"
+#USAGE flag "--skills" default=#false help="Enable pi skills for print-mode runs (interactive runs use pi defaults)"
+#USAGE flag "--prompt-templates" default=#false help="Enable pi prompt templates for print-mode runs (interactive runs use pi defaults)"
 
 set -euo pipefail
 
@@ -22,6 +23,7 @@ MODEL="${usage_model:-}"
 SESSION="${usage_session:-}"
 CWD="${usage_cwd:-${SESSIONS_CALLER_PWD:-${CALLER_PWD:-.}}}"
 HEADLESS="${usage_headless:-false}"
+INTERACTIVE="${usage_interactive:-false}"
 # Extensions disabled by default (determinism for CI). Pass --extensions etc. to enable.
 EXTENSIONS="${usage_extensions:-false}"
 SKILLS="${usage_skills:-false}"
@@ -193,6 +195,11 @@ if [ "$HEADLESS" = "true" ] && [ -z "$MESSAGE" ]; then
   exit 1
 fi
 
+if [ "$HEADLESS" = "true" ] && [ "$INTERACTIVE" = "true" ]; then
+  echo "Error: --headless cannot be combined with --interactive" >&2
+  exit 1
+fi
+
 if [ -z "$MODEL" ]; then
   echo "Error: --model is required" >&2
   echo "Usage: sessions run --model <provider/model> [options] \"message\"" >&2
@@ -253,7 +260,7 @@ This is a headless session. No human is present. You are running non-interactive
 HEADLESS_EOF
 fi
 
-run_interactive_without_message() {
+run_interactive() {
   # shellcheck source=../../lib/harness/dispatch.sh
   source "$MISE_CONFIG_ROOT/lib/harness/dispatch.sh"
 
@@ -285,6 +292,9 @@ run_interactive_without_message() {
   else
     pi_args+=(--no-session)
   fi
+  if [ -n "$MESSAGE" ]; then
+    pi_args+=("$MESSAGE")
+  fi
   cd "$CWD"
 
   if [ -n "$TIMEOUT" ]; then
@@ -298,8 +308,8 @@ run_interactive_without_message() {
   run_and_exit pi "${pi_args[@]}"
 }
 
-if [ -z "$MESSAGE" ]; then
-  run_interactive_without_message
+if [ "$INTERACTIVE" = "true" ] || [ -z "$MESSAGE" ]; then
+  run_interactive
 fi
 
 CLI_DIR="$MISE_CONFIG_ROOT/cli"

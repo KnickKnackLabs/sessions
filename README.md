@@ -8,7 +8,7 @@ Create sessions with structured metadata, wake agents into them,
 observe transcripts in real time, and query your history.
 
 ![lang: bash + python](https://img.shields.io/badge/lang-bash%20%2B%20python-4EAA25?style=flat&logo=gnubash&logoColor=white)
-[![tests: 282 passing](https://img.shields.io/badge/tests-282%20passing-brightgreen?style=flat)](test/)
+[![tests: 286 passing](https://img.shields.io/badge/tests-286%20passing-brightgreen?style=flat)](test/)
 ![commands: 17](https://img.shields.io/badge/commands-17-blue?style=flat)
 ![license: MIT](https://img.shields.io/badge/license-MIT-blue?style=flat)
 
@@ -114,7 +114,7 @@ The spawning stack uses [shell](https://github.com/KnickKnackLabs/shell) for per
 
 `--model` on `sessions wake` is required and is not remembered across wakes — pass a provider-qualified model (for example `openai-codex/gpt-5.5`) on each wake.
 
-`--message` is optional for interactive wakes/runs; omit it to open the harness and let the human start the conversation. `--headless` still requires `--message`.
+`--message` is optional for interactive `sessions wake`: with a message, wake sends an initial prompt and keeps the harness open; without one, it opens the harness for the human. `--headless` still requires `--message`. For low-level `sessions run`, pass `--interactive` when a provided message should keep the harness open; otherwise a message uses the print/one-turn compatibility path.
 
 To run only the payload process as a local agent OS user, pass `--os-user` or set `SHIMMER_OS_USER`. The shell/zmx session remains owned by the caller. This does not copy caller environment, secrets, or auth into the target account; the target user's session environment is a separate setup step.
 
@@ -231,7 +231,7 @@ cd sessions && mise trust && mise install
 mise run test
 ```
 
-**282 tests** across 20 suites, using [BATS 1.13.0](https://github.com/bats-core/bats-core). Tasks are bash scripts (session creation, wake, metadata) and Python scripts with [Rich](https://github.com/Textualize/rich) output (list, read, wait, usage, inspect, search). The shared Python support library is 826 lines in `lib/`.
+**286 tests** across 20 suites, using [BATS 1.13.0](https://github.com/bats-core/bats-core). Tasks are bash scripts (session creation, wake, metadata) and Python scripts with [Rich](https://github.com/Textualize/rich) output (list, read, wait, usage, inspect, search). The shared Python support library is 826 lines in `lib/`.
 
 <details>
 <summary><b>Project structure</b></summary>
@@ -264,7 +264,7 @@ sessions/
 │   ├── shell.sh        # Shell helpers
 │   └── harness/        # Per-harness adapters (pi, …)
 └── test/
-    └── *.bats          # 282 tests
+    └── *.bats          # 286 tests
 ```
 
 </details>

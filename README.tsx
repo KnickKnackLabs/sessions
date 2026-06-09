@@ -240,11 +240,17 @@ sessions wake review/pr-50 --model openai-codex/gpt-5.5 --message "You missed th
 
       <Paragraph>
         <Code>--message</Code>
-        {" is optional for interactive wakes/runs; omit it to open the harness and let the human start the conversation. "}
+        {" is optional for interactive "}
+        <Code>sessions wake</Code>
+        {": with a message, wake sends an initial prompt and keeps the harness open; without one, it opens the harness for the human. "}
         <Code>--headless</Code>
         {" still requires "}
         <Code>--message</Code>
-        {"."}
+        {". For low-level "}
+        <Code>sessions run</Code>
+        {", pass "}
+        <Code>--interactive</Code>
+        {" when a provided message should keep the harness open; otherwise a message uses the print/one-turn compatibility path."}
       </Paragraph>
 
       <Paragraph>

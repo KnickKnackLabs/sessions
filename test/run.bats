@@ -55,6 +55,42 @@ teardown() {
   ! grep -qx '' "$argv_capture"
 }
 
+@test "run --interactive with message execs pi without print mode" {
+  local stub_dir="$BATS_TEST_TMPDIR/stub-pi-interactive-message"
+  local argv_capture="$BATS_TEST_TMPDIR/pi-argv-interactive-message"
+  local cwd_capture="$BATS_TEST_TMPDIR/pi-cwd-interactive-message"
+  stub_pi_capture_argv_cwd "$stub_dir" "$argv_capture" "$cwd_capture"
+
+  local run_cwd="$BATS_TEST_TMPDIR/run-cwd-interactive-message"
+  mkdir -p "$run_cwd"
+  local expected_cwd
+  expected_cwd=$(cd "$run_cwd" && pwd -P)
+
+  local session_file
+  session_file=$(find "$PROJECT_DIR" -name "*${SESSION_1}.jsonl")
+
+  PATH="$stub_dir:$PATH" run sessions run \
+    --interactive \
+    --cwd "$run_cwd" \
+    --model "openai-codex/gpt-5.5" \
+    --session "$session_file" \
+    "stay attached"
+  [ "$status" -eq 0 ]
+  [ -f "$argv_capture" ]
+  [ -f "$cwd_capture" ]
+
+  [ "$(cat "$cwd_capture")" = "$expected_cwd" ]
+  grep -qx -- "--model" "$argv_capture"
+  [ "$(awk '/^--model$/ { getline; print; exit }' "$argv_capture")" = "openai-codex/gpt-5.5" ]
+  grep -qx -- "--session" "$argv_capture"
+  [ "$(awk '/^--session$/ { getline; print; exit }' "$argv_capture")" = "$session_file" ]
+  [ "$(tail -1 "$argv_capture")" = "stay attached" ]
+
+  ! grep -qx -- "-p" "$argv_capture"
+  ! grep -qx -- "--print" "$argv_capture"
+  ! grep -qx -- "--mode" "$argv_capture"
+}
+
 @test "run interactive without message works without any system prompt" {
   local stub_dir="$BATS_TEST_TMPDIR/stub-pi-no-prompt"
   local argv_capture="$BATS_TEST_TMPDIR/pi-argv-no-prompt"
@@ -475,6 +511,12 @@ STUB
   grep -q "$pi_bin" "$env_capture"
   ! grep -q "$stale_bin" "$env_capture"
   ! grep -q "$fresh_bin" "$env_capture"
+}
+
+@test "run rejects --headless with --interactive" {
+  run sessions run --headless --interactive --model "openai-codex/gpt-5.5" "do work"
+  [ "$status" -eq 1 ]
+  echo "$output" | grep -q -- "--headless cannot be combined with --interactive"
 }
 
 @test "run --headless requires a message" {

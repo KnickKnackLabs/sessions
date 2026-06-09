@@ -569,6 +569,21 @@ STUB
   [ "$after" = "$((before + 1))" ]
 }
 
+@test "wake interactive with --message rejects unsupported harness before recording wake" {
+  src_file=$(find "$PROJECT_DIR" -name "*${SESSION_1}.jsonl")
+  local before
+  before=$(wc -l < "$src_file" | tr -d ' ')
+  echo '{"type":"harness","id":"h-claude","parentId":"u4","timestamp":"2026-03-14T10:31:00.000Z","name":"claude"}' >> "$src_file"
+
+  run sessions wake "$SESSION_1" --background --model "openai-codex/gpt-5.5" --message "stay attached"
+  [ "$status" -eq 10 ]
+  echo "$output" | grep -q -- "claude.*does not support interactive wake with --message"
+
+  local after
+  after=$(wc -l < "$src_file" | tr -d ' ')
+  [ "$after" = "$((before + 1))" ]
+}
+
 @test "wake interactive without --message records no synthetic message" {
   local stub_dir="$BATS_TEST_TMPDIR/stub-shell-no-message"
   local capture="$BATS_TEST_TMPDIR/shell-argv-no-message"
@@ -600,6 +615,45 @@ STUB
   ! grep -qx 'stale inherited message' "$capture"
   ! grep -qx -- '--headless' "$capture"
   ! grep -qx '' "$capture"
+}
+
+@test "wake interactive with --message passes initial prompt to persistent pi" {
+  local session_cwd="$BATS_TEST_TMPDIR/wake-message-cwd"
+  local expected_cwd
+  mkdir -p "$session_cwd"
+  expected_cwd=$(cd "$session_cwd" && pwd -P)
+
+  src_file=$(find "$PROJECT_DIR" -name "*${SESSION_1}.jsonl")
+  local updated_file="$BATS_TEST_TMPDIR/session-cwd-for-message.jsonl"
+  jq -c --arg cwd "$session_cwd" 'if .type == "session" then .cwd = $cwd else . end' "$src_file" > "$updated_file"
+  mv "$updated_file" "$src_file"
+
+  local stub_dir="$BATS_TEST_TMPDIR/stub-shell-pi-message"
+  local shell_capture="$BATS_TEST_TMPDIR/shell-argv-message"
+  local pi_argv_capture="$BATS_TEST_TMPDIR/pi-argv-message"
+  local pi_cwd_capture="$BATS_TEST_TMPDIR/pi-cwd-message"
+  stub_shell_exec_payload "$stub_dir" "$shell_capture"
+  stub_pi_capture_argv_cwd "$stub_dir" "$pi_argv_capture" "$pi_cwd_capture"
+
+  PATH="$stub_dir:$PATH" run sessions wake "${SESSION_1:0:8}" --background --model "openai-codex/gpt-5.5" --message "stay attached"
+  [ "$status" -eq 0 ]
+  [ -f "$shell_capture" ]
+  [ -f "$pi_argv_capture" ]
+  [ -f "$pi_cwd_capture" ]
+
+  grep -qx -- "--interactive" "$shell_capture"
+  [ "$(tail -1 "$shell_capture")" = "stay attached" ]
+
+  [ "$(cat "$pi_cwd_capture")" = "$expected_cwd" ]
+  grep -qx -- "--model" "$pi_argv_capture"
+  [ "$(awk '/^--model$/ { getline; print; exit }' "$pi_argv_capture")" = "openai-codex/gpt-5.5" ]
+  grep -qx -- "--session" "$pi_argv_capture"
+  [ "$(awk '/^--session$/ { getline; print; exit }' "$pi_argv_capture")" = "$src_file" ]
+  [ "$(tail -1 "$pi_argv_capture")" = "stay attached" ]
+
+  ! grep -qx -- "-p" "$pi_argv_capture"
+  ! grep -qx -- "--print" "$pi_argv_capture"
+  ! grep -qx -- "--mode" "$pi_argv_capture"
 }
 
 @test "wake interactive without --message executes nested run without a system prompt" {

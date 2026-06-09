@@ -99,8 +99,12 @@ HARNESS_NAME=$(harness_resolve --session "$SESSION_FILE") || exit 1
 # shellcheck source=/dev/null
 source "$MISE_CONFIG_ROOT/lib/harness/$HARNESS_NAME.sh"
 
-if [ -z "$MESSAGE" ] && [ "$HARNESS_NAME" != "pi" ]; then
-  echo "sessions: '$HARNESS_NAME' harness does not support interactive no-message wake yet" >&2
+if [ "$HEADLESS" != "true" ] && [ "$HARNESS_NAME" != "pi" ]; then
+  if [ -z "$MESSAGE" ]; then
+    echo "sessions: '$HARNESS_NAME' harness does not support interactive no-message wake yet" >&2
+  else
+    echo "sessions: '$HARNESS_NAME' harness does not support interactive wake with --message yet" >&2
+  fi
   exit "$HARNESS_UNSUPPORTED_EXIT"
 fi
 
@@ -205,9 +209,13 @@ SESSION_CWD=$(cd "$SESSION_CWD" && pwd -P)
 # --- Launch ---
 
 RUN_CMD=("${mise_run[@]}" run --session "$SESSION_FILE" --cwd "$SESSION_CWD" --model "$MODEL")
-[ "$HEADLESS" = "true" ] && RUN_CMD+=(--headless)
-if [ -n "$MESSAGE" ]; then
-  RUN_CMD+=("$MESSAGE")
+if [ "$HEADLESS" = "true" ]; then
+  RUN_CMD+=(--headless)
+  if [ -n "$MESSAGE" ]; then
+    RUN_CMD+=("$MESSAGE")
+  fi
+elif [ -n "$MESSAGE" ]; then
+  RUN_CMD+=(--interactive "$MESSAGE")
 fi
 
 if [ -n "$OS_USER" ]; then

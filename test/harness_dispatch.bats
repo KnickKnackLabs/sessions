@@ -290,7 +290,7 @@ JSONL
   # lives under PI_DIR so pi's find_session locates it; the harness
   # entry then wins over path-based detection (see the priority test
   # above), so wake dispatches to claude — which errors UNSUPPORTED
-  # when the Elixir run path asks claude to build the harness command.
+  # when the Elixir headless run path asks claude to build the harness command.
   # Foreground wake (no --background) — execs mise run directly, so
   # `shell` isn't required.
 
@@ -302,7 +302,7 @@ JSONL
 {"type":"harness","id":"h1","parentId":"${sid}","timestamp":"2026-04-22T10:00:00.000Z","name":"claude"}
 JSONL
 
-  run sessions wake "${sid:0:8}" --model "openai-codex/gpt-5.5" --message "acceptance"
+  run sessions wake "${sid:0:8}" --headless --model "openai-codex/gpt-5.5" --message "acceptance"
   [ "$status" -eq 10 ]
   # The user-facing message should name the claude harness and the
   # specific unsupported op.
