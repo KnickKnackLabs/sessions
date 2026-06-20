@@ -30,11 +30,15 @@ def render_json(names: list[str], rows: list[sqlite3.Row], out: io.TextIOBase) -
 
 def render_jsonl(names: list[str], rows: list[sqlite3.Row], out: io.TextIOBase) -> None:
     for row in rows:
-        out.write(json.dumps({name: row[name] for name in names}, sort_keys=True) + "\n")
+        out.write(
+            json.dumps({name: row[name] for name in names}, sort_keys=True) + "\n"
+        )
 
 
 def render_table(names: list[str], rows: list[sqlite3.Row], out: io.TextIOBase) -> None:
-    values = [["" if row[name] is None else str(row[name]) for name in names] for row in rows]
+    values = [
+        ["" if row[name] is None else str(row[name]) for name in names] for row in rows
+    ]
     widths = [len(name) for name in names]
     for row in values:
         for idx, value in enumerate(row):
@@ -43,10 +47,18 @@ def render_table(names: list[str], rows: list[sqlite3.Row], out: io.TextIOBase) 
     def trim(value: str, width: int) -> str:
         return value if len(value) <= width else value[: max(0, width - 1)] + "…"
 
-    out.write("  ".join(name.ljust(widths[idx]) for idx, name in enumerate(names)) + "\n")
+    out.write(
+        "  ".join(name.ljust(widths[idx]) for idx, name in enumerate(names)) + "\n"
+    )
     out.write("  ".join("-" * width for width in widths) + "\n")
     for row in values:
-        out.write("  ".join(trim(value, widths[idx]).ljust(widths[idx]) for idx, value in enumerate(row)) + "\n")
+        out.write(
+            "  ".join(
+                trim(value, widths[idx]).ljust(widths[idx])
+                for idx, value in enumerate(row)
+            )
+            + "\n"
+        )
 
 
 def wrap_grid_cell(value: Any, *, width: int, max_lines: int) -> list[str]:
@@ -77,7 +89,9 @@ def render_grid(
     max_cell_lines: int,
     color: str,
 ) -> None:
-    raw_values = [["" if row[name] is None else str(row[name]) for name in names] for row in rows]
+    raw_values = [
+        ["" if row[name] is None else str(row[name]) for name in names] for row in rows
+    ]
     widths = [min(max_col_width, len(name)) for name in names]
     for row in raw_values:
         for idx, value in enumerate(row):
@@ -100,7 +114,9 @@ def render_grid(
             wrap_grid_cell(cell, width=widths[idx], max_lines=max_cell_lines)
             for idx, cell in enumerate(cells)
         ]
-        row_height = max(len(cell_lines) for cell_lines in wrapped_cells) if wrapped_cells else 1
+        row_height = (
+            max(len(cell_lines) for cell_lines in wrapped_cells) if wrapped_cells else 1
+        )
         for line_idx in range(row_height):
             parts = []
             for col_idx, cell_lines in enumerate(wrapped_cells):

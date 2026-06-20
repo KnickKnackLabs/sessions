@@ -87,10 +87,14 @@ def include_session(entry: ScopeEntry, *, include_agent_prefixed: bool) -> bool:
     return message_count > 0 and entry.model != "unknown"
 
 
-def load_corpus(*, project: str, limit: int, include_agent_prefixed: bool) -> tuple[list[ScopeEntry], dict[str, UsageTotals]]:
+def load_corpus(
+    *, project: str, limit: int, include_agent_prefixed: bool
+) -> tuple[list[ScopeEntry], dict[str, UsageTotals]]:
     entries: list[ScopeEntry] = []
     usage: dict[str, UsageTotals] = {}
-    for path in session_files(project=project, include_agent_prefixed=include_agent_prefixed):
+    for path in session_files(
+        project=project, include_agent_prefixed=include_agent_prefixed
+    ):
         try:
             session = parse.load(str(path))
             entry = entry_from_session(session)
@@ -105,7 +109,9 @@ def load_corpus(*, project: str, limit: int, include_agent_prefixed: bool) -> tu
     return entries, usage
 
 
-def load_selected(session_ids: list[str]) -> tuple[list[ScopeEntry], dict[str, UsageTotals]]:
+def load_selected(
+    session_ids: list[str],
+) -> tuple[list[ScopeEntry], dict[str, UsageTotals]]:
     entries: list[ScopeEntry] = []
     usage: dict[str, UsageTotals] = {}
     for requested in session_ids:
@@ -116,7 +122,9 @@ def load_selected(session_ids: list[str]) -> tuple[list[ScopeEntry], dict[str, U
     return entries, usage
 
 
-def scope_entries(args: argparse.Namespace) -> tuple[list[ScopeEntry], dict[str, UsageTotals]]:
+def scope_entries(
+    args: argparse.Namespace,
+) -> tuple[list[ScopeEntry], dict[str, UsageTotals]]:
     if args.session_ids:
         return load_selected(args.session_ids)
     return load_corpus(

@@ -114,7 +114,9 @@ def create_schema(conn: sqlite3.Connection) -> None:
     )
 
 
-def insert_session(conn: sqlite3.Connection, entry: ScopeEntry, usage: UsageTotals) -> None:
+def insert_session(
+    conn: sqlite3.Connection, entry: ScopeEntry, usage: UsageTotals
+) -> None:
     conn.execute(
         """
         insert into sessions values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -154,7 +156,15 @@ def text_allowed(text_mode: str, kind: str) -> bool:
     return False
 
 
-def ingest_session(conn: sqlite3.Connection, entry: ScopeEntry, usage: UsageTotals, *, text_mode: str, max_output_chars: int, max_message_chars: int) -> None:
+def ingest_session(
+    conn: sqlite3.Connection,
+    entry: ScopeEntry,
+    usage: UsageTotals,
+    *,
+    text_mode: str,
+    max_output_chars: int,
+    max_message_chars: int,
+) -> None:
     insert_session(conn, entry, usage)
     filepath = Path(entry.filepath)
     if not filepath.exists():
@@ -173,7 +183,10 @@ def ingest_session(conn: sqlite3.Connection, entry: ScopeEntry, usage: UsageTota
             event_type = str(obj.get("type") or "")
             message = obj.get("message") if isinstance(obj.get("message"), dict) else {}
             role = str(message.get("role") or "") if message else ""
-            conn.execute("insert into events values (?, ?, ?, ?, ?)", (entry.session_id, seq, timestamp, event_type, role))
+            conn.execute(
+                "insert into events values (?, ?, ?, ?, ?)",
+                (entry.session_id, seq, timestamp, event_type, role),
+            )
 
             if event_type != "message":
                 continue
@@ -181,19 +194,40 @@ def ingest_session(conn: sqlite3.Connection, entry: ScopeEntry, usage: UsageTota
             text = collect_text_blocks(message.get("content"))
             text_excerpt = None
             if text and text_allowed(text_mode, "message"):
-                text_excerpt = compact_text(text, max_chars=max_message_chars if text_mode == "compact" else max(len(text), max_message_chars))
+                text_excerpt = compact_text(
+                    text,
+                    max_chars=max_message_chars
+                    if text_mode == "compact"
+                    else max(len(text), max_message_chars),
+                )
             conn.execute(
                 "insert into messages values (?, ?, ?, ?, ?, ?, ?)",
-                (entry.session_id, seq, timestamp, role, len(text), text_excerpt, int(bool(message.get("usage")))),
+                (
+                    entry.session_id,
+                    seq,
+                    timestamp,
+                    role,
+                    len(text),
+                    text_excerpt,
+                    int(bool(message.get("usage"))),
+                ),
             )
 
             if role == "assistant":
-                blocks = message.get("content") if isinstance(message.get("content"), list) else []
+                blocks = (
+                    message.get("content")
+                    if isinstance(message.get("content"), list)
+                    else []
+                )
                 for block in blocks:
                     if not isinstance(block, dict) or block.get("type") != "toolCall":
                         continue
                     tool_name = str(block.get("name") or "<unknown>")
-                    args = block.get("arguments") if isinstance(block.get("arguments"), dict) else {}
+                    args = (
+                        block.get("arguments")
+                        if isinstance(block.get("arguments"), dict)
+                        else {}
+                    )
                     command = None
                     category = None
                     if tool_name == "bash":
@@ -213,7 +247,15 @@ def ingest_session(conn: sqlite3.Connection, entry: ScopeEntry, usage: UsageTota
                     tool_calls.append(call)
                     conn.execute(
                         "insert into tool_calls values (?, ?, ?, ?, ?, ?, ?)",
-                        (call.session_id, call.call_seq, call.timestamp, call.call_id, call.tool_name, call.command, call.command_category),
+                        (
+                            call.session_id,
+                            call.call_seq,
+                            call.timestamp,
+                            call.call_id,
+                            call.tool_name,
+                            call.command,
+                            call.command_category,
+                        ),
                     )
 
             if role == "toolResult":
@@ -224,7 +266,12 @@ def ingest_session(conn: sqlite3.Connection, entry: ScopeEntry, usage: UsageTota
                 is_error = bool(is_error or status_error)
                 output_excerpt = None
                 if text_allowed(text_mode, "output"):
-                    output_excerpt = compact_text(content_text, max_chars=max_output_chars if text_mode == "compact" else max(len(content_text), max_output_chars))
+                    output_excerpt = compact_text(
+                        content_text,
+                        max_chars=max_output_chars
+                        if text_mode == "compact"
+                        else max(len(content_text), max_output_chars),
+                    )
                 result = ToolResultRecord(
                     session_id=entry.session_id,
                     result_seq=seq,

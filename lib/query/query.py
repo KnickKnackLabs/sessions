@@ -15,7 +15,9 @@ def safe_sql(sql: str) -> str:
     return stripped
 
 
-def rows_for_query(conn: sqlite3.Connection, sql: str) -> tuple[list[str], list[sqlite3.Row]]:
+def rows_for_query(
+    conn: sqlite3.Connection, sql: str
+) -> tuple[list[str], list[sqlite3.Row]]:
     conn.execute("pragma query_only = on")
     cursor = conn.execute(safe_sql(sql))
     names = [description[0] for description in cursor.description or []]

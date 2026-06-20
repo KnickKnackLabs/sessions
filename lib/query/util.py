@@ -9,7 +9,6 @@ from typing import Any
 
 from .constants import (
     EXIT_RE,
-    FAILURE_MARKERS,
     FILE_RE,
     GIT_GH_RE,
     INSTALL_RE,
@@ -96,7 +95,11 @@ def compact_text(text: str, *, max_chars: int) -> str:
     head_size = max_chars // 2
     tail_size = max_chars - head_size
     omitted = len(text) - max_chars
-    return text[:head_size] + f"\n[... compacted {omitted:,} chars ...]\n" + text[-tail_size:]
+    return (
+        text[:head_size]
+        + f"\n[... compacted {omitted:,} chars ...]\n"
+        + text[-tail_size:]
+    )
 
 
 def collect_text_blocks(content: Any) -> str:

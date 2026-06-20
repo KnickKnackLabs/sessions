@@ -20,16 +20,16 @@ at the bottom.
 
 import json
 import os
-import sys
 
 
 # --- Entry-level schema ---
 
+
 def is_message_entry(entry: dict) -> bool:
     """True if `entry` is a pi user/assistant message."""
-    return (
-        entry.get("type") == "message"
-        and entry.get("message", {}).get("role") in ("user", "assistant")
+    return entry.get("type") == "message" and entry.get("message", {}).get("role") in (
+        "user",
+        "assistant",
     )
 
 
@@ -120,24 +120,26 @@ def usage_records(entries: list) -> list:
             continue
 
         cost = usage.get("cost") if isinstance(usage.get("cost"), dict) else {}
-        records.append({
-            "index": idx,
-            "timestamp": entry.get("timestamp", ""),
-            "provider": msg.get("provider") or current_provider or "",
-            "model": msg.get("model") or current_model or "unknown",
-            "input": _number(usage.get("input")),
-            "output": _number(usage.get("output")),
-            "cacheRead": _number(usage.get("cacheRead")),
-            "cacheWrite": _number(usage.get("cacheWrite")),
-            "totalTokens": _number(usage.get("totalTokens")),
-            "cost": {
-                "input": _float(cost.get("input")),
-                "output": _float(cost.get("output")),
-                "cacheRead": _float(cost.get("cacheRead")),
-                "cacheWrite": _float(cost.get("cacheWrite")),
-                "total": _float(cost.get("total")),
-            },
-        })
+        records.append(
+            {
+                "index": idx,
+                "timestamp": entry.get("timestamp", ""),
+                "provider": msg.get("provider") or current_provider or "",
+                "model": msg.get("model") or current_model or "unknown",
+                "input": _number(usage.get("input")),
+                "output": _number(usage.get("output")),
+                "cacheRead": _number(usage.get("cacheRead")),
+                "cacheWrite": _number(usage.get("cacheWrite")),
+                "totalTokens": _number(usage.get("totalTokens")),
+                "cost": {
+                    "input": _float(cost.get("input")),
+                    "output": _float(cost.get("output")),
+                    "cacheRead": _float(cost.get("cacheRead")),
+                    "cacheWrite": _float(cost.get("cacheWrite")),
+                    "total": _float(cost.get("total")),
+                },
+            }
+        )
 
     return records
 
@@ -206,6 +208,7 @@ def message_counts(entries: list) -> tuple[int, int]:
 
 # --- Text rendering ---
 
+
 def text_messages(entries: list) -> list:
     """
     Render pi's JSONL entries into (index, role, timestamp, text) tuples.
@@ -238,7 +241,8 @@ def text_messages(entries: list) -> list:
             preview = _extract_tool_result_preview(content)
             text = (
                 f"[tool_result: {tool_name}: {preview}]"
-                if preview else f"[tool_result: {tool_name}]"
+                if preview
+                else f"[tool_result: {tool_name}]"
             )
             results.append((i, "user", ts, text))
 
@@ -313,6 +317,7 @@ def _extract_tool_result_preview(content) -> str:
 
 
 # --- Location / lookup ---
+
 
 def sessions_dir() -> str:
     """Pi sessions root. Honours $PI_DIR for tests; defaults to ~/.pi."""

@@ -28,7 +28,9 @@ def _cell_html(value: object) -> str:
     return escaped
 
 
-def render_html(names: list[str], rows: list[sqlite3.Row], out: TextIO, *, title: str) -> None:
+def render_html(
+    names: list[str], rows: list[sqlite3.Row], out: TextIO, *, title: str
+) -> None:
     safe_title = html.escape(title)
     out.write(
         "<!doctype html>\n"
@@ -87,9 +89,13 @@ def render_html(names: list[str], rows: list[sqlite3.Row], out: TextIO, *, title
     )
 
 
-def write_html_file(names: list[str], rows: list[sqlite3.Row], *, title: str, output: Path | None = None) -> Path:
+def write_html_file(
+    names: list[str], rows: list[sqlite3.Row], *, title: str, output: Path | None = None
+) -> Path:
     if output is None:
-        handle = tempfile.NamedTemporaryFile(prefix="sessions-query-", suffix=".html", delete=False, mode="w")
+        handle = tempfile.NamedTemporaryFile(
+            prefix="sessions-query-", suffix=".html", delete=False, mode="w"
+        )
         path = Path(handle.name)
         with handle:
             render_html(names, rows, handle, title=title)

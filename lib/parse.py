@@ -108,6 +108,7 @@ class Session:
 
 # --- Generic helpers (harness-agnostic) ---
 
+
 def dict_contains(haystack: dict, needle: dict) -> bool:
     """Check if haystack contains all keys/values from needle (recursive)."""
     for key, value in needle.items():
@@ -143,10 +144,13 @@ def parse_meta_filter(raw: str) -> dict:
         except json.JSONDecodeError:
             # Try evaluating via jq for jq-syntax (e.g., unquoted keys)
             import subprocess
+
             try:
                 result = subprocess.run(
                     ["jq", "-nc", raw],
-                    capture_output=True, text=True, timeout=5,
+                    capture_output=True,
+                    text=True,
+                    timeout=5,
                 )
                 if result.returncode == 0:
                     return json.loads(result.stdout.strip())
@@ -180,6 +184,7 @@ class Filter:
     path: dotted path within the entry (e.g., 'meta.agent.name')
     value: expected value
     """
+
     entry_type: str
     index: object  # int or None
     path: str
@@ -197,6 +202,7 @@ def parse_filters(raw: str) -> list:
         wake[-1].meta.by.agent.name=brownie
     """
     import shlex
+
     filters = []
     if not raw.strip():
         return filters
@@ -220,8 +226,8 @@ def parse_filters(raw: str) -> list:
         index = None
         if "[" in lhs.split(".")[0]:
             type_part = lhs.split(".")[0]
-            entry_type = type_part[:type_part.index("[")]
-            idx_str = type_part[type_part.index("[") + 1:type_part.index("]")]
+            entry_type = type_part[: type_part.index("[")]
+            idx_str = type_part[type_part.index("[") + 1 : type_part.index("]")]
             try:
                 index = int(idx_str)
             except ValueError:
@@ -231,7 +237,9 @@ def parse_filters(raw: str) -> list:
             entry_type = lhs.split(".")[0]
             path = ".".join(lhs.split(".")[1:])
 
-        filters.append(Filter(entry_type=entry_type, index=index, path=path, value=value))
+        filters.append(
+            Filter(entry_type=entry_type, index=index, path=path, value=value)
+        )
 
     return filters
 
@@ -254,7 +262,7 @@ def _entry_matches_filter(entry: dict, f: Filter) -> bool:
     return str(val) == f.value
 
 
-def session_matches_filters(session: 'Session', filters: list) -> bool:
+def session_matches_filters(session: "Session", filters: list) -> bool:
     """Check if a session matches ALL filters."""
     for f in filters:
         typed_entries = [e for e in session.entries if e.get("type") == f.entry_type]
@@ -294,6 +302,7 @@ def load(filepath: str) -> Session:
 # all available harnesses and merges the results. Today pi is the only
 # adapter, so the iteration has one iteration — the shape is ready for
 # when claude (or another adapter) lands.
+
 
 def discover_sessions_dir() -> str:
     """Return the default harness's sessions root.

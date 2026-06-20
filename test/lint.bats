@@ -2,6 +2,14 @@
 
 load helpers
 
+@test "Python lint passes" {
+  run bash -c 'cd "$1" && mise run lint:python' bash "$REPO_DIR"
+  if [ "$status" -ne 0 ]; then
+    echo "$output"
+    return 1
+  fi
+}
+
 @test "configured codebase lints pass" {
   local lints
   lints=$(python3 - "$REPO_DIR/mise.toml" <<'PY'

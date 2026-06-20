@@ -8,8 +8,8 @@ Create sessions with structured metadata, wake agents into them,
 observe transcripts in real time, and query your history.
 
 ![lang: bash + python](https://img.shields.io/badge/lang-bash%20%2B%20python-4EAA25?style=flat&logo=gnubash&logoColor=white)
-[![tests: 294 passing](https://img.shields.io/badge/tests-294%20passing-brightgreen?style=flat)](test/)
-![commands: 18](https://img.shields.io/badge/commands-18-blue?style=flat)
+[![tests: 295 passing](https://img.shields.io/badge/tests-295%20passing-brightgreen?style=flat)](test/)
+![commands: 19](https://img.shields.io/badge/commands-19-blue?style=flat)
 ![license: MIT](https://img.shields.io/badge/license-MIT-blue?style=flat)
 
 </div>
@@ -268,7 +268,9 @@ cd sessions && mise trust && mise install
 mise run test
 ```
 
-**294 tests** across 21 suites, using [BATS 1.13.0](https://github.com/bats-core/bats-core). Tasks are bash scripts (session creation, wake, metadata) and Python scripts with [Rich](https://github.com/Textualize/rich) output (list, read, wait, usage, inspect, search). The shared Python support library is 2535 lines in `lib/`.
+**295 tests** across 21 suites, using [BATS 1.13.0](https://github.com/bats-core/bats-core). Tasks are bash scripts (session creation, wake, metadata) and Python scripts with [Rich](https://github.com/Textualize/rich) output (list, read, wait, usage, inspect, search). The shared Python support library is 2710 lines in `lib/`.
+
+Python code is checked with [Ruff](https://docs.astral.sh/ruff/) via `mise run lint:python`, and CI runs the same lint/format check in addition to the BATS and Elixir suites.
 
 <details>
 <summary><b>Project structure</b></summary>
@@ -291,6 +293,7 @@ sessions/
 │   ├── remove       # Remove sessions (kill shell + delete file)
 │   ├── run          # Hidden low-level executor used by wake
 │   ├── cli/build    # Build Elixir CLI dependencies
+│   ├── lint/python  # Ruff lint + format check for Python code
 │   ├── export       # Portable bundles (JSONL + metadata)
 │   └── import       # Import exported sessions
 ├── cli/             # Elixir execution engine (timeout, ABORT, usage)
@@ -304,7 +307,7 @@ sessions/
 │   └── harness/        # Per-harness adapters (pi, …)
 ├── queries/            # Packaged sessions query SQL presets
 └── test/
-    └── *.bats          # 294 tests
+    └── *.bats          # 295 tests
 ```
 
 </details>

@@ -45,10 +45,12 @@ class ProcessRow:
             "headless": self.start.get("headless", False),
         }
         if self.exit is not None:
-            result.update({
-                "exited_at": self.exit.get("timestamp", ""),
-                "exit_code": self.exit.get("exit_code"),
-            })
+            result.update(
+                {
+                    "exited_at": self.exit.get("timestamp", ""),
+                    "exit_code": self.exit.get("exit_code"),
+                }
+            )
         return result
 
 
@@ -137,7 +139,11 @@ def session_process_rows(
 ) -> list[ProcessRow]:
     session = parse.load(filepath)
     meta = session.metadata()
-    if project_filter and project_filter not in meta["project"] and project_filter not in filepath:
+    if (
+        project_filter
+        and project_filter not in meta["project"]
+        and project_filter not in filepath
+    ):
         return []
 
     starts: list[dict] = []
@@ -162,13 +168,15 @@ def session_process_rows(
             status = "dead"
 
         if include_all or status == "live":
-            rows.append(ProcessRow(
-                session=session,
-                filepath=filepath,
-                start=start,
-                exit=exit_entry,
-                status=status,
-            ))
+            rows.append(
+                ProcessRow(
+                    session=session,
+                    filepath=filepath,
+                    start=start,
+                    exit=exit_entry,
+                    status=status,
+                )
+            )
     return rows
 
 
@@ -181,11 +189,13 @@ def collect_process_rows(
     rows: list[ProcessRow] = []
     for filepath in iter_session_files():
         try:
-            rows.extend(session_process_rows(
-                filepath,
-                project_filter=project_filter,
-                include_all=include_all,
-            ))
+            rows.extend(
+                session_process_rows(
+                    filepath,
+                    project_filter=project_filter,
+                    include_all=include_all,
+                )
+            )
         except Exception:
             continue
 

@@ -14,6 +14,7 @@ from harness import Unsupported
 
 # --- Entry-level schema ---
 
+
 def is_message_entry(entry: dict) -> bool:
     raise Unsupported("is_message_entry", harness="claude")
 
@@ -67,6 +68,7 @@ def usage_records(entries: list) -> list:
 
 
 # --- Location / lookup ---
+
 
 def sessions_dir() -> str:
     raise Unsupported("sessions_dir", harness="claude")

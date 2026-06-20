@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+#MISE description="Lint and format-check Python code with Ruff"
+set -euo pipefail
+
+check_targets=(
+  .mise/tasks/query
+  lib
+  test
+)
+
+format_targets=(
+  .mise/tasks/query
+  lib
+  test
+)
+
+ruff check "${check_targets[@]}"
+ruff format --check "${format_targets[@]}"

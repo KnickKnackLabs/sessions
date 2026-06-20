@@ -451,6 +451,14 @@ mise run test`}</CodeBlock>
         {"."}
       </Paragraph>
 
+      <Paragraph>
+        {"Python code is checked with "}
+        <Link href="https://docs.astral.sh/ruff/">Ruff</Link>
+        {" via "}
+        <Code>mise run lint:python</Code>
+        {", and CI runs the same lint/format check in addition to the BATS and Elixir suites."}
+      </Paragraph>
+
       <Details summary="Project structure">
         <CodeBlock>{`sessions/
 ├── .mise/tasks/
@@ -469,6 +477,7 @@ mise run test`}</CodeBlock>
 │   ├── remove       # Remove sessions (kill shell + delete file)
 │   ├── run          # Hidden low-level executor used by wake
 │   ├── cli/build    # Build Elixir CLI dependencies
+│   ├── lint/python  # Ruff lint + format check for Python code
 │   ├── export       # Portable bundles (JSONL + metadata)
 │   └── import       # Import exported sessions
 ├── cli/             # Elixir execution engine (timeout, ABORT, usage)
