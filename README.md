@@ -8,8 +8,8 @@ Create sessions with structured metadata, wake agents into them,
 observe transcripts in real time, and query your history.
 
 ![lang: bash + python](https://img.shields.io/badge/lang-bash%20%2B%20python-4EAA25?style=flat&logo=gnubash&logoColor=white)
-[![tests: 286 passing](https://img.shields.io/badge/tests-286%20passing-brightgreen?style=flat)](test/)
-![commands: 17](https://img.shields.io/badge/commands-17-blue?style=flat)
+[![tests: 297 passing](https://img.shields.io/badge/tests-297%20passing-brightgreen?style=flat)](test/)
+![commands: 19](https://img.shields.io/badge/commands-19-blue?style=flat)
 ![license: MIT](https://img.shields.io/badge/license-MIT-blue?style=flat)
 
 </div>
@@ -66,6 +66,11 @@ sessions usage review/pr-50
 
 # Inspect forensic metadata
 sessions inspect e96bd43a
+
+# Query structured history without creating a durable DB
+sessions query --project junior/home --limit 30 \
+  --sql-file queries/bash-status.sql \
+  --format grid
 ```
 
 ## Session lifecycle
@@ -223,6 +228,38 @@ For existing sessions you want to work with elsewhere, `copy` duplicates a sessi
 sessions copy e96bd43a --context "continue the review"
 ```
 
+## Querying session history
+
+`sessions query` builds an ephemeral in-memory SQLite projection over local session JSONL files. JSONL remains the source of truth; no durable database is created. This is useful for ad hoc analysis across sessions, tools, messages, usage, and bash command status.
+
+Privacy defaults are conservative: the default `--text commands` mode inserts redacted bash commands, but not message text or tool output excerpts. Use `--text compact` only when you intentionally want bounded excerpts, and reserve `--text full` for explicitly scoped local analysis.
+
+```bash
+# Show the query schema and examples
+sessions query
+
+# Use a packaged SQL preset over a recent project slice
+sessions query --project junior/home --limit 30 \
+  --sql-file queries/bash-status.sql \
+  --format grid
+
+# Inspect failed bash commands for one session
+sessions query e96bd43a --sql '
+select call_seq, command_category, exit_status, output_lines, command
+from bash_calls
+where is_error = 1 or coalesce(exit_status, 0) != 0
+order by call_seq
+limit 20;
+' --format grid
+
+# Compact output excerpts require an explicit text mode
+sessions query e96bd43a --text compact \
+  --sql-file queries/bash-with-output.sql \
+  --format jsonl
+```
+
+Large result sets can be rendered as `--format html` or opened with `--browser` for a temporary local table with sticky headers and row filtering. Richer browser table controls are tracked separately so the first query surface can stay small.
+
 ## Development
 
 ```bash
@@ -231,7 +268,9 @@ cd sessions && mise trust && mise install
 mise run test
 ```
 
-**286 tests** across 20 suites, using [BATS 1.13.0](https://github.com/bats-core/bats-core). Tasks are bash scripts (session creation, wake, metadata) and Python scripts with [Rich](https://github.com/Textualize/rich) output (list, read, wait, usage, inspect, search). The shared Python support library is 826 lines in `lib/`.
+**297 tests** across 21 suites, using [BATS 1.13.0](https://github.com/bats-core/bats-core). Tasks are bash scripts (session creation, wake, metadata) and Python scripts with [Rich](https://github.com/Textualize/rich) output (list, read, wait, usage, inspect, search). The shared Python support library is 2747 lines in `lib/`.
+
+Python code is checked with [Ruff](https://docs.astral.sh/ruff/) via `mise run lint:python`, and CI runs the same lint/format check in addition to the BATS and Elixir suites.
 
 <details>
 <summary><b>Project structure</b></summary>
@@ -249,10 +288,12 @@ sessions/
 │   ├── usage        # Recorded token/cost aggregation
 │   ├── search       # Full-text regex across transcripts
 │   ├── inspect      # Forensic metadata (duration, tools, model)
+│   ├── query        # Ephemeral SQLite projection for ad hoc analysis
 │   ├── copy         # Duplicate sessions for handoff
 │   ├── remove       # Remove sessions (kill shell + delete file)
 │   ├── run          # Hidden low-level executor used by wake
 │   ├── cli/build    # Build Elixir CLI dependencies
+│   ├── lint/python  # Ruff lint + format check for Python code
 │   ├── export       # Portable bundles (JSONL + metadata)
 │   └── import       # Import exported sessions
 ├── cli/             # Elixir execution engine (timeout, ABORT, usage)
@@ -262,9 +303,11 @@ sessions/
 │   ├── ensure-deps.sh  # First-run CLI deps self-heal
 │   ├── find.sh         # Back-compat shim → harness adapter
 │   ├── shell.sh        # Shell helpers
+│   ├── query/          # sessions query projection/rendering code
 │   └── harness/        # Per-harness adapters (pi, …)
+├── queries/            # Packaged sessions query SQL presets
 └── test/
-    └── *.bats          # 286 tests
+    └── *.bats          # 297 tests
 ```
 
 </details>

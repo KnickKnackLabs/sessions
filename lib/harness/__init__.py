@@ -44,11 +44,7 @@ class Unsupported(Exception):
     def __init__(self, op: str, harness: str = ""):
         self.op = op
         self.harness = harness
-        message = (
-            f"'{harness}' harness does not support '{op}' yet"
-            if harness
-            else op
-        )
+        message = f"'{harness}' harness does not support '{op}' yet" if harness else op
         super().__init__(message)
 
 
@@ -67,6 +63,7 @@ def exit_unsupported(harness: str, op: str) -> None:
 
 
 # --- Registry ---
+
 
 def available() -> list:
     """List adapter names present in this package, sorted."""
@@ -87,6 +84,7 @@ def _load(name: str):
 
 
 # --- Resolver inputs ---
+
 
 def _from_entries(entries: list):
     """Scan entries in reverse; return the most recent harness-declaration name."""
@@ -132,6 +130,7 @@ def _from_path(filepath: str):
 
 # --- Resolver ---
 
+
 def resolve(*, filepath: str = None, entries: list = None, name: str = None):
     """Resolve the harness for a session. Returns the adapter module.
 
@@ -154,6 +153,7 @@ def resolve(*, filepath: str = None, entries: list = None, name: str = None):
 
 
 # --- Convenience for non-session callers ---
+
 
 def adapter(name: str):
     """Load an adapter module by name. Prefer `resolve()` when you have a session."""

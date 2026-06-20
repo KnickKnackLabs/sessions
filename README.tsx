@@ -37,9 +37,16 @@ const batsVersion =
 
 // Count Python lib lines for the "how it works" credibility
 const libDir = join(ROOT, "lib");
-const libFiles = readdirSync(libDir).filter((f) => f.endsWith(".py"));
+function pythonFiles(dir: string): string[] {
+  return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+    const path = join(dir, entry.name);
+    if (entry.isDirectory()) return pythonFiles(path);
+    return entry.name.endsWith(".py") ? [path] : [];
+  });
+}
+const libFiles = pythonFiles(libDir);
 const libLines = libFiles.reduce(
-  (sum, f) => sum + readFileSync(join(libDir, f), "utf-8").split("\n").length,
+  (sum, f) => sum + readFileSync(f, "utf-8").split("\n").length,
   0
 );
 
@@ -157,7 +164,12 @@ sessions ps
 sessions usage review/pr-50
 
 # Inspect forensic metadata
-sessions inspect e96bd43a`}</CodeBlock>
+sessions inspect e96bd43a
+
+# Query structured history without creating a durable DB
+sessions query --project junior/home --limit 30 \\
+  --sql-file queries/bash-status.sql \\
+  --format grid`}</CodeBlock>
     </Section>
 
     <Section title="Session lifecycle">
@@ -376,6 +388,53 @@ sessions usage --after 2026-06-01 --json # machine-readable aggregate`}</CodeBlo
       <CodeBlock lang="bash">{`sessions copy e96bd43a --context "continue the review"`}</CodeBlock>
     </Section>
 
+    <Section title="Querying session history">
+      <Paragraph>
+        <Code>sessions query</Code>
+        {" builds an ephemeral in-memory SQLite projection over local session JSONL files. JSONL remains the source of truth; no durable database is created. This is useful for ad hoc analysis across sessions, tools, messages, usage, and bash command status."}
+      </Paragraph>
+
+      <Paragraph>
+        {"Privacy defaults are conservative: the default "}
+        <Code>--text commands</Code>
+        {" mode inserts redacted bash commands, but not message text or tool output excerpts. Use "}
+        <Code>--text compact</Code>
+        {" only when you intentionally want bounded excerpts, and reserve "}
+        <Code>--text full</Code>
+        {" for explicitly scoped local analysis."}
+      </Paragraph>
+
+      <CodeBlock lang="bash">{`# Show the query schema and examples
+sessions query
+
+# Use a packaged SQL preset over a recent project slice
+sessions query --project junior/home --limit 30 \\
+  --sql-file queries/bash-status.sql \\
+  --format grid
+
+# Inspect failed bash commands for one session
+sessions query e96bd43a --sql '
+select call_seq, command_category, exit_status, output_lines, command
+from bash_calls
+where is_error = 1 or coalesce(exit_status, 0) != 0
+order by call_seq
+limit 20;
+' --format grid
+
+# Compact output excerpts require an explicit text mode
+sessions query e96bd43a --text compact \\
+  --sql-file queries/bash-with-output.sql \\
+  --format jsonl`}</CodeBlock>
+
+      <Paragraph>
+        {"Large result sets can be rendered as "}
+        <Code>--format html</Code>
+        {" or opened with "}
+        <Code>--browser</Code>
+        {" for a temporary local table with sticky headers and row filtering. Richer browser table controls are tracked separately so the first query surface can stay small."}
+      </Paragraph>
+    </Section>
+
     <Section title="Development">
       <CodeBlock lang="bash">{`git clone https://github.com/KnickKnackLabs/sessions.git
 cd sessions && mise trust && mise install
@@ -392,6 +451,14 @@ mise run test`}</CodeBlock>
         {"."}
       </Paragraph>
 
+      <Paragraph>
+        {"Python code is checked with "}
+        <Link href="https://docs.astral.sh/ruff/">Ruff</Link>
+        {" via "}
+        <Code>mise run lint:python</Code>
+        {", and CI runs the same lint/format check in addition to the BATS and Elixir suites."}
+      </Paragraph>
+
       <Details summary="Project structure">
         <CodeBlock>{`sessions/
 ├── .mise/tasks/
@@ -405,10 +472,12 @@ mise run test`}</CodeBlock>
 │   ├── usage        # Recorded token/cost aggregation
 │   ├── search       # Full-text regex across transcripts
 │   ├── inspect      # Forensic metadata (duration, tools, model)
+│   ├── query        # Ephemeral SQLite projection for ad hoc analysis
 │   ├── copy         # Duplicate sessions for handoff
 │   ├── remove       # Remove sessions (kill shell + delete file)
 │   ├── run          # Hidden low-level executor used by wake
 │   ├── cli/build    # Build Elixir CLI dependencies
+│   ├── lint/python  # Ruff lint + format check for Python code
 │   ├── export       # Portable bundles (JSONL + metadata)
 │   └── import       # Import exported sessions
 ├── cli/             # Elixir execution engine (timeout, ABORT, usage)
@@ -418,7 +487,9 @@ mise run test`}</CodeBlock>
 │   ├── ensure-deps.sh  # First-run CLI deps self-heal
 │   ├── find.sh         # Back-compat shim → harness adapter
 │   ├── shell.sh        # Shell helpers
+│   ├── query/          # sessions query projection/rendering code
 │   └── harness/        # Per-harness adapters (pi, …)
+├── queries/            # Packaged sessions query SQL presets
 └── test/
     └── *.bats          # ${testCount} tests`}</CodeBlock>
       </Details>

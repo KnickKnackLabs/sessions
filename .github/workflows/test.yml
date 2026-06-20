@@ -39,6 +39,9 @@ jobs:
       - name: Run CLI tests
         run: cd cli && mix test
 
+      - name: Run Python lint
+        run: mise run lint:python
+
       - name: Run codebase lints
         run: |
           for target in \
