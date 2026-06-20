@@ -16,7 +16,10 @@ SECRET_PATTERNS: list[tuple[re.Pattern[str], str]] = [
     (re.compile(r"github_pat_[A-Za-z0-9_]+"), "github_pat_[REDACTED]"),
     (re.compile(r"gh[pousr]_[A-Za-z0-9_]+"), "gh*_REDACTED"),
     (re.compile(r"sk-[A-Za-z0-9_-]{16,}"), "sk-[REDACTED]"),
-    (re.compile(r"(?i)(GITHUB_TOKEN|GH_TOKEN|OPENAI_API_KEY|ANTHROPIC_API_KEY|API_KEY|TOKEN|PASSWORD|SECRET)=([^\s'\"]+)"), r"\1=[REDACTED]"),
+    (re.compile(r"(?i)\b(GITHUB_TOKEN|GH_TOKEN|OPENAI_API_KEY|ANTHROPIC_API_KEY|API_KEY|TOKEN|PASSWORD|SECRET)=(['\"])[^'\"]*\2"), r"\1=\2[REDACTED]\2"),
+    (re.compile(r"(?i)\b(GITHUB_TOKEN|GH_TOKEN|OPENAI_API_KEY|ANTHROPIC_API_KEY|API_KEY|TOKEN|PASSWORD|SECRET)=([^\s'\"]+)"), r"\1=[REDACTED]"),
+    (re.compile(r"(?i)(Authorization:\s*(?:Bearer|Basic)\s+)[^'\"\s]+"), r"\1[REDACTED]"),
+    (re.compile(r"(?i)(--(?:api-key|password|secret|token)\s+)[^'\"\s]+"), r"\1[REDACTED]"),
     (re.compile(r"-----BEGIN [^-]+-----.*?-----END [^-]+-----", re.DOTALL), "[REDACTED PEM BLOCK]"),
 ]
 

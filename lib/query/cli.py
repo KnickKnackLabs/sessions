@@ -29,19 +29,39 @@ def read_sql(args: argparse.Namespace) -> str | None:
     return args.sql
 
 
+def positive_int(value: str) -> int:
+    try:
+        parsed = int(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("must be an integer") from exc
+    if parsed <= 0:
+        raise argparse.ArgumentTypeError("must be greater than 0")
+    return parsed
+
+
+def non_negative_int(value: str) -> int:
+    try:
+        parsed = int(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("must be an integer") from exc
+    if parsed < 0:
+        raise argparse.ArgumentTypeError("must be greater than or equal to 0")
+    return parsed
+
+
 def parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Query local sessions through an ephemeral SQLite projection")
     parser.add_argument("session_ids", nargs="*", help="Optional session ID prefixes to query")
     parser.add_argument("--project", default="", help="Project substring filter when querying a corpus")
     parser.add_argument("--limit", type=int, default=20, help="Max sessions for corpus scope")
     parser.add_argument("--text", choices=["none", "commands", "compact", "full"], default="commands", help="Text columns to insert into the ephemeral DB")
-    parser.add_argument("--max-output-chars", type=int, default=4000, help="Output excerpt budget for --text compact")
-    parser.add_argument("--max-message-chars", type=int, default=2000, help="Message excerpt budget for --text compact")
+    parser.add_argument("--max-output-chars", type=positive_int, default=4000, help="Output excerpt budget for --text compact")
+    parser.add_argument("--max-message-chars", type=positive_int, default=2000, help="Message excerpt budget for --text compact")
     parser.add_argument("--sql", default="", help="SQL SELECT/WITH/PRAGMA query")
     parser.add_argument("--sql-file", default="", help="File containing SQL query")
     parser.add_argument("--format", choices=["table", "grid", "html", "tsv", "csv", "json", "jsonl"], default="table", help="Output format")
-    parser.add_argument("--max-col-width", type=int, default=80, help="Max display width per column for --format grid")
-    parser.add_argument("--max-cell-lines", type=int, default=12, help="Max wrapped lines per cell for --format grid; 0 means unlimited")
+    parser.add_argument("--max-col-width", type=positive_int, default=80, help="Max display width per column for --format grid")
+    parser.add_argument("--max-cell-lines", type=non_negative_int, default=12, help="Max wrapped lines per cell for --format grid; 0 means unlimited")
     parser.add_argument("--color", choices=["auto", "always", "never"], default="auto", help="Color mode for grid separators; auto dims separators on a TTY")
     parser.add_argument("--browser", action="store_true", help="Render results to temporary HTML and open in the default browser")
     parser.add_argument("--title", default="sessions query", help="HTML/browser result title")

@@ -8,7 +8,7 @@ Create sessions with structured metadata, wake agents into them,
 observe transcripts in real time, and query your history.
 
 ![lang: bash + python](https://img.shields.io/badge/lang-bash%20%2B%20python-4EAA25?style=flat&logo=gnubash&logoColor=white)
-[![tests: 294 passing](https://img.shields.io/badge/tests-294%20passing-brightgreen?style=flat)](test/)
+[![tests: 296 passing](https://img.shields.io/badge/tests-296%20passing-brightgreen?style=flat)](test/)
 ![commands: 18](https://img.shields.io/badge/commands-18-blue?style=flat)
 ![license: MIT](https://img.shields.io/badge/license-MIT-blue?style=flat)
 
@@ -268,7 +268,7 @@ cd sessions && mise trust && mise install
 mise run test
 ```
 
-**294 tests** across 21 suites, using [BATS 1.13.0](https://github.com/bats-core/bats-core). Tasks are bash scripts (session creation, wake, metadata) and Python scripts with [Rich](https://github.com/Textualize/rich) output (list, read, wait, usage, inspect, search). The shared Python support library is 2535 lines in `lib/`.
+**296 tests** across 21 suites, using [BATS 1.13.0](https://github.com/bats-core/bats-core). Tasks are bash scripts (session creation, wake, metadata) and Python scripts with [Rich](https://github.com/Textualize/rich) output (list, read, wait, usage, inspect, search). The shared Python support library is 2560 lines in `lib/`.
 
 <details>
 <summary><b>Project structure</b></summary>
@@ -304,7 +304,7 @@ sessions/
 │   └── harness/        # Per-harness adapters (pi, …)
 ├── queries/            # Packaged sessions query SQL presets
 └── test/
-    └── *.bats          # 294 tests
+    └── *.bats          # 296 tests
 ```
 
 </details>

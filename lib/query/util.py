@@ -91,6 +91,8 @@ def redact(text: str) -> str:
 
 def compact_text(text: str, *, max_chars: int) -> str:
     text = redact(text)
+    if max_chars <= 0:
+        return ""
     if len(text) <= max_chars:
         return text
     head_size = max_chars // 2
