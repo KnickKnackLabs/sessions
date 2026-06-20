@@ -1,0 +1,66 @@
+#!/usr/bin/env python3
+#MISE description="Query local sessions through an ephemeral SQLite projection"
+#USAGE arg "[session_ids]" var=#true default="" help="Optional session ID prefixes to query"
+#USAGE flag "--project <filter>" default="" help="Project substring filter when querying a corpus"
+#USAGE flag "--limit <n>" default="20" help="Max sessions for corpus scope"
+#USAGE flag "--text <mode>" default="commands" help="Text mode: none, commands, compact, or full"
+#USAGE flag "--max-output-chars <n>" default="4000" help="Output excerpt budget for --text compact"
+#USAGE flag "--max-message-chars <n>" default="2000" help="Message excerpt budget for --text compact"
+#USAGE flag "--sql <sql>" default="" help="SQL SELECT/WITH/PRAGMA query"
+#USAGE flag "--sql-file <file>" default="" help="File containing SQL query"
+#USAGE flag "--format <format>" default="table" help="Output format: table, grid, html, tsv, csv, json, or jsonl"
+#USAGE flag "--max-col-width <n>" default="80" help="Max display width per column for --format grid"
+#USAGE flag "--max-cell-lines <n>" default="12" help="Max wrapped lines per cell for --format grid; 0 means unlimited"
+#USAGE flag "--color <mode>" default="auto" help="Grid color mode: auto, always, or never"
+#USAGE flag "--browser" default=#false help="Render results to temporary HTML and open in the default browser"
+#USAGE flag "--title <title>" default="sessions query" help="HTML/browser result title"
+#USAGE flag "--out <path>" default="" help="Write query output to a file"
+
+from __future__ import annotations
+
+import os
+import shlex
+import sys
+
+sys.path.insert(0, os.environ["MISE_CONFIG_ROOT"] + "/lib")
+from query.cli import main
+
+
+def add_value(argv: list[str], flag: str, value: str) -> None:
+    if value:
+        argv.extend([flag, value])
+
+
+def env(name: str, default: str = "") -> str:
+    return os.environ.get(name, default)
+
+
+def build_argv() -> list[str]:
+    argv: list[str] = []
+    raw_session_ids = env("usage_session_ids")
+    if raw_session_ids:
+        argv.extend(item for item in shlex.split(raw_session_ids) if item)
+
+    add_value(argv, "--project", env("usage_project"))
+    add_value(argv, "--limit", env("usage_limit", "20"))
+
+    add_value(argv, "--text", env("usage_text", "commands"))
+    add_value(argv, "--max-output-chars", env("usage_max_output_chars", "4000"))
+    add_value(argv, "--max-message-chars", env("usage_max_message_chars", "2000"))
+    add_value(argv, "--sql", env("usage_sql"))
+    add_value(argv, "--sql-file", env("usage_sql_file"))
+    add_value(argv, "--format", env("usage_format", "table"))
+    add_value(argv, "--max-col-width", env("usage_max_col_width", "80"))
+    add_value(argv, "--max-cell-lines", env("usage_max_cell_lines", "12"))
+    add_value(argv, "--color", env("usage_color", "auto"))
+
+    if env("usage_browser", "false") == "true":
+        argv.append("--browser")
+
+    add_value(argv, "--title", env("usage_title", "sessions query"))
+    add_value(argv, "--out", env("usage_out"))
+    return argv
+
+
+if __name__ == "__main__":
+    raise SystemExit(main(build_argv()))

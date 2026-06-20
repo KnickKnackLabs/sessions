@@ -12,5 +12,9 @@ setup_suite() {
     export MISE_TRUSTED_CONFIG_PATHS="$REPO_DIR"
   fi
 
+  bats_libexec="${BATS_LIBEXEC:-}"
   eval "$(cd "$REPO_DIR" && mise env)"
+  if [ -n "$bats_libexec" ]; then
+    export PATH="$bats_libexec:$PATH"
+  fi
 }
