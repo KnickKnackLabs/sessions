@@ -268,7 +268,7 @@ cd sessions && mise trust && mise install
 mise run test
 ```
 
-**294 tests** across 21 suites, using [BATS 1.13.0](https://github.com/bats-core/bats-core). Tasks are bash scripts (session creation, wake, metadata) and Python scripts with [Rich](https://github.com/Textualize/rich) output (list, read, wait, usage, inspect, search). The shared Python support library is 2540 lines in `lib/`.
+**294 tests** across 21 suites, using [BATS 1.13.0](https://github.com/bats-core/bats-core). Tasks are bash scripts (session creation, wake, metadata) and Python scripts with [Rich](https://github.com/Textualize/rich) output (list, read, wait, usage, inspect, search). The shared Python support library is 2535 lines in `lib/`.
 
 <details>
 <summary><b>Project structure</b></summary>
