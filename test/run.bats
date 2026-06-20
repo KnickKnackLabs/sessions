@@ -127,7 +127,7 @@ teardown() {
 #!/usr/bin/env bash
 set -euo pipefail
 case "\$*" in
-  "local.hex --force --if-missing"|"deps.get") exit 0 ;;
+  "local.hex --force --if-missing"|"deps.loadpaths --no-compile"|"deps.get") exit 0 ;;
 esac
 printf '%s\n' "\$@" > "$argv_capture"
 exit 0
@@ -144,6 +144,34 @@ STUB
   ! grep -qx -- "--system-prompt-file" "$argv_capture"
   grep -qx -- "--model" "$argv_capture"
   [ "$(awk '/^--model$/ { getline; print; exit }' "$argv_capture")" = "openai-codex/gpt-5.5" ]
+}
+
+@test "run with message prepares CLI deps before mix sessions" {
+  local stub_dir="$BATS_TEST_TMPDIR/stub-mix-readiness-order"
+  local command_log="$BATS_TEST_TMPDIR/mix-readiness-order.log"
+  mkdir -p "$stub_dir"
+  cat > "$stub_dir/mix" <<STUB
+#!/usr/bin/env bash
+set -euo pipefail
+printf '%s\n' "\$*" >> "$command_log"
+case "\$*" in
+  "local.hex --force --if-missing"|"deps.loadpaths --no-compile") exit 0 ;;
+  sessions*) exit 0 ;;
+esac
+exit 43
+STUB
+  chmod +x "$stub_dir/mix"
+
+  PATH="$stub_dir:$PATH" run sessions run \
+    --cwd "$BATS_TEST_TMPDIR" \
+    --model "openai-codex/gpt-5.5" \
+    "do work"
+
+  [ "$status" -eq 0 ]
+  [ "$(sed -n '1p' "$command_log")" = "local.hex --force --if-missing" ]
+  [ "$(sed -n '2p' "$command_log")" = "deps.loadpaths --no-compile" ]
+  [[ "$(sed -n '3p' "$command_log")" == sessions\ --cwd\ * ]]
+  ! grep -q '^deps.get$' "$command_log"
 }
 
 @test "run rejects a missing explicit system prompt file before launch" {
@@ -247,7 +275,7 @@ STUB
 #!/usr/bin/env bash
 set -euo pipefail
 case "\$*" in
-  "local.hex --force --if-missing"|"deps.get") exit 0 ;;
+  "local.hex --force --if-missing"|"deps.loadpaths --no-compile"|"deps.get") exit 0 ;;
 esac
 printf '%s\n' "\$@" > "$argv_capture"
 prompt_file=""
@@ -295,7 +323,7 @@ STUB
 #!/usr/bin/env bash
 set -euo pipefail
 case "\$*" in
-  "local.hex --force --if-missing"|"deps.get") exit 0 ;;
+  "local.hex --force --if-missing"|"deps.loadpaths --no-compile"|"deps.get") exit 0 ;;
 esac
 printf '%s\n' "\$@" > "$argv_capture"
 prompt_file=""
