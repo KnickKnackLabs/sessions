@@ -46,6 +46,45 @@ assert rows == [{'n': 2}], rows
   echo "$output" | grep -q "Only read-only"
 }
 
+@test "query rejects non-positive display and text budgets" {
+  run sessions query "${SESSION_1:0:8}" --sql "select 'abc' as value" --format grid --max-col-width 0
+  [ "$status" -ne 0 ]
+  echo "$output" | grep -q -- "--max-col-width: must be greater than 0"
+
+  run sessions query "${SESSION_1:0:8}" --text compact --max-output-chars 0 --sql "select output_excerpt from bash_calls limit 1" --format json
+  [ "$status" -ne 0 ]
+  echo "$output" | grep -q -- "--max-output-chars: must be greater than 0"
+
+  run sessions query "${SESSION_1:0:8}" --format grid --max-cell-lines -1 --sql "select 'abc' as value"
+  [ "$status" -ne 0 ]
+  echo "$output" | grep -q -- "--max-cell-lines: must be greater than or equal to 0"
+}
+
+@test "query redacts common secret command shapes" {
+  run python3 - <<'PY'
+import sys
+sys.path.insert(0, "lib")
+from query.util import compact_text, redact
+
+samples = [
+    "TOKEN=plain gh api user",
+    "TOKEN='quoted secret' gh api user",
+    'TOKEN="double quoted" gh api user',
+    "curl -H 'Authorization: Bearer bearer-secret' https://example.test",
+    "tool --password hunter2 --token tok123",
+]
+redacted = "\n".join(redact(sample) for sample in samples)
+assert "plain" not in redacted
+assert "quoted secret" not in redacted
+assert "double quoted" not in redacted
+assert "bearer-secret" not in redacted
+assert "hunter2" not in redacted
+assert "tok123" not in redacted
+assert compact_text("sensitive", max_chars=0) == ""
+PY
+  [ "$status" -eq 0 ]
+}
+
 @test "query default text mode exposes redacted bash commands but not messages or output" {
   run sessions query "${SESSION_1:0:8}" --sql "
 select

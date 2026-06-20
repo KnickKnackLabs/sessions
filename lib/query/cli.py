@@ -29,6 +29,26 @@ def read_sql(args: argparse.Namespace) -> str | None:
     return args.sql
 
 
+def positive_int(value: str) -> int:
+    try:
+        parsed = int(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("must be an integer") from exc
+    if parsed <= 0:
+        raise argparse.ArgumentTypeError("must be greater than 0")
+    return parsed
+
+
+def non_negative_int(value: str) -> int:
+    try:
+        parsed = int(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("must be an integer") from exc
+    if parsed < 0:
+        raise argparse.ArgumentTypeError("must be greater than or equal to 0")
+    return parsed
+
+
 def parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Query local sessions through an ephemeral SQLite projection"
@@ -40,7 +60,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         "--project", default="", help="Project substring filter when querying a corpus"
     )
     parser.add_argument(
-        "--limit", type=int, default=20, help="Max sessions for corpus scope"
+        "--limit", type=positive_int, default=20, help="Max sessions for corpus scope"
     )
     parser.add_argument(
         "--text",
@@ -50,13 +70,13 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     )
     parser.add_argument(
         "--max-output-chars",
-        type=int,
+        type=positive_int,
         default=4000,
         help="Output excerpt budget for --text compact",
     )
     parser.add_argument(
         "--max-message-chars",
-        type=int,
+        type=positive_int,
         default=2000,
         help="Message excerpt budget for --text compact",
     )
@@ -70,13 +90,13 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     )
     parser.add_argument(
         "--max-col-width",
-        type=int,
+        type=positive_int,
         default=80,
         help="Max display width per column for --format grid",
     )
     parser.add_argument(
         "--max-cell-lines",
-        type=int,
+        type=non_negative_int,
         default=12,
         help="Max wrapped lines per cell for --format grid; 0 means unlimited",
     )
