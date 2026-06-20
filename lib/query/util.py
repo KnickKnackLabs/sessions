@@ -136,4 +136,3 @@ def output_status(text: str, is_error: bool) -> tuple[int | None, int]:
     if match:
         return int(match.group(1)), 1
     return (1 if is_error else None), int(is_error)
-

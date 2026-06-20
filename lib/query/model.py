@@ -53,4 +53,3 @@ class ToolResultRecord:
     output_bytes: int
     output_lines: int
     output_excerpt: str | None
-

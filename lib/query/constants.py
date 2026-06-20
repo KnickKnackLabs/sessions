@@ -29,4 +29,3 @@ SESSION_RE = re.compile(r"\b(sessions|sphincters|shimmer|shell\s+(status|wait|at
 FILE_RE = re.compile(r"^\s*(cp|mv|rm|mkdir|chmod|touch|tee|cat)\b|\b(chmod|mkdir|rm\s+-rf)\b")
 SCRIPT_RE = re.compile(r"^\s*(python3?|node|bun|ruby|perl)\b|<<'?(PY|EOF|JS|SH)'?")
 EXIT_RE = re.compile(r"Command exited with code (\d+)")
-

@@ -294,4 +294,3 @@ def build_db(args: argparse.Namespace) -> sqlite3.Connection:
                 max_message_chars=args.max_message_chars,
             )
     return conn
-

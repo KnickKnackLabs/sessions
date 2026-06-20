@@ -160,4 +160,3 @@ def render(
     finally:
         if should_close:
             out.close()
-
