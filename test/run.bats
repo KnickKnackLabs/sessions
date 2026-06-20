@@ -126,6 +126,9 @@ teardown() {
   cat > "$stub_dir/mix" <<STUB
 #!/usr/bin/env bash
 set -euo pipefail
+case "\$*" in
+  "local.hex --force --if-missing"|"deps.get") exit 0 ;;
+esac
 printf '%s\n' "\$@" > "$argv_capture"
 exit 0
 STUB
@@ -243,6 +246,9 @@ STUB
   cat > "$stub_dir/mix" <<STUB
 #!/usr/bin/env bash
 set -euo pipefail
+case "\$*" in
+  "local.hex --force --if-missing"|"deps.get") exit 0 ;;
+esac
 printf '%s\n' "\$@" > "$argv_capture"
 prompt_file=""
 while [ "\$#" -gt 0 ]; do
@@ -288,6 +294,9 @@ STUB
   cat > "$stub_dir/mix" <<STUB
 #!/usr/bin/env bash
 set -euo pipefail
+case "\$*" in
+  "local.hex --force --if-missing"|"deps.get") exit 0 ;;
+esac
 printf '%s\n' "\$@" > "$argv_capture"
 prompt_file=""
 while [ "\$#" -gt 0 ]; do

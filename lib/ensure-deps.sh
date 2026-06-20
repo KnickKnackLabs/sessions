@@ -3,10 +3,12 @@
 #
 # On a fresh shiv-sessions install (or after a manual `rm -rf cli/deps`),
 # `cli/deps/` is empty and `mix sessions` refuses to start with an
-# 'Unchecked dependencies' error. This helper detects that case and
-# runs `mix deps.get` on the fly.
+# 'Unchecked dependencies' error. On CI, a restored deps cache can also
+# exist before Hex has been installed in the runner's Mix home, which
+# makes Mix unable to resolve Hex-backed dependencies. This helper
+# installs Hex when needed, then fetches deps only when deps/ is empty.
 #
-# See KnickKnackLabs/sessions#53 for the rationale.
+# See KnickKnackLabs/sessions#53 and KnickKnackLabs/sessions#111 for the rationale.
 
 # ensure_cli_deps <cli_dir>
 #
@@ -27,6 +29,15 @@ ensure_cli_deps() {
     return 2
   fi
 
+  if ! (
+    cd "$cli_dir" || exit 1
+    mix local.hex --force --if-missing >&2
+  ); then
+    echo "sessions: failed to install Hex package manager." >&2
+    echo "  try: mix local.hex --force --if-missing   (in $cli_dir)" >&2
+    return 1
+  fi
+
   # Populated-deps check: if any entry exists under deps/, we assume
   # deps have been fetched at least once. `mix` itself will handle
   # version drift (it re-fetches on `mix.lock` change). In practice
@@ -39,7 +50,6 @@ ensure_cli_deps() {
   echo "sessions: first-run setup — fetching Elixir dependencies…" >&2
   (
     cd "$cli_dir" || exit 1
-    mix local.hex --force --if-missing >&2 || exit 1
     mix deps.get >&2 || exit 1
   ) || {
     echo "sessions: failed to fetch dependencies." >&2

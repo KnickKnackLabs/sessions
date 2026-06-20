@@ -42,7 +42,7 @@ teardown() {
   [[ "$output" != *"first-run setup"* ]]
 }
 
-@test "ensure_cli_deps: returns 0 and does nothing when deps are populated" {
+@test "ensure_cli_deps: returns 0 without fetching deps when deps are populated" {
   # Multiple subdirs, mimicking a real install.
   mkdir -p "$CLI/deps/jason" "$CLI/deps/credo" "$CLI/deps/bunt"
   run ensure_cli_deps "$CLI"
@@ -51,6 +51,53 @@ teardown() {
   [ -d "$CLI/deps/jason" ]
   [ -d "$CLI/deps/credo" ]
   [ -d "$CLI/deps/bunt" ]
+}
+
+@test "ensure_cli_deps: installs Hex even when deps are populated" {
+  mkdir -p "$CLI/deps/jason"
+  fakebin="$TMP/fakebin"
+  mkdir -p "$fakebin"
+  MIX_LOG="$TMP/mix.log"
+  export MIX_LOG
+  cat > "$fakebin/mix" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >> "$MIX_LOG"
+case "$*" in
+  "local.hex --force --if-missing") exit 0 ;;
+  "deps.get") exit 42 ;;
+esac
+exit 43
+EOF
+  chmod +x "$fakebin/mix"
+
+  PATH="$fakebin:$PATH" run ensure_cli_deps "$CLI"
+  [ "$status" -eq 0 ]
+  grep -q '^local.hex --force --if-missing$' "$MIX_LOG"
+  ! grep -q '^deps.get$' "$MIX_LOG"
+}
+
+@test "ensure_cli_deps: returns 1 when Hex setup fails" {
+  mkdir -p "$CLI/deps/jason"
+  fakebin="$TMP/fakebin"
+  mkdir -p "$fakebin"
+  MIX_LOG="$TMP/mix.log"
+  export MIX_LOG
+  cat > "$fakebin/mix" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >> "$MIX_LOG"
+case "$*" in
+  "local.hex --force --if-missing") exit 17 ;;
+  "deps.get") exit 0 ;;
+esac
+exit 43
+EOF
+  chmod +x "$fakebin/mix"
+
+  PATH="$fakebin:$PATH" run ensure_cli_deps "$CLI"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"failed to install Hex package manager"* ]]
+  grep -q '^local.hex --force --if-missing$' "$MIX_LOG"
+  ! grep -q '^deps.get$' "$MIX_LOG"
 }
 
 # ----------------------------------------------------------------------------
@@ -101,13 +148,27 @@ teardown() {
   [[ "$output" == *"cli dir does not exist"* ]]
 }
 
-@test "ensure_cli_deps: returns 1 (fetch failed) and emits hint when mix fails" {
-  # Break the mix project so deps.get fails.
-  echo "this is not valid elixir" > "$CLI/mix.exs"
+@test "ensure_cli_deps: returns 1 (fetch failed) and emits hint when deps.get fails" {
+  fakebin="$TMP/fakebin"
+  mkdir -p "$fakebin"
+  MIX_LOG="$TMP/mix.log"
+  export MIX_LOG
+  cat > "$fakebin/mix" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >> "$MIX_LOG"
+case "$*" in
+  "local.hex --force --if-missing") exit 0 ;;
+  "deps.get") exit 18 ;;
+esac
+exit 43
+EOF
+  chmod +x "$fakebin/mix"
 
-  run ensure_cli_deps "$CLI"
+  PATH="$fakebin:$PATH" run ensure_cli_deps "$CLI"
   [ "$status" -eq 1 ]
   [[ "$output" == *"first-run setup"* ]]
   [[ "$output" == *"failed to fetch dependencies"* ]]
   [[ "$output" == *"mise run cli:build"* ]]
+  grep -q '^local.hex --force --if-missing$' "$MIX_LOG"
+  grep -q '^deps.get$' "$MIX_LOG"
 }
