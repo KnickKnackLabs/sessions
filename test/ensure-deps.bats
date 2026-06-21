@@ -14,7 +14,7 @@ setup() {
   CLI="$TMP/cli"
   mkdir -p "$CLI/deps"
 
-  # Minimal mix project so `mix deps.get` has something to read.
+  # Minimal mix project so real `mix deps.get` has something to read.
   cat > "$CLI/mix.exs" <<'EOF'
 defmodule EnsureDepsTest.MixProject do
   use Mix.Project
@@ -29,28 +29,99 @@ teardown() {
   rm -rf "$TMP"
 }
 
+write_fake_mix() {
+  fakebin="$TMP/fakebin"
+  mkdir -p "$fakebin"
+  MIX_LOG="$TMP/mix.log"
+  export MIX_LOG
+  cat > "$fakebin/mix" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+printf '%s\n' "$*" >> "$MIX_LOG"
+case "$*" in
+  "local.hex --force --if-missing")
+    exit "${FAKE_MIX_HEX_STATUS:-0}"
+    ;;
+  "deps.loadpaths --no-compile")
+    count_file="$MIX_LOG.loadpaths-count"
+    count=0
+    if [ -f "$count_file" ]; then
+      count=$(cat "$count_file")
+    fi
+    count=$((count + 1))
+    printf '%s\n' "$count" > "$count_file"
+    if [ "$count" -eq 1 ]; then
+      exit "${FAKE_MIX_LOADPATHS_FIRST_STATUS:-0}"
+    fi
+    exit "${FAKE_MIX_LOADPATHS_NEXT_STATUS:-${FAKE_MIX_LOADPATHS_FIRST_STATUS:-0}}"
+    ;;
+  "deps.get")
+    exit "${FAKE_MIX_DEPS_GET_STATUS:-0}"
+    ;;
+esac
+exit 43
+EOF
+  chmod +x "$fakebin/mix"
+  export fakebin
+}
+
 # ----------------------------------------------------------------------------
 # Happy paths
 # ----------------------------------------------------------------------------
 
-@test "ensure_cli_deps: returns 0 when deps/ is already populated" {
-  # Simulate previously-fetched state by planting a dummy subdir.
-  mkdir -p "$CLI/deps/some_pkg"
-  run ensure_cli_deps "$CLI"
+@test "ensure_cli_deps: returns 0 when Mix reports dependency load paths ready" {
+  write_fake_mix
+  export FAKE_MIX_LOADPATHS_FIRST_STATUS=0
+  export FAKE_MIX_DEPS_GET_STATUS=42
+
+  PATH="$fakebin:$PATH" run ensure_cli_deps "$CLI"
+
   [ "$status" -eq 0 ]
-  # Should NOT emit the first-run notice when deps are present.
   [[ "$output" != *"first-run setup"* ]]
+  [ "$(sed -n '1p' "$MIX_LOG")" = "local.hex --force --if-missing" ]
+  [ "$(sed -n '2p' "$MIX_LOG")" = "deps.loadpaths --no-compile" ]
+  ! grep -q '^deps.get$' "$MIX_LOG"
 }
 
-@test "ensure_cli_deps: returns 0 and does nothing when deps are populated" {
-  # Multiple subdirs, mimicking a real install.
-  mkdir -p "$CLI/deps/jason" "$CLI/deps/credo" "$CLI/deps/bunt"
-  run ensure_cli_deps "$CLI"
+@test "ensure_cli_deps: fetches deps when load paths are not ready even if deps is populated" {
+  mkdir -p "$CLI/deps/some_pkg"
+  write_fake_mix
+  export FAKE_MIX_LOADPATHS_FIRST_STATUS=1
+  export FAKE_MIX_LOADPATHS_NEXT_STATUS=0
+
+  PATH="$fakebin:$PATH" run ensure_cli_deps "$CLI"
+
   [ "$status" -eq 0 ]
-  # Directory unchanged.
-  [ -d "$CLI/deps/jason" ]
-  [ -d "$CLI/deps/credo" ]
-  [ -d "$CLI/deps/bunt" ]
+  [[ "$output" == *"first-run setup"* ]]
+  [ "$(sed -n '1p' "$MIX_LOG")" = "local.hex --force --if-missing" ]
+  [ "$(sed -n '2p' "$MIX_LOG")" = "deps.loadpaths --no-compile" ]
+  [ "$(sed -n '3p' "$MIX_LOG")" = "deps.get" ]
+  [ "$(sed -n '4p' "$MIX_LOG")" = "deps.loadpaths --no-compile" ]
+}
+
+@test "ensure_cli_deps: installs Hex before checking dependency readiness" {
+  write_fake_mix
+  export FAKE_MIX_LOADPATHS_FIRST_STATUS=0
+
+  PATH="$fakebin:$PATH" run ensure_cli_deps "$CLI"
+
+  [ "$status" -eq 0 ]
+  [ "$(sed -n '1p' "$MIX_LOG")" = "local.hex --force --if-missing" ]
+  [ "$(sed -n '2p' "$MIX_LOG")" = "deps.loadpaths --no-compile" ]
+}
+
+@test "ensure_cli_deps: returns 1 when Hex setup fails" {
+  write_fake_mix
+  export FAKE_MIX_HEX_STATUS=17
+  export FAKE_MIX_LOADPATHS_FIRST_STATUS=0
+
+  PATH="$fakebin:$PATH" run ensure_cli_deps "$CLI"
+
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"failed to install Hex package manager"* ]]
+  grep -q '^local.hex --force --if-missing$' "$MIX_LOG"
+  ! grep -q '^deps.loadpaths --no-compile$' "$MIX_LOG"
+  ! grep -q '^deps.get$' "$MIX_LOG"
 }
 
 # ----------------------------------------------------------------------------
@@ -72,7 +143,7 @@ teardown() {
 }
 
 @test "ensure_cli_deps: fetches deps when deps/ does not exist at all" {
-  # Nuke the deps dir entirely — ls -A returns empty for a missing dir.
+  # Nuke the deps dir entirely — the Mix readiness check should fail closed.
   rm -rf "$CLI/deps"
 
   run ensure_cli_deps "$CLI"
@@ -88,8 +159,8 @@ teardown() {
 
 @test "ensure_cli_deps: returns 2 (programmer error) when cli_dir argument is missing" {
   # Tests the documented contract: return 2 for programmer errors,
-  # return 1 for runtime fetch failures. A future refactor that swaps
-  # these should fail here.
+  # return 1 for runtime setup/readiness failures. A future refactor that
+  # swaps these should fail here.
   run ensure_cli_deps
   [ "$status" -eq 2 ]
   [[ "$output" == *"cli_dir argument required"* ]]
@@ -101,13 +172,45 @@ teardown() {
   [[ "$output" == *"cli dir does not exist"* ]]
 }
 
-@test "ensure_cli_deps: returns 1 (fetch failed) and emits hint when mix fails" {
-  # Break the mix project so deps.get fails.
-  echo "this is not valid elixir" > "$CLI/mix.exs"
+@test "ensure_cli_deps: returns 1 (fetch failed) and emits hint when deps.get fails" {
+  write_fake_mix
+  export FAKE_MIX_LOADPATHS_FIRST_STATUS=1
+  export FAKE_MIX_DEPS_GET_STATUS=18
 
-  run ensure_cli_deps "$CLI"
+  PATH="$fakebin:$PATH" run ensure_cli_deps "$CLI"
+
   [ "$status" -eq 1 ]
   [[ "$output" == *"first-run setup"* ]]
   [[ "$output" == *"failed to fetch dependencies"* ]]
   [[ "$output" == *"mise run cli:build"* ]]
+  grep -q '^local.hex --force --if-missing$' "$MIX_LOG"
+  grep -q '^deps.loadpaths --no-compile$' "$MIX_LOG"
+  grep -q '^deps.get$' "$MIX_LOG"
+}
+
+@test "ensure_cli_deps: returns 1 when deps remain unloadable after deps.get" {
+  write_fake_mix
+  export FAKE_MIX_LOADPATHS_FIRST_STATUS=1
+  export FAKE_MIX_LOADPATHS_NEXT_STATUS=1
+  export FAKE_MIX_DEPS_GET_STATUS=0
+
+  PATH="$fakebin:$PATH" run ensure_cli_deps "$CLI"
+
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"dependencies were fetched but are still not loadable"* ]]
+  [ "$(grep -c '^deps.loadpaths --no-compile$' "$MIX_LOG")" -eq 2 ]
+  grep -q '^deps.get$' "$MIX_LOG"
+}
+
+@test "cli:build uses the shared readiness helper" {
+  write_fake_mix
+  export FAKE_MIX_LOADPATHS_FIRST_STATUS=0
+  export FAKE_MIX_DEPS_GET_STATUS=42
+
+  PATH="$fakebin:$PATH" run mise -C "$REPO_DIR" run -q cli:build
+
+  [ "$status" -eq 0 ]
+  [ "$(sed -n '1p' "$MIX_LOG")" = "local.hex --force --if-missing" ]
+  [ "$(sed -n '2p' "$MIX_LOG")" = "deps.loadpaths --no-compile" ]
+  ! grep -q '^deps.get$' "$MIX_LOG"
 }

@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 #MISE description="Build the sessions CLI (install Elixir dependencies)"
-set -e
+set -euo pipefail
 
-CLI_DIR="$MISE_CONFIG_ROOT/cli"
+CLI_DIR="${MISE_CONFIG_ROOT:?MISE_CONFIG_ROOT not set}/cli"
 
-cd "$CLI_DIR"
-mix local.hex --force --if-missing
-mix deps.get
+# shellcheck source=../../../lib/ensure-deps.sh
+source "$MISE_CONFIG_ROOT/lib/ensure-deps.sh"
+ensure_cli_deps "$CLI_DIR"
