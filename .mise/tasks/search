@@ -178,7 +178,7 @@ for dir_name in os.listdir(sessions_dir):
     if not os.path.isdir(dir_path):
         continue
     for fname in os.listdir(dir_path):
-        if not fname.endswith(".jsonl") or fname.startswith("agent-"):
+        if not fname.endswith(".jsonl"):
             continue
         filepath = os.path.join(dir_path, fname)
         all_files.append(filepath)

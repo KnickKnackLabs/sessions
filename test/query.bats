@@ -40,6 +40,26 @@ assert rows == [{'n': 2}], rows
 "
 }
 
+@test "query corpus includes sessions regardless of filename prefix" {
+  cat > "${PROJECT_DIR}agent-abc1234.jsonl" <<JSONL
+{"type":"session","version":3,"id":"agent-abc1234","timestamp":"2026-03-15T15:00:00.000Z","cwd":"/test/project"}
+{"type":"model_change","id":"mc1","parentId":null,"timestamp":"2026-03-15T15:00:00.001Z","provider":"test","modelId":"test-model"}
+{"type":"message","id":"u1","parentId":"mc1","timestamp":"2026-03-15T15:00:01.000Z","message":{"role":"user","content":[{"type":"text","text":"test"}]}}
+{"type":"message","id":"a1","parentId":"u1","timestamp":"2026-03-15T15:00:02.000Z","message":{"role":"assistant","content":[{"type":"text","text":"done"}],"model":"test-model","provider":"test"}}
+JSONL
+
+  run sessions query --project test/project --limit 10 \
+    --sql "select session_id from sessions where session_id = 'agent-abc1234'" \
+    --format json
+
+  [ "$status" -eq 0 ]
+  echo "$output" | python3 -c "
+import json, sys
+rows = json.load(sys.stdin)
+assert rows == [{'session_id': 'agent-abc1234'}], rows
+"
+}
+
 @test "query rejects mutating SQL" {
   run sessions query --sql "delete from sessions" --format json
   [ "$status" -ne 0 ]

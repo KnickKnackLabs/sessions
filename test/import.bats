@@ -32,6 +32,27 @@ teardown() {
   echo "$output" | grep -q "Resume with:"
 }
 
+@test "import bundle restores associated session files" {
+  mkdir -p "$EXPORT_DIR/$SESSION_1/associated-sessions"
+  echo '{}' > "$EXPORT_DIR/$SESSION_1/associated-sessions/related.jsonl"
+
+  run sessions import "$EXPORT_DIR/$SESSION_1"
+
+  [ "$status" -eq 0 ]
+  [ -f "${PROJECT_DIR}${SESSION_1}/related.jsonl" ]
+}
+
+@test "import bundle accepts legacy associated-session directory" {
+  legacy_dir="$EXPORT_DIR/$SESSION_1/sub""agents"
+  mkdir -p "$legacy_dir"
+  echo '{}' > "$legacy_dir/related.jsonl"
+
+  run sessions import "$EXPORT_DIR/$SESSION_1"
+
+  [ "$status" -eq 0 ]
+  [ -f "${PROJECT_DIR}${SESSION_1}/related.jsonl" ]
+}
+
 @test "import errors when session already exists" {
   # Re-create the original (import writes without timestamp prefix)
   echo '{}' > "${PROJECT_DIR}${SESSION_1}.jsonl"

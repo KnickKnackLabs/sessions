@@ -3,7 +3,7 @@
 #USAGE flag "--limit <n>" default="20" help="Max sessions to show (default: 20)"
 #USAGE flag "--project <filter>" help="Filter by project directory (substring match)"
 #USAGE flag "--filter <filter>" var=#true help="Filter sessions (type.meta.key=value, supports indexing e.g. wake[0].meta.by=ikma)"
-#USAGE flag "--all" help="Include subagent sessions (excluded by default)"
+#USAGE flag "--all" default=#false help="Include empty/stub sessions hidden by default"
 #USAGE flag "--json" help="Output as JSON"
 # /// script
 # requires-python = ">=3.10"
@@ -21,7 +21,7 @@ from format import console, format_duration, format_model, format_relative, make
 limit = int(os.environ.get("usage_limit", "20"))
 project_filter = os.environ.get("usage_project", "")
 filter_raw = os.environ.get("usage_filter", "")
-include_agents = os.environ.get("usage_all", "") == "true"
+include_empty = os.environ.get("usage_all", "") == "true"
 output_json = os.environ.get("usage_json", "") == "true"
 
 filters = parse.parse_filters(filter_raw) if filter_raw else []
@@ -42,9 +42,6 @@ for project_dir in os.listdir(sessions_dir):
     for fname in os.listdir(project_path):
         if not fname.endswith(".jsonl"):
             continue
-        # Skip subagent sessions unless --all
-        if not include_agents and fname.startswith("agent-"):
-            continue
         filepath = os.path.join(project_path, fname)
         mtime = os.path.getmtime(filepath)
         files.append((mtime, filepath))
@@ -64,7 +61,7 @@ for mtime, filepath in files:
             continue
         meta = session.metadata()
         # Skip empty/stub sessions — no real assistant interaction
-        if not include_agents:
+        if not include_empty:
             msgs = meta["user_messages"] + meta["assistant_messages"]
             if msgs == 0 or meta["model"] == "unknown":
                 continue

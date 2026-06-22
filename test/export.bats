@@ -34,6 +34,31 @@ assert 'source_machine' in m
 "
 }
 
+@test "export bundle includes associated session files" {
+  source_file=$(find "$PROJECT_DIR" -name "*${SESSION_1}.jsonl")
+  associated_dir="${source_file%.jsonl}"
+  mkdir -p "$associated_dir"
+  echo '{}' > "$associated_dir/related.jsonl"
+
+  run sessions export "$SESSION_1" --output "$EXPORT_DIR" --format bundle
+
+  [ "$status" -eq 0 ]
+  [ -f "$EXPORT_DIR/$SESSION_1/associated-sessions/related.jsonl" ]
+  echo "$output" | grep -q "associated-sessions/ (1 sessions)"
+}
+
+@test "export bundle output does not invent special agent session categories" {
+  source_file=$(find "$PROJECT_DIR" -name "*${SESSION_1}.jsonl")
+  associated_dir="${source_file%.jsonl}"
+  mkdir -p "$associated_dir"
+  echo '{}' > "$associated_dir/related.jsonl"
+
+  run sessions export "$SESSION_1" --output "$EXPORT_DIR" --format bundle
+
+  [ "$status" -eq 0 ]
+  ! echo "$output" | grep -qi "sub""agent"
+}
+
 @test "export markdown creates .md file" {
   run sessions export "$SESSION_1" --output "$EXPORT_DIR" --format markdown
   [ "$status" -eq 0 ]
