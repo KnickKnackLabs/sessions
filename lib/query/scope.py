@@ -48,7 +48,7 @@ def usage_from_session(session: parse.Session) -> UsageTotals:
     )
 
 
-def session_files(*, project: str, include_agent_prefixed: bool) -> list[Path]:
+def session_files(*, project: str) -> list[Path]:
     files: list[Path] = []
     for harness_name in harness.available():
         adapter = harness.adapter(harness_name)
@@ -65,8 +65,6 @@ def session_files(*, project: str, include_agent_prefixed: bool) -> list[Path]:
             for fname in os.listdir(project_path):
                 if not fname.endswith(".jsonl"):
                     continue
-                if fname.startswith("agent-") and not include_agent_prefixed:
-                    continue
                 filepath = os.path.join(project_path, fname)
                 if project:
                     try:
@@ -80,27 +78,23 @@ def session_files(*, project: str, include_agent_prefixed: bool) -> list[Path]:
     return files
 
 
-def include_session(entry: ScopeEntry, *, include_agent_prefixed: bool) -> bool:
-    if include_agent_prefixed:
-        return True
+def include_session(entry: ScopeEntry) -> bool:
     message_count = entry.user_messages + entry.assistant_messages
     return message_count > 0 and entry.model != "unknown"
 
 
 def load_corpus(
-    *, project: str, limit: int, include_agent_prefixed: bool
+    *, project: str, limit: int
 ) -> tuple[list[ScopeEntry], dict[str, UsageTotals]]:
     entries: list[ScopeEntry] = []
     usage: dict[str, UsageTotals] = {}
-    for path in session_files(
-        project=project, include_agent_prefixed=include_agent_prefixed
-    ):
+    for path in session_files(project=project):
         try:
             session = parse.load(str(path))
             entry = entry_from_session(session)
         except Exception:
             continue
-        if not include_session(entry, include_agent_prefixed=include_agent_prefixed):
+        if not include_session(entry):
             continue
         entries.append(entry)
         usage[entry.session_id] = usage_from_session(session)
@@ -130,5 +124,4 @@ def scope_entries(
     return load_corpus(
         project=args.project,
         limit=args.limit,
-        include_agent_prefixed=getattr(args, "include_agent_prefixed", False),
     )

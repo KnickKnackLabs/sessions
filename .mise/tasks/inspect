@@ -69,11 +69,11 @@ for e in session.entries:
         # Don't double-count — toolCall already counted it
         pass
 
-# Subagent sessions
-subagent_dir = filepath.replace(".jsonl", "")
-subagent_count = 0
-if os.path.isdir(subagent_dir):
-    subagent_count = len([f for f in os.listdir(subagent_dir) if f.endswith(".jsonl")])
+# Associated session files stored next to this session.
+associated_session_dir = filepath.replace(".jsonl", "")
+associated_session_count = 0
+if os.path.isdir(associated_session_dir):
+    associated_session_count = len([f for f in os.listdir(associated_session_dir) if f.endswith(".jsonl")])
 
 # Context usage from user messages
 context_snapshots = []
@@ -110,7 +110,7 @@ result = {
     "models": models,
     "tools": tools,
     "entry_types": entry_types,
-    "subagent_sessions": subagent_count,
+    "associated_sessions": associated_session_count,
     "context_snapshots": context_snapshots,
     "has_compaction": has_summary,
 }
@@ -203,8 +203,8 @@ else:
     if synthetic_count:
         kv2.add_row("Model", Text("system-generated only", style="dim"))
 
-if subagent_count:
-    kv2.add_row("Subagents", f"{subagent_count} sessions")
+if associated_session_count:
+    kv2.add_row("Associated", f"{associated_session_count} sessions")
 
 console.print(kv2)
 

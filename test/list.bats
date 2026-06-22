@@ -62,18 +62,32 @@ assert all('model' in s for s in data)
   echo "$output" | grep -q "claude-opus-4-6"
 }
 
-@test "list excludes agent- prefixed files by default" {
-  echo '{"type":"user","message":{"role":"user","content":"test"},"sessionId":"agent-test","timestamp":"2026-03-15T15:00:00.000Z"}' > "${PROJECT_DIR}agent-abc1234.jsonl"
-  run sessions list
-  [ "$status" -eq 0 ]
-  ! echo "$output" | grep -q "agent-abc"
-}
+@test "list includes sessions regardless of filename prefix" {
+  cat > "${PROJECT_DIR}agent-abc1234.jsonl" <<JSONL
+{"type":"session","version":3,"id":"agent-abc1234","timestamp":"2026-03-15T15:00:00.000Z","cwd":"/test/project"}
+{"type":"model_change","id":"mc1","parentId":null,"timestamp":"2026-03-15T15:00:00.001Z","provider":"test","modelId":"test-model"}
+{"type":"message","id":"u1","parentId":"mc1","timestamp":"2026-03-15T15:00:01.000Z","message":{"role":"user","content":[{"type":"text","text":"test"}]}}
+{"type":"message","id":"a1","parentId":"u1","timestamp":"2026-03-15T15:00:02.000Z","message":{"role":"assistant","content":[{"type":"text","text":"done"}],"model":"test-model","provider":"test"}}
+JSONL
 
-@test "list --all includes agent sessions" {
-  echo '{"type":"user","message":{"role":"user","content":"test"},"sessionId":"agent-abc1234","timestamp":"2026-03-15T15:00:00.000Z"}' > "${PROJECT_DIR}agent-abc1234.jsonl"
-  run sessions list --all
+  run sessions list
+
   [ "$status" -eq 0 ]
   echo "$output" | grep -q "agent-ab"
+}
+
+@test "list --all includes empty stub sessions" {
+  cat > "${PROJECT_DIR}stub-session.jsonl" <<JSONL
+{"type":"session","version":3,"id":"stub-session","timestamp":"2026-03-15T15:00:00.000Z","cwd":"/test/project"}
+JSONL
+
+  run sessions list
+  [ "$status" -eq 0 ]
+  ! echo "$output" | grep -q "stub-se"
+
+  run sessions list --all
+  [ "$status" -eq 0 ]
+  echo "$output" | grep -q "stub-se"
 }
 
 # --- --filter: session header metadata ---

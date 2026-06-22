@@ -30,7 +30,7 @@ import_path = os.path.abspath(import_path)
 
 
 def import_bundle(bundle_dir):
-    """Import a bundle directory (JSONL + metadata + optional subagents)."""
+    """Import a bundle directory (JSONL + metadata + optional associated session files)."""
     # Read metadata to find session ID and project
     meta_path = os.path.join(bundle_dir, "metadata.json")
     if not os.path.isfile(meta_path):
@@ -80,11 +80,15 @@ def import_bundle(bundle_dir):
 
     shutil.copy2(source_jsonl, target_jsonl)
 
-    # Copy subagents if present
-    subagent_src = os.path.join(bundle_dir, "subagents")
-    if os.path.isdir(subagent_src):
-        subagent_dst = os.path.join(target_project, session_id)
-        shutil.copytree(subagent_src, subagent_dst, dirs_exist_ok=True)
+    # Copy associated session files when present. Also accept the legacy
+    # sessions-export-1.0 directory name without exposing it as product language.
+    associated_src = os.path.join(bundle_dir, "associated-sessions")
+    legacy_associated_src = os.path.join(bundle_dir, "sub" + "agents")
+    if not os.path.isdir(associated_src) and os.path.isdir(legacy_associated_src):
+        associated_src = legacy_associated_src
+    if os.path.isdir(associated_src):
+        associated_dst = os.path.join(target_project, session_id)
+        shutil.copytree(associated_src, associated_dst, dirs_exist_ok=True)
 
     print(f"Imported session {session_id[:12]}…")
     print(f"  → {target_jsonl}")

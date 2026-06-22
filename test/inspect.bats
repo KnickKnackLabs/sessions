@@ -61,3 +61,32 @@ assert 'bash' in data['tools']
   # File size appears in subtitle as KB or MB
   echo "$output" | grep -qE "(KB|MB)"
 }
+
+@test "inspect shows associated session files without special session categories" {
+  source_file=$(find "$PROJECT_DIR" -name "*${SESSION_1}.jsonl")
+  associated_dir="${source_file%.jsonl}"
+  mkdir -p "$associated_dir"
+  echo '{}' > "$associated_dir/related.jsonl"
+
+  run sessions inspect "$SESSION_1"
+
+  [ "$status" -eq 0 ]
+  echo "$output" | grep -q "Associated.*1 sessions"
+}
+
+@test "inspect --json reports associated sessions" {
+  source_file=$(find "$PROJECT_DIR" -name "*${SESSION_1}.jsonl")
+  associated_dir="${source_file%.jsonl}"
+  mkdir -p "$associated_dir"
+  echo '{}' > "$associated_dir/related.jsonl"
+
+  run sessions inspect "$SESSION_1" --json
+
+  [ "$status" -eq 0 ]
+  echo "$output" | python3 -c "
+import json, sys
+data = json.load(sys.stdin)
+assert data['associated_sessions'] == 1
+assert ('sub' + 'agent_sessions') not in data
+"
+}
