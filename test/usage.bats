@@ -109,6 +109,26 @@ assert obj['sessions'][0]['session_id'] == '$USAGE_SESSION_2'
 "
 }
 
+@test "usage aggregate includes sessions regardless of filename prefix" {
+  cat > "${PROJECT_DIR}agent-usage-visible.jsonl" <<JSONL
+{"type":"session","version":3,"id":"agent-usage-visible","timestamp":"2026-03-18T12:00:00.000Z","cwd":"/test/project","meta":{"agent":{"name":"agent-prefix-usage"}}}
+{"type":"model_change","id":"mc1","parentId":null,"timestamp":"2026-03-18T12:00:00.001Z","provider":"openai","modelId":"model-a"}
+{"type":"message","id":"a1","parentId":"mc1","timestamp":"2026-03-18T12:00:01.000Z","message":{"role":"assistant","content":[{"type":"text","text":"agent prefix usage"}],"model":"model-a","provider":"openai","stopReason":"stop","usage":{"input":11,"output":5,"cacheRead":0,"cacheWrite":0,"totalTokens":16,"cost":{"input":0.011,"output":0.005,"cacheRead":0,"cacheWrite":0,"total":0.016}}}}
+JSONL
+
+  run sessions usage --filter session.meta.agent.name=agent-prefix-usage --json
+
+  [ "$status" -eq 0 ]
+  echo "$output" | python3 -c "
+import json, sys
+obj = json.load(sys.stdin)
+assert len(obj['sessions']) == 1, obj
+assert obj['sessions'][0]['session_id'] == 'agent-usage-visible', obj
+assert obj['totals']['calls'] == 1, obj
+assert obj['totals']['totalTokens'] == 16, obj
+"
+}
+
 @test "usage applies metadata filters before the default aggregate limit" {
   for i in $(seq -w 1 20); do
     cat > "${PROJECT_DIR}2026-03-16T12-${i}-00-000Z_other-${i}.jsonl" <<JSONL

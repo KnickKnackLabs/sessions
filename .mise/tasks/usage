@@ -105,8 +105,6 @@ def usage_files():
             for fname in os.listdir(project_path):
                 if not fname.endswith(".jsonl"):
                     continue
-                if fname.startswith("agent-") and not scan_all:
-                    continue
                 filepath = os.path.join(project_path, fname)
                 files.append((os.path.getmtime(filepath), filepath))
     files.sort(key=lambda item: -item[0])
