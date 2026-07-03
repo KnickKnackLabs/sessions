@@ -69,7 +69,7 @@ defmodule Cli.Harness.Pi.Command do
       ]
       |> Enum.join("")
 
-    pi_cmd = ~s(pi -p "$1"#{pi_flags})
+    pi_cmd = ~s(mise -C "$MISE_CONFIG_ROOT" exec -- pi -p "$1"#{pi_flags})
 
     # `echo |` pipes empty stdin so pi doesn't block waiting for a TTY.
     shell_script =

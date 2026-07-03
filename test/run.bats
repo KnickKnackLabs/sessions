@@ -55,6 +55,45 @@ teardown() {
   ! grep -qx '' "$argv_capture"
 }
 
+@test "run interactive resolves pi through sessions mise root by default" {
+  local stub_dir="$BATS_TEST_TMPDIR/stub-mise-pi"
+  local argv_capture="$BATS_TEST_TMPDIR/pi-argv-owned"
+  local cwd_capture="$BATS_TEST_TMPDIR/pi-cwd-owned"
+  local mise_capture="$BATS_TEST_TMPDIR/mise-argv-owned"
+  local real_mise
+  real_mise=$(command -v mise)
+
+  stub_pi_capture_argv_cwd "$stub_dir" "$argv_capture" "$cwd_capture"
+  cat > "$stub_dir/mise" <<STUB
+#!/usr/bin/env bash
+set -euo pipefail
+if [ "\${1:-}" = "-C" ] && [ "\${3:-}" = "exec" ] && [ "\${4:-}" = "--" ] && [ "\${5:-}" = "pi" ]; then
+  printf '%s\n' "\$@" > "$mise_capture"
+  shift 5
+  exec pi "\$@"
+fi
+exec "$real_mise" "\$@"
+STUB
+  chmod +x "$stub_dir/mise"
+
+  local run_cwd="$BATS_TEST_TMPDIR/run-cwd-owned"
+  mkdir -p "$run_cwd"
+
+  PATH="$stub_dir:$PATH" SESSIONS_PI_BIN= run "$real_mise" -C "$REPO_DIR" run -q run \
+    --cwd "$run_cwd" \
+    --model "openai-codex/gpt-5.5"
+  [ "$status" -eq 0 ]
+  [ -f "$mise_capture" ]
+  [ -f "$argv_capture" ]
+
+  [ "$(awk 'NR == 1 { print }' "$mise_capture")" = "-C" ]
+  [ "$(awk 'NR == 2 { print }' "$mise_capture")" = "$REPO_DIR" ]
+  [ "$(awk 'NR == 3 { print }' "$mise_capture")" = "exec" ]
+  [ "$(awk 'NR == 4 { print }' "$mise_capture")" = "--" ]
+  [ "$(awk 'NR == 5 { print }' "$mise_capture")" = "pi" ]
+  grep -qx -- "--model" "$argv_capture"
+}
+
 @test "run --interactive with message execs pi without print mode" {
   local stub_dir="$BATS_TEST_TMPDIR/stub-pi-interactive-message"
   local argv_capture="$BATS_TEST_TMPDIR/pi-argv-interactive-message"
@@ -212,7 +251,7 @@ fi
 STUB
   chmod +x "$stub_dir/pi"
 
-  run bash -c 'printf "%s\n" "typed input" | PATH="$1" PI_DIR="$2" mise -C "$3" run -q run --system-prompt-file "$4" --cwd "$5" --model "openai-codex/gpt-5.5"' \
+  run bash -c 'printf "%s\n" "typed input" | PATH="$1" PI_DIR="$2" SESSIONS_PI_BIN=pi mise -C "$3" run -q run --system-prompt-file "$4" --cwd "$5" --model "openai-codex/gpt-5.5"' \
     bash \
     "$stub_dir:$PATH" \
     "$PI_DIR" \
@@ -482,7 +521,7 @@ while :; do sleep 1; done
 STUB
   chmod +x "$stub_dir/pi"
 
-  PATH="$stub_dir:$PATH" DISPATCH_CONTEXT="generated prompt" PI_DIR="$PI_DIR" \
+  PATH="$stub_dir:$PATH" DISPATCH_CONTEXT="generated prompt" PI_DIR="$PI_DIR" SESSIONS_PI_BIN=pi \
     mise -C "$REPO_DIR" run -q run --cwd "$BATS_TEST_TMPDIR" --model "openai-codex/gpt-5.5" \
     >"$stdout_capture" 2>"$stderr_capture" &
   local mise_pid=$!

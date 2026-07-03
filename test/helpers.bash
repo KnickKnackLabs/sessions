@@ -24,7 +24,7 @@ REPO_DIR="${REPO_DIR:-$(cd "$BATS_TEST_DIRNAME/.." && pwd)}"
 export REPO_DIR
 
 sessions() {
-  cd "$REPO_DIR" && PI_DIR="$PI_DIR" mise run -q "$@"
+  cd "$REPO_DIR" && PI_DIR="$PI_DIR" SESSIONS_PI_BIN="${SESSIONS_PI_BIN:-pi}" mise run -q "$@"
 }
 export -f sessions
 
