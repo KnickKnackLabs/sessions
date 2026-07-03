@@ -8,7 +8,7 @@ defmodule Cli.Harness.Pi.CommandTest do
       {script, _args} =
         Command.build_command("hi", "claude-sonnet-4-5", nil, nil, nil)
 
-      assert script =~ "echo | pi -p \"$1\""
+      assert script =~ "echo | mise -C \"$MISE_CONFIG_ROOT\" exec -- pi -p \"$1\""
       refute script =~ "--append-system-prompt"
       assert script =~ ~s( --model "$2")
       assert script =~ " --mode json"
@@ -25,7 +25,7 @@ defmodule Cli.Harness.Pi.CommandTest do
       {script, _} =
         Command.build_command("hi", "claude-sonnet-4-5", "/tmp/prompt.txt", nil, 300)
 
-      assert script =~ "echo | timeout 300 pi -p"
+      assert script =~ "echo | timeout 300 mise -C \"$MISE_CONFIG_ROOT\" exec -- pi -p"
     end
 
     test "uses --session at the next positional index after prompt args" do

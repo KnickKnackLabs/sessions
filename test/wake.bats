@@ -721,6 +721,7 @@ cat "\$prompt_file" > "$prompt_capture"
 exit 0
 STUB
   chmod +x "$stub_dir/pi"
+  stub_mise_exec_pi "$stub_dir"
 
   PATH="$stub_dir:$PATH" run sessions wake wake-baked-prompt --background --model "openai-codex/gpt-5.5"
   [ "$status" -eq 0 ]

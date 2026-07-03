@@ -28,6 +28,24 @@ sessions() {
 }
 export -f sessions
 
+stub_mise_exec_pi() {
+  local stub_dir="$1"
+  local real_mise
+  real_mise=$(command -v mise)
+
+  mkdir -p "$stub_dir"
+  cat > "$stub_dir/mise" <<STUB
+#!/usr/bin/env bash
+set -euo pipefail
+if [ "\${1:-}" = "-C" ] && [ "\${3:-}" = "exec" ] && [ "\${4:-}" = "--" ] && [ "\${5:-}" = "pi" ]; then
+  shift 5
+  exec pi "\$@"
+fi
+exec "$real_mise" "\$@"
+STUB
+  chmod +x "$stub_dir/mise"
+}
+
 stub_pi_capture_argv_cwd() {
   local stub_dir="$1"
   local argv_capture="$2"
@@ -41,6 +59,7 @@ printf '%s\n' "\$@" > "$argv_capture"
 exit 0
 STUB
   chmod +x "$stub_dir/pi"
+  stub_mise_exec_pi "$stub_dir"
 }
 
 stub_pi_capture_env() {
@@ -57,6 +76,7 @@ printf 'PATH=%s\n' "\$PATH" >> "$env_capture"
 exit 0
 STUB
   chmod +x "$stub_dir/pi"
+  stub_mise_exec_pi "$stub_dir"
 }
 
 stub_shell_exec_payload() {

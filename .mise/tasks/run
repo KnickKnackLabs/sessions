@@ -278,8 +278,9 @@ run_interactive() {
 
   sessions_prepare_harness_env
 
-  if ! command -v pi >/dev/null 2>&1; then
-    echo "Error: pi not found on PATH" >&2
+  local -a pi_command=(mise -C "$MISE_CONFIG_ROOT" exec -- pi)
+  if ! command -v mise >/dev/null 2>&1; then
+    echo "Error: mise not found on PATH for sessions-owned pi harness" >&2
     exit 1
   fi
 
@@ -302,10 +303,10 @@ run_interactive() {
       echo "Error: timeout command is required for --timeout" >&2
       exit 1
     fi
-    run_and_exit timeout "$TIMEOUT" pi "${pi_args[@]}"
+    run_and_exit timeout "$TIMEOUT" "${pi_command[@]}" "${pi_args[@]}"
   fi
 
-  run_and_exit pi "${pi_args[@]}"
+  run_and_exit "${pi_command[@]}" "${pi_args[@]}"
 }
 
 if [ "$INTERACTIVE" = "true" ] || [ -z "$MESSAGE" ]; then
