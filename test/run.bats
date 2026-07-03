@@ -79,7 +79,7 @@ STUB
   local run_cwd="$BATS_TEST_TMPDIR/run-cwd-owned"
   mkdir -p "$run_cwd"
 
-  PATH="$stub_dir:$PATH" SESSIONS_PI_BIN= run "$real_mise" -C "$REPO_DIR" run -q run \
+  PATH="$stub_dir:$PATH" run "$real_mise" -C "$REPO_DIR" run -q run \
     --cwd "$run_cwd" \
     --model "openai-codex/gpt-5.5"
   [ "$status" -eq 0 ]
@@ -250,8 +250,9 @@ else
 fi
 STUB
   chmod +x "$stub_dir/pi"
+  stub_mise_exec_pi "$stub_dir"
 
-  run bash -c 'printf "%s\n" "typed input" | PATH="$1" PI_DIR="$2" SESSIONS_PI_BIN=pi mise -C "$3" run -q run --system-prompt-file "$4" --cwd "$5" --model "openai-codex/gpt-5.5"' \
+  run bash -c 'printf "%s\n" "typed input" | PATH="$1" PI_DIR="$2" mise -C "$3" run -q run --system-prompt-file "$4" --cwd "$5" --model "openai-codex/gpt-5.5"' \
     bash \
     "$stub_dir:$PATH" \
     "$PI_DIR" \
@@ -284,6 +285,7 @@ cat "\$prompt_file" > "$prompt_capture"
 exit 0
 STUB
   chmod +x "$stub_dir/pi"
+  stub_mise_exec_pi "$stub_dir"
 
   run sessions new --cwd "$BATS_TEST_TMPDIR" --system-prompt "baked prompt from session"
   [ "$status" -eq 0 ]
@@ -415,6 +417,7 @@ cat "\$prompt_file" > "$prompt_capture"
 exit 0
 STUB
   chmod +x "$stub_dir/pi"
+  stub_mise_exec_pi "$stub_dir"
 
   run sessions new --cwd "$BATS_TEST_TMPDIR" --system-prompt "baked prompt"
   [ "$status" -eq 0 ]
@@ -454,6 +457,7 @@ cat "\$prompt_file" > "$prompt_capture"
 exit 0
 STUB
   chmod +x "$stub_dir/pi"
+  stub_mise_exec_pi "$stub_dir"
 
   : > "$BATS_TEST_TMPDIR/empty-prompt.md"
   run sessions new --cwd "$BATS_TEST_TMPDIR" --system-prompt-file "$BATS_TEST_TMPDIR/empty-prompt.md"
@@ -520,8 +524,9 @@ trap 'printf term > "$term_capture"; exit 143' TERM
 while :; do sleep 1; done
 STUB
   chmod +x "$stub_dir/pi"
+  stub_mise_exec_pi "$stub_dir"
 
-  PATH="$stub_dir:$PATH" DISPATCH_CONTEXT="generated prompt" PI_DIR="$PI_DIR" SESSIONS_PI_BIN=pi \
+  PATH="$stub_dir:$PATH" DISPATCH_CONTEXT="generated prompt" PI_DIR="$PI_DIR" \
     mise -C "$REPO_DIR" run -q run --cwd "$BATS_TEST_TMPDIR" --model "openai-codex/gpt-5.5" \
     >"$stdout_capture" 2>"$stderr_capture" &
   local mise_pid=$!

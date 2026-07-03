@@ -278,19 +278,10 @@ run_interactive() {
 
   sessions_prepare_harness_env
 
-  local -a pi_command
-  if [ -n "${SESSIONS_PI_BIN:-}" ]; then
-    pi_command=("$SESSIONS_PI_BIN")
-    if ! command -v "$SESSIONS_PI_BIN" >/dev/null 2>&1; then
-      echo "Error: pi override not found on PATH: $SESSIONS_PI_BIN" >&2
-      exit 1
-    fi
-  else
-    pi_command=(mise -C "$MISE_CONFIG_ROOT" exec -- pi)
-    if ! command -v mise >/dev/null 2>&1; then
-      echo "Error: mise not found on PATH for sessions-owned pi harness" >&2
-      exit 1
-    fi
+  local -a pi_command=(mise -C "$MISE_CONFIG_ROOT" exec -- pi)
+  if ! command -v mise >/dev/null 2>&1; then
+    echo "Error: mise not found on PATH for sessions-owned pi harness" >&2
+    exit 1
   fi
 
   local pi_args=(--model "$MODEL")
