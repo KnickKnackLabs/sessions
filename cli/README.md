@@ -45,4 +45,4 @@ mix sessions --model openai-codex/gpt-5.5 --session ./session.jsonl "Continue"
 
 - Elixir 1.19+
 - Jason (JSON parsing)
-- pi (owned by this package via mise: `github:KnickKnackLabs/pi@v0.80.3-kkl.1`)
+- pi (owned by this package via mise: `github:KnickKnackLabs/pi@v0.80.6-kkl.1`)
