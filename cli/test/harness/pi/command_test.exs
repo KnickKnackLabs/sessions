@@ -117,6 +117,43 @@ defmodule Cli.Harness.Pi.CommandTest do
     end
   end
 
+  describe "build_command/6 — project trust" do
+    test "inherits project trust by default without a pi override" do
+      {script, _} =
+        Command.build_command("hi", "claude-sonnet-4-5", "/tmp/prompt.txt", nil, nil)
+
+      refute script =~ "--approve"
+      refute script =~ "--no-approve"
+    end
+
+    test "maps approve to --approve" do
+      {script, _} =
+        Command.build_command("hi", "claude-sonnet-4-5", "/tmp/prompt.txt", nil, nil,
+          project_trust: "approve"
+        )
+
+      assert script =~ " --approve"
+      refute script =~ "--no-approve"
+    end
+
+    test "maps deny to --no-approve" do
+      {script, _} =
+        Command.build_command("hi", "claude-sonnet-4-5", "/tmp/prompt.txt", nil, nil,
+          project_trust: "deny"
+        )
+
+      assert script =~ " --no-approve"
+    end
+
+    test "rejects an unknown project trust policy" do
+      assert_raise ArgumentError, ~r/unknown project trust policy/, fn ->
+        Command.build_command("hi", "claude-sonnet-4-5", "/tmp/prompt.txt", nil, nil,
+          project_trust: "sometimes"
+        )
+      end
+    end
+  end
+
   describe "build_command/6 — positional args" do
     test "returns [message, model] without prompt or session" do
       {_script, args} =

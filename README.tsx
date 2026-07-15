@@ -266,6 +266,27 @@ sessions wake review/pr-50 --model openai-codex/gpt-5.5 --message "You missed th
       </Paragraph>
 
       <Paragraph>
+        {"Runs inherit the selected harness's normal extensions, skills, and prompt templates by default, including print and headless execution. Use "}
+        <Code>--no-extensions</Code>
+        {", "}
+        <Code>--no-skills</Code>
+        {", or "}
+        <Code>--no-prompt-templates</Code>
+        {" only when a caller deliberately needs a resource-free boundary."}
+      </Paragraph>
+
+      <Paragraph>
+        <Code>--project-trust inherit|approve|deny</Code>
+        {" controls project-scoped settings and executable resources for one run. The default "}
+        <Code>inherit</Code>
+        {" preserves native harness behavior. A harness translates "}
+        <Code>approve</Code>
+        {" and "}
+        <Code>deny</Code>
+        {" explicitly or rejects the unsupported policy; Sessions never silently ignores it. This option does not persist trust and is not a sandbox."}
+      </Paragraph>
+
+      <Paragraph>
         {"To run only the payload process as a local agent OS user, pass "}
         <Code>--os-user</Code>
         {" or set "}

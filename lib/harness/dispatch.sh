@@ -50,6 +50,21 @@ _DISPATCH_SH_LOADED=1
 HARNESS_LIB_DIR="${HARNESS_LIB_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
 HARNESS_DEFAULT="pi"
 
+# Project trust is a generic one-run policy. Core tasks validate the shared
+# vocabulary; each harness adapter translates a supported policy into its own
+# launch flags or reports UNSUPPORTED for non-default behavior.
+sessions_validate_project_trust() {
+  case "${1:-}" in
+    inherit|approve|deny)
+      return 0
+      ;;
+    *)
+      echo "Error: --project-trust must be inherit, approve, or deny" >&2
+      return 1
+      ;;
+  esac
+}
+
 # --- UNSUPPORTED contract ---
 #
 # Adapters that don't (yet) implement a given operation signal so via a

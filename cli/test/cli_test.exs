@@ -83,6 +83,20 @@ defmodule CliTest do
       end
     end
 
+    test "rejects an unknown project trust policy" do
+      {output, exit_code} =
+        run_cli([
+          "--project-trust",
+          "sometimes",
+          "--model",
+          "openai-codex/gpt-5.5",
+          "hello"
+        ])
+
+      assert exit_code == 1
+      assert output =~ "--project-trust must be inherit, approve, or deny"
+    end
+
     test "rejects non-existent system-prompt-file" do
       {output, exit_code} =
         run_cli([

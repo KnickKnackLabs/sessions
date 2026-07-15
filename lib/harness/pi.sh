@@ -17,6 +17,28 @@
 # Usage (from task scripts, where $MISE_CONFIG_ROOT is set by mise):
 #   source "$MISE_CONFIG_ROOT/lib/harness/pi.sh"
 
+# --- Launch policy ---
+
+# Translate Sessions' generic one-run project trust policy to Pi flags.
+# Empty output means inherit Pi's normal trust behavior.
+harness_pi_project_trust_flag() {
+  case "${1:-}" in
+    inherit)
+      return 0
+      ;;
+    approve)
+      echo "--approve"
+      ;;
+    deny)
+      echo "--no-approve"
+      ;;
+    *)
+      echo "Error: unknown project trust policy: ${1:-}" >&2
+      return 2
+      ;;
+  esac
+}
+
 # --- Location ---
 
 # Print the absolute path of pi's sessions root.
