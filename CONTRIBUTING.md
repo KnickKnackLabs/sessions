@@ -15,7 +15,18 @@ Keep harness-specific knowledge in `lib/harness/<name>.sh` and `lib/harness/<nam
 - session file locations and path encoding;
 - native JSONL message schemas;
 - launch arguments for a harness binary;
+- translation of generic one-run policies such as project trust;
 - fallback parsing of harness-owned transcript/event shapes.
+
+A harness must translate a non-default generic policy or reject it explicitly.
+It must never silently ignore a policy it cannot honor.
+
+`wake` preflights non-default policy before appending wake or context entries
+because it launches `run` only after those mutations.
+Low-level `run` delegates policy handling to the selected execution adapter
+and records its attempted process plus exit, including an adapter rejection.
+Do not duplicate execution-adapter policy in the Bash wrapper merely to suppress
+that audit trail.
 
 For example, `sessions run` writes generic `process_start` / `process_exit` records, and `sessions ps` reads those generic records. If a future harness exposes its own process metadata, parse that in the harness adapter and convert it to the generic shape instead of baking the harness schema into `ps`.
 

@@ -20,6 +20,25 @@
 # Usage (from task scripts, where $MISE_CONFIG_ROOT is set by mise):
 #   source "$MISE_CONFIG_ROOT/lib/harness/claude.sh"
 
+# --- Launch policy ---
+
+# Inheriting native behavior requires no adapter support. Claude project trust
+# translation is not implemented, so non-default policies fail explicitly.
+harness_claude_project_trust_flag() {
+  case "${1:-}" in
+    inherit)
+      return 0
+      ;;
+    approve|deny)
+      harness_unsupported
+      ;;
+    *)
+      echo "Error: unknown project trust policy: ${1:-}" >&2
+      return 2
+      ;;
+  esac
+}
+
 # --- Location ---
 
 harness_claude_sessions_dir() {

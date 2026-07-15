@@ -8,6 +8,10 @@
 #USAGE flag "--os-user <os_user>" default="" help="Run the session payload as this local OS user (default: $SHIMMER_OS_USER)"
 #USAGE flag "--headless" default=#false help="No human present — agent completes task and exits"
 #USAGE flag "--background" default=#false help="Launch in background via shell/zmx (default: foreground, blocks until done)"
+#USAGE flag "--project-trust <policy>" default="inherit" help="Project resource trust for this run: inherit, approve, or deny"
+#USAGE flag "--no-extensions" default=#false help="Disable harness extensions for this run"
+#USAGE flag "--no-skills" default=#false help="Disable harness skills for this run"
+#USAGE flag "--no-prompt-templates" default=#false help="Disable harness prompt templates for this run"
 #USAGE flag "--meta <meta>" var=#true default="" help="Metadata for the wake event (repeatable, dotted paths or jq expressions)"
 
 set -euo pipefail
@@ -21,6 +25,10 @@ MODEL="${usage_model:-}"
 OS_USER="${usage_os_user:-}"
 HEADLESS="${usage_headless:-false}"
 BACKGROUND="${usage_background:-false}"
+PROJECT_TRUST="${usage_project_trust:-inherit}"
+NO_EXTENSIONS="${usage_no_extensions:-false}"
+NO_SKILLS="${usage_no_skills:-false}"
+NO_PROMPT_TEMPLATES="${usage_no_prompt_templates:-false}"
 
 scrub_caller_pwd_env() {
   local name
@@ -90,6 +98,7 @@ mise_run=(mise -C "$MISE_CONFIG_ROOT" run -q)
 
 # shellcheck source=/dev/null
 source "$MISE_CONFIG_ROOT/lib/harness/dispatch.sh"
+sessions_validate_project_trust "$PROJECT_TRUST" || exit 1
 source "$MISE_CONFIG_ROOT/lib/find.sh"
 source "$MISE_CONFIG_ROOT/lib/shell.sh"
 SESSION_FILE=$(find_session_file "$SESSION_ID") || exit 1
@@ -98,6 +107,12 @@ SESSION_FILE=$(find_session_file "$SESSION_ID") || exit 1
 HARNESS_NAME=$(harness_resolve --session "$SESSION_FILE") || exit 1
 # shellcheck source=/dev/null
 source "$MISE_CONFIG_ROOT/lib/harness/$HARNESS_NAME.sh"
+
+# Inherit requires no adapter behavior. Fail before recording a wake when the
+# selected harness cannot honor an explicitly non-default trust policy.
+if [ "$PROJECT_TRUST" != "inherit" ]; then
+  harness_call "$HARNESS_NAME" project_trust_flag "$PROJECT_TRUST" >/dev/null
+fi
 
 if [ "$HEADLESS" != "true" ] && [ "$HARNESS_NAME" != "pi" ]; then
   if [ -z "$MESSAGE" ]; then
@@ -208,7 +223,16 @@ SESSION_CWD=$(cd "$SESSION_CWD" && pwd -P)
 
 # --- Launch ---
 
-RUN_CMD=("${mise_run[@]}" run --session "$SESSION_FILE" --cwd "$SESSION_CWD" --model "$MODEL")
+RUN_CMD=(
+  "${mise_run[@]}" run
+  --session "$SESSION_FILE"
+  --cwd "$SESSION_CWD"
+  --model "$MODEL"
+  --project-trust "$PROJECT_TRUST"
+)
+[ "$NO_EXTENSIONS" = "true" ] && RUN_CMD+=(--no-extensions)
+[ "$NO_SKILLS" = "true" ] && RUN_CMD+=(--no-skills)
+[ "$NO_PROMPT_TEMPLATES" = "true" ] && RUN_CMD+=(--no-prompt-templates)
 if [ "$HEADLESS" = "true" ]; then
   RUN_CMD+=(--headless)
   if [ -n "$MESSAGE" ]; then

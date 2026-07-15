@@ -10,9 +10,13 @@
 #USAGE flag "--cwd <cwd>" default="" help="Working directory for pi"
 #USAGE flag "--headless" default=#false help="Non-interactive mode (appends headless context to system prompt)"
 #USAGE flag "--interactive" default=#false help="Open a persistent interactive harness even when a message is provided"
-#USAGE flag "--extensions" default=#false help="Enable pi extensions for print-mode runs (interactive runs use pi defaults)"
-#USAGE flag "--skills" default=#false help="Enable pi skills for print-mode runs (interactive runs use pi defaults)"
-#USAGE flag "--prompt-templates" default=#false help="Enable pi prompt templates for print-mode runs (interactive runs use pi defaults)"
+#USAGE flag "--project-trust <policy>" default="inherit" help="Project resource trust for this run: inherit, approve, or deny"
+#USAGE flag "--extensions" default=#false help="Explicitly enable pi extensions (retained for compatibility; enabled by default)"
+#USAGE flag "--skills" default=#false help="Explicitly enable pi skills (retained for compatibility; enabled by default)"
+#USAGE flag "--prompt-templates" default=#false help="Explicitly enable pi prompt templates (retained for compatibility; enabled by default)"
+#USAGE flag "--no-extensions" default=#false help="Disable harness extensions for this run"
+#USAGE flag "--no-skills" default=#false help="Disable harness skills for this run"
+#USAGE flag "--no-prompt-templates" default=#false help="Disable harness prompt templates for this run"
 
 set -euo pipefail
 
@@ -24,10 +28,27 @@ SESSION="${usage_session:-}"
 CWD="${usage_cwd:-${SESSIONS_CALLER_PWD:-${CALLER_PWD:-.}}}"
 HEADLESS="${usage_headless:-false}"
 INTERACTIVE="${usage_interactive:-false}"
-# Extensions disabled by default (determinism for CI). Pass --extensions etc. to enable.
-EXTENSIONS="${usage_extensions:-false}"
-SKILLS="${usage_skills:-false}"
-PROMPT_TEMPLATES="${usage_prompt_templates:-false}"
+PROJECT_TRUST="${usage_project_trust:-inherit}"
+EXTENSIONS=true
+SKILLS=true
+PROMPT_TEMPLATES=true
+
+if [ "${usage_extensions:-false}" = "true" ] && [ "${usage_no_extensions:-false}" = "true" ]; then
+  echo "Error: --extensions cannot be combined with --no-extensions" >&2
+  exit 1
+fi
+if [ "${usage_skills:-false}" = "true" ] && [ "${usage_no_skills:-false}" = "true" ]; then
+  echo "Error: --skills cannot be combined with --no-skills" >&2
+  exit 1
+fi
+if [ "${usage_prompt_templates:-false}" = "true" ] && [ "${usage_no_prompt_templates:-false}" = "true" ]; then
+  echo "Error: --prompt-templates cannot be combined with --no-prompt-templates" >&2
+  exit 1
+fi
+
+[ "${usage_no_extensions:-false}" = "true" ] && EXTENSIONS=false
+[ "${usage_no_skills:-false}" = "true" ] && SKILLS=false
+[ "${usage_no_prompt_templates:-false}" = "true" ] && PROMPT_TEMPLATES=false
 
 # shellcheck source=../../lib/harness-env.sh
 source "$MISE_CONFIG_ROOT/lib/harness-env.sh"
@@ -211,6 +232,8 @@ if [[ "$MODEL" != */* ]]; then
   exit 1
 fi
 
+sessions_validate_project_trust "$PROJECT_TRUST" || exit 1
+
 # Prompt resolution order:
 #   1. Explicit --system-prompt-file
 #   2. Latest system_prompt entry baked into --session by `sessions new`
@@ -270,6 +293,8 @@ run_interactive() {
   else
     harness_name=$(harness_resolve) || exit 1
   fi
+  # shellcheck source=/dev/null
+  source "$MISE_CONFIG_ROOT/lib/harness/$harness_name.sh"
 
   if [ "$harness_name" != "pi" ]; then
     echo "sessions: '$harness_name' harness does not support interactive no-message run yet" >&2
@@ -284,7 +309,14 @@ run_interactive() {
     exit 1
   fi
 
+  local project_trust_flag
+  project_trust_flag=$(harness_call "$harness_name" project_trust_flag "$PROJECT_TRUST") || exit 1
+
   local pi_args=(--model "$MODEL")
+  [ -n "$project_trust_flag" ] && pi_args+=("$project_trust_flag")
+  [ "$EXTENSIONS" = "true" ] || pi_args+=(--no-extensions)
+  [ "$SKILLS" = "true" ] || pi_args+=(--no-skills)
+  [ "$PROMPT_TEMPLATES" = "true" ] || pi_args+=(--no-prompt-templates)
   if [ -n "$SYSTEM_PROMPT_FILE" ]; then
     pi_args=(--append-system-prompt "$SYSTEM_PROMPT_FILE" "${pi_args[@]}")
   fi
@@ -322,7 +354,7 @@ CLI_ARGS=(--cwd "$CWD")
 [ -n "$TIMEOUT" ] && CLI_ARGS+=(--timeout "$TIMEOUT")
 CLI_ARGS+=(--model "$MODEL")
 [ -n "$SESSION" ] && CLI_ARGS+=(--session "$SESSION")
-# Extensions off by default — only pass --no-* when NOT explicitly enabled
+CLI_ARGS+=(--project-trust "$PROJECT_TRUST")
 [ "$EXTENSIONS" != "true" ] && CLI_ARGS+=(--no-extensions)
 [ "$SKILLS" != "true" ] && CLI_ARGS+=(--no-skills)
 [ "$PROMPT_TEMPLATES" != "true" ] && CLI_ARGS+=(--no-prompt-templates)

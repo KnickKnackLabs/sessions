@@ -19,7 +19,8 @@ defmodule Cli.Engine do
   @typep run_opts :: [
            extensions: boolean(),
            skills: boolean(),
-           prompt_templates: boolean()
+           prompt_templates: boolean(),
+           project_trust: String.t()
          ]
 
   @doc """

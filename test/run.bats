@@ -183,6 +183,105 @@ STUB
   ! grep -qx -- "--system-prompt-file" "$argv_capture"
   grep -qx -- "--model" "$argv_capture"
   [ "$(awk '/^--model$/ { getline; print; exit }' "$argv_capture")" = "openai-codex/gpt-5.5" ]
+  grep -qx -- "--project-trust" "$argv_capture"
+  [ "$(awk '/^--project-trust$/ { getline; print; exit }' "$argv_capture")" = "inherit" ]
+  ! grep -qx -- "--no-extensions" "$argv_capture"
+  ! grep -qx -- "--no-skills" "$argv_capture"
+  ! grep -qx -- "--no-prompt-templates" "$argv_capture"
+}
+
+@test "run forwards explicit resource disables and project approval" {
+  local stub_dir="$BATS_TEST_TMPDIR/stub-mix-resource-policy"
+  local argv_capture="$BATS_TEST_TMPDIR/mix-argv-resource-policy"
+  mkdir -p "$stub_dir"
+  cat > "$stub_dir/mix" <<STUB
+#!/usr/bin/env bash
+set -euo pipefail
+case "\$*" in
+  "local.hex --force --if-missing"|"deps.loadpaths --no-compile"|"deps.get") exit 0 ;;
+esac
+printf '%s\n' "\$@" > "$argv_capture"
+exit 0
+STUB
+  chmod +x "$stub_dir/mix"
+
+  PATH="$stub_dir:$PATH" run sessions run \
+    --cwd "$BATS_TEST_TMPDIR" \
+    --model "openai-codex/gpt-5.5" \
+    --project-trust approve \
+    --no-extensions \
+    --no-skills \
+    --no-prompt-templates \
+    "do work"
+  [ "$status" -eq 0 ]
+  [ -f "$argv_capture" ]
+
+  [ "$(awk '/^--project-trust$/ { getline; print; exit }' "$argv_capture")" = "approve" ]
+  grep -qx -- "--no-extensions" "$argv_capture"
+  grep -qx -- "--no-skills" "$argv_capture"
+  grep -qx -- "--no-prompt-templates" "$argv_capture"
+}
+
+@test "run rejects conflicting resource flags" {
+  run sessions run \
+    --model "openai-codex/gpt-5.5" \
+    --extensions \
+    --no-extensions \
+    "do work"
+
+  [ "$status" -eq 1 ]
+  echo "$output" | grep -q -- "--extensions cannot be combined with --no-extensions"
+}
+
+@test "run rejects an invalid project trust policy" {
+  run sessions run \
+    --model "openai-codex/gpt-5.5" \
+    --project-trust sometimes \
+    "do work"
+
+  [ "$status" -eq 1 ]
+  echo "$output" | grep -q -- "--project-trust must be inherit, approve, or deny"
+}
+
+@test "run lets the selected adapter reject unsupported trust and records the failed attempt" {
+  local session_file
+  session_file=$(find "$PROJECT_DIR" -name "*${SESSION_1}.jsonl")
+  echo '{"type":"harness","id":"h-claude","parentId":"u4","timestamp":"2026-03-14T10:31:00.000Z","name":"claude"}' >> "$session_file"
+
+  run sessions run \
+    --session "$session_file" \
+    --cwd "$BATS_TEST_TMPDIR" \
+    --model "openai-codex/gpt-5.5" \
+    --project-trust approve \
+    "do work"
+
+  [ "$status" -eq 10 ]
+  echo "$output" | grep -q -- "claude.*does not support.*build_command"
+  jq -s -e '
+    ([.[] | select(.type == "process_start" and .harness == "claude")] | length) == 1 and
+    ([.[] | select(.type == "process_exit" and .exit_code == 10)] | length) == 1
+  ' "$session_file" >/dev/null
+}
+
+@test "run interactive maps project trust and explicit resource disables to pi" {
+  local stub_dir="$BATS_TEST_TMPDIR/stub-pi-interactive-policy"
+  local argv_capture="$BATS_TEST_TMPDIR/pi-argv-interactive-policy"
+  local cwd_capture="$BATS_TEST_TMPDIR/pi-cwd-interactive-policy"
+  stub_pi_capture_argv_cwd "$stub_dir" "$argv_capture" "$cwd_capture"
+
+  PATH="$stub_dir:$PATH" run sessions run \
+    --cwd "$BATS_TEST_TMPDIR" \
+    --model "openai-codex/gpt-5.5" \
+    --project-trust deny \
+    --no-extensions \
+    --no-skills \
+    --no-prompt-templates
+  [ "$status" -eq 0 ]
+
+  grep -qx -- "--no-approve" "$argv_capture"
+  grep -qx -- "--no-extensions" "$argv_capture"
+  grep -qx -- "--no-skills" "$argv_capture"
+  grep -qx -- "--no-prompt-templates" "$argv_capture"
 }
 
 @test "run with message prepares CLI deps before mix sessions" {

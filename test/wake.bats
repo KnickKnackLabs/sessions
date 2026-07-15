@@ -417,6 +417,71 @@ STUB
   # Sanity: `sessions run` is also in the argv (confirms we're stubbing
   # the right layer).
   grep -q '^run$' "$capture"
+
+  [ "$(awk '/^--project-trust$/ { getline; print; exit }' "$capture")" = "inherit" ]
+  ! grep -qx -- "--no-extensions" "$capture"
+  ! grep -qx -- "--no-skills" "$capture"
+  ! grep -qx -- "--no-prompt-templates" "$capture"
+}
+
+@test "wake forwards project approval and explicit resource disables" {
+  local stub_dir="$BATS_TEST_TMPDIR/stub-shell-resource-policy"
+  local capture="$BATS_TEST_TMPDIR/shell-argv-resource-policy"
+  mkdir -p "$stub_dir"
+  cat > "$stub_dir/shell" <<STUB
+#!/usr/bin/env bash
+printf '%s\n' "\$@" > "$capture"
+exit 0
+STUB
+  chmod +x "$stub_dir/shell"
+
+  PATH="$stub_dir:$PATH" run sessions wake "${SESSION_1:0:8}" \
+    --background \
+    --model "openai-codex/gpt-5.5" \
+    --project-trust approve \
+    --no-extensions \
+    --no-skills \
+    --no-prompt-templates
+  [ "$status" -eq 0 ]
+  [ -f "$capture" ]
+
+  [ "$(awk '/^--project-trust$/ { getline; print; exit }' "$capture")" = "approve" ]
+  grep -qx -- "--no-extensions" "$capture"
+  grep -qx -- "--no-skills" "$capture"
+  grep -qx -- "--no-prompt-templates" "$capture"
+}
+
+@test "wake rejects invalid project trust before recording wake" {
+  local src_file
+  src_file=$(find "$PROJECT_DIR" -name "*${SESSION_1}.jsonl")
+  local before
+  before=$(wc -l < "$src_file" | tr -d ' ')
+
+  run sessions wake "$SESSION_1" \
+    --background \
+    --model "openai-codex/gpt-5.5" \
+    --project-trust sometimes
+  [ "$status" -eq 1 ]
+  echo "$output" | grep -q -- "--project-trust must be inherit, approve, or deny"
+  [ "$(wc -l < "$src_file" | tr -d ' ')" = "$before" ]
+}
+
+@test "wake rejects unsupported non-default project trust before recording wake" {
+  local src_file
+  src_file=$(find "$PROJECT_DIR" -name "*${SESSION_1}.jsonl")
+  echo '{"type":"harness","id":"h-claude","parentId":"u4","timestamp":"2026-03-14T10:31:00.000Z","name":"claude"}' >> "$src_file"
+  local before
+  before=$(wc -l < "$src_file" | tr -d ' ')
+
+  run sessions wake "$SESSION_1" \
+    --headless \
+    --background \
+    --model "openai-codex/gpt-5.5" \
+    --message "review" \
+    --project-trust approve
+  [ "$status" -eq 10 ]
+  echo "$output" | grep -q -- "claude.*does not support.*project_trust"
+  [ "$(wc -l < "$src_file" | tr -d ' ')" = "$before" ]
 }
 
 @test "wake forwards session cwd to sessions run" {
@@ -611,7 +676,7 @@ STUB
   [ "$after_messages" = "$before_messages" ]
   jq -e 'select(.type == "wake" and .headless == false)' "$src_file"
 
-  [ "$(tail -1 "$capture")" = "openai-codex/gpt-5.5" ]
+  [ "$(awk '/^--model$/ { getline; print; exit }' "$capture")" = "openai-codex/gpt-5.5" ]
   ! grep -qx 'stale inherited message' "$capture"
   ! grep -qx -- '--headless' "$capture"
   ! grep -qx '' "$capture"

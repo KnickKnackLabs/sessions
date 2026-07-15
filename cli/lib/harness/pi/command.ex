@@ -14,7 +14,8 @@ defmodule Cli.Harness.Pi.Command do
   @typep build_opts :: [
            extensions: boolean(),
            skills: boolean(),
-           prompt_templates: boolean()
+           prompt_templates: boolean(),
+           project_trust: String.t()
          ]
 
   @doc """
@@ -38,6 +39,7 @@ defmodule Cli.Harness.Pi.Command do
     extensions = Keyword.get(opts, :extensions, true)
     skills = Keyword.get(opts, :skills, true)
     prompt_templates = Keyword.get(opts, :prompt_templates, true)
+    project_trust_flag = project_trust_flag(Keyword.get(opts, :project_trust, "inherit"))
 
     qualified_model = model
 
@@ -63,6 +65,7 @@ defmodule Cli.Harness.Pi.Command do
         ~s( --model "$2"),
         " --mode json",
         session_flag,
+        project_trust_flag,
         if(extensions, do: "", else: " --no-extensions"),
         if(skills, do: "", else: " --no-skills"),
         if(prompt_templates, do: "", else: " --no-prompt-templates")
@@ -80,5 +83,13 @@ defmodule Cli.Harness.Pi.Command do
       end
 
     {shell_script, positional}
+  end
+
+  defp project_trust_flag("inherit"), do: ""
+  defp project_trust_flag("approve"), do: " --approve"
+  defp project_trust_flag("deny"), do: " --no-approve"
+
+  defp project_trust_flag(policy) do
+    raise ArgumentError, "unknown project trust policy: #{inspect(policy)}"
   end
 end

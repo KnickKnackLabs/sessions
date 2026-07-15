@@ -37,9 +37,14 @@ mix sessions --model openai-codex/gpt-5.5 --session ./session.jsonl "Continue"
 | `--model <provider/model>` | Required. Provider-qualified model to use |
 | `--session <path>` | Optional. Session file for conversation continuity |
 | `--cwd <path>` | Optional. Working directory for pi |
-| `--no-extensions` | Disable pi extensions |
-| `--no-skills` | Disable pi skills |
-| `--no-prompt-templates` | Disable pi prompt templates |
+| `--no-extensions` | Disable harness extensions for this run |
+| `--no-skills` | Disable harness skills for this run |
+| `--no-prompt-templates` | Disable harness prompt templates for this run |
+| `--project-trust <policy>` | Project resources for this run: `inherit`, `approve`, or `deny` |
+
+Runs inherit the harness's normal resource behavior by default. Project trust is
+one-run policy, not persisted trust or a sandbox. Harnesses translate non-default
+policy explicitly or fail as unsupported.
 
 ## Dependencies
 

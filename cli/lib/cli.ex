@@ -54,6 +54,7 @@ defmodule Cli do
     extensions = opts[:no_extensions] != true
     skills = opts[:no_skills] != true
     prompt_templates = opts[:no_prompt_templates] != true
+    project_trust = opts[:project_trust] || "inherit"
 
     print_header(opts, message, timeout, model)
 
@@ -73,7 +74,8 @@ defmodule Cli do
           session,
           extensions: extensions,
           skills: skills,
-          prompt_templates: prompt_templates
+          prompt_templates: prompt_templates,
+          project_trust: project_trust
         )
     end
   end
@@ -102,6 +104,9 @@ defmodule Cli do
       not String.contains?(opts[:model], "/") ->
         {:error, "--model must be provider-qualified (for example: openai-codex/gpt-5.5)"}
 
+      (opts[:project_trust] || "inherit") not in ["inherit", "approve", "deny"] ->
+        {:error, "--project-trust must be inherit, approve, or deny"}
+
       system_prompt_file != nil and system_prompt_file != "" and
           not File.exists?(system_prompt_file) ->
         {:error, "System prompt file not found: #{system_prompt_file}"}
@@ -123,6 +128,7 @@ defmodule Cli do
           no_extensions: :boolean,
           no_skills: :boolean,
           no_prompt_templates: :boolean,
+          project_trust: :string,
           help: :boolean
         ],
         aliases: [h: :help]
@@ -156,9 +162,11 @@ defmodule Cli do
       --timeout <seconds>          Maximum runtime in seconds (default: no timeout)
       --cwd <path>                 Working directory for pi
       --session <path>             Session file for conversation continuity
-      --no-extensions              Disable pi extensions
-      --no-skills                  Disable pi skills
-      --no-prompt-templates        Disable pi prompt templates
+      --no-extensions              Disable harness extensions
+      --no-skills                  Disable harness skills
+      --no-prompt-templates        Disable harness prompt templates
+      --project-trust <policy>     Project resources: inherit, approve, or deny
+                                   (one run only; unsupported policies fail)
       -h, --help                   Show this help message
 
     Examples:
