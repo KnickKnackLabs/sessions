@@ -243,6 +243,26 @@ STUB
   echo "$output" | grep -q -- "--project-trust must be inherit, approve, or deny"
 }
 
+@test "run lets the selected adapter reject unsupported trust and records the failed attempt" {
+  local session_file
+  session_file=$(find "$PROJECT_DIR" -name "*${SESSION_1}.jsonl")
+  echo '{"type":"harness","id":"h-claude","parentId":"u4","timestamp":"2026-03-14T10:31:00.000Z","name":"claude"}' >> "$session_file"
+
+  run sessions run \
+    --session "$session_file" \
+    --cwd "$BATS_TEST_TMPDIR" \
+    --model "openai-codex/gpt-5.5" \
+    --project-trust approve \
+    "do work"
+
+  [ "$status" -eq 10 ]
+  echo "$output" | grep -q -- "claude.*does not support.*build_command"
+  jq -s -e '
+    ([.[] | select(.type == "process_start" and .harness == "claude")] | length) == 1 and
+    ([.[] | select(.type == "process_exit" and .exit_code == 10)] | length) == 1
+  ' "$session_file" >/dev/null
+}
+
 @test "run interactive maps project trust and explicit resource disables to pi" {
   local stub_dir="$BATS_TEST_TMPDIR/stub-pi-interactive-policy"
   local argv_capture="$BATS_TEST_TMPDIR/pi-argv-interactive-policy"
