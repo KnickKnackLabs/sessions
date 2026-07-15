@@ -234,6 +234,19 @@ fi
 
 sessions_validate_project_trust "$PROJECT_TRUST" || exit 1
 
+# Inherit requires no adapter behavior. Fail before recording process metadata
+# when the selected harness cannot honor an explicitly non-default trust policy.
+if [ "$PROJECT_TRUST" != "inherit" ]; then
+  if [ -n "$SESSION" ]; then
+    RUN_HARNESS_NAME=$(harness_resolve --session "$SESSION") || exit 1
+  else
+    RUN_HARNESS_NAME=$(harness_resolve) || exit 1
+  fi
+  # shellcheck source=/dev/null
+  source "$MISE_CONFIG_ROOT/lib/harness/$RUN_HARNESS_NAME.sh"
+  harness_call "$RUN_HARNESS_NAME" project_trust_flag "$PROJECT_TRUST" >/dev/null
+fi
+
 # Prompt resolution order:
 #   1. Explicit --system-prompt-file
 #   2. Latest system_prompt entry baked into --session by `sessions new`

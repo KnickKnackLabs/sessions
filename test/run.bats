@@ -243,6 +243,25 @@ STUB
   echo "$output" | grep -q -- "--project-trust must be inherit, approve, or deny"
 }
 
+@test "run rejects unsupported non-default project trust before recording process metadata" {
+  local src_file
+  src_file=$(find "$PROJECT_DIR" -name "*${SESSION_1}.jsonl")
+  echo '{"type":"harness","id":"h-claude","parentId":"u4","timestamp":"2026-03-14T10:31:00.000Z","name":"claude"}' >> "$src_file"
+  local before
+  before=$(wc -l < "$src_file" | tr -d ' ')
+
+  run sessions run \
+    --session "$src_file" \
+    --cwd "$BATS_TEST_TMPDIR" \
+    --model "openai-codex/gpt-5.5" \
+    --project-trust approve \
+    "do work"
+
+  [ "$status" -eq 10 ]
+  echo "$output" | grep -q -- "claude.*does not support.*project_trust"
+  [ "$(wc -l < "$src_file" | tr -d ' ')" = "$before" ]
+}
+
 @test "run interactive maps project trust and explicit resource disables to pi" {
   local stub_dir="$BATS_TEST_TMPDIR/stub-pi-interactive-policy"
   local argv_capture="$BATS_TEST_TMPDIR/pi-argv-interactive-policy"
