@@ -3,12 +3,12 @@
 #USAGE arg "<query>" help="Search query (regex supported)"
 #USAGE flag "--limit <n>" default="50" help="Max matches to show (default: 50)"
 #USAGE flag "--context <n>" default="0" help="Lines of context around matches (default: 0)"
-#USAGE flag "--session <id>" help="Filter to a specific session (prefix match)"
+#USAGE flag "--session <id>" default="" help="Filter to a specific session (prefix match)"
 #USAGE flag "--sort <field>" default="time" help="Sort by: time (default), session"
-#USAGE flag "--after <date>" help="Only matches after this date (YYYY-MM-DD)"
-#USAGE flag "--before <date>" help="Only matches before this date (YYYY-MM-DD)"
-#USAGE flag "--tools" help="Include matches in tool inputs/outputs (excluded by default)"
-#USAGE flag "--json" help="Output as JSON"
+#USAGE flag "--after <date>" default="" help="Only matches after this date (YYYY-MM-DD)"
+#USAGE flag "--before <date>" default="" help="Only matches before this date (YYYY-MM-DD)"
+#USAGE flag "--tools" default=#false help="Include matches in tool inputs/outputs (excluded by default)"
+#USAGE flag "--json" default=#false help="Output as JSON"
 # /// script
 # requires-python = ">=3.10"
 # dependencies = ["rich"]

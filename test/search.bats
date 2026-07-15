@@ -17,6 +17,23 @@ teardown() { teardown_test_sessions; }
   echo "$output" | grep -q "hello"
 }
 
+@test "search clears inherited optional usage defaults" {
+  export usage_session="stale-session-filter"
+  export usage_after="2099-01-01"
+  export usage_before="2000-01-01"
+  export usage_tools=true
+  export usage_json=true
+
+  run sessions search "sccache"
+  [ "$status" -eq 0 ]
+  echo "$output" | grep -q "sccache"
+  [ "${output:0:1}" != "[" ]
+
+  run sessions search "config/sccache"
+  [ "$status" -eq 0 ]
+  echo "$output" | grep -q "No matches"
+}
+
 @test "search includes sessions regardless of filename prefix" {
   cat > "${PROJECT_DIR}agent-search-visible.jsonl" <<JSONL
 {"type":"session","version":3,"id":"agent-search-visible","timestamp":"2026-03-15T15:00:00.000Z","cwd":"/test/project"}
