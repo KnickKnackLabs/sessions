@@ -12,6 +12,7 @@ Keep these generic in core task/library code:
 
 Keep harness-specific knowledge in `lib/harness/<name>.sh` and `lib/harness/<name>.py`:
 
+- exact executable resolution from Sessions' declared tool context;
 - session file locations and path encoding;
 - native JSONL message schemas;
 - launch arguments for a harness binary;

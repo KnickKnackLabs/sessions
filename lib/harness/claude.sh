@@ -22,6 +22,12 @@
 
 # --- Launch policy ---
 
+# The skeleton has no launch executable yet. Empty output lets the generic run
+# path reach the Elixir adapter's existing explicit build-command rejection.
+harness_claude_executable() {
+  return 0
+}
+
 # Inheriting native behavior requires no adapter support. Claude project trust
 # translation is not implemented, so non-default policies fail explicitly.
 harness_claude_project_trust_flag() {

@@ -48,16 +48,17 @@ defmodule Cli.EngineTest do
     refute output =~ "Agent reported an error"
   end
 
-  test "scrubs caller context from harness process environment" do
-    previous_caller = System.get_env("CALLER_PWD")
-    previous_sessions_caller = System.get_env("SESSIONS_CALLER_PWD")
-    previous_other_caller = System.get_env("OTHER_CALLER_PWD")
+  test "scrubs Sessions caller and task context while preserving other package context" do
+    transient = %{
+      "SESSIONS_CALLER_PWD" => "/stale/sessions/caller",
+      "MISE_CONFIG_ROOT" => "/stale/sessions/root",
+      "MISE_TASK_NAME" => "run",
+      "usage_message" => "stale task payload"
+    }
 
-    try do
-      System.put_env("CALLER_PWD", "/stale/caller")
-      System.put_env("SESSIONS_CALLER_PWD", "/stale/sessions/caller")
-      System.put_env("OTHER_CALLER_PWD", "/stale/other/caller")
+    preserved = %{"OTHER_CALLER_PWD" => "/other/package/context"}
 
+    with_env(Map.merge(transient, preserved), fn ->
       output =
         capture_io(fn ->
           exit_code =
@@ -76,23 +77,31 @@ defmodule Cli.EngineTest do
         end)
 
       assert_receive {:exit_code, 0}
-      assert output =~ "CALLER_PWD="
-      assert output =~ "SESSIONS_CALLER_PWD="
-      assert output =~ "OTHER_CALLER_PWD="
-      refute output =~ "/stale/caller"
-      refute output =~ "/stale/sessions/caller"
-      refute output =~ "/stale/other/caller"
-    after
-      restore_env("CALLER_PWD", previous_caller)
-      restore_env("SESSIONS_CALLER_PWD", previous_sessions_caller)
-      restore_env("OTHER_CALLER_PWD", previous_other_caller)
-    end
+
+      for name <- Map.keys(transient) do
+        assert output =~ "#{name}="
+        refute output =~ Map.fetch!(transient, name)
+      end
+
+      assert output =~ "OTHER_CALLER_PWD=/other/package/context"
+    end)
   end
 
   defmodule EnvHarness do
     def build_command(_message, _model, _system_prompt_file, _session, _timeout, _opts) do
-      {"printf 'CALLER_PWD=%s\\n' \"${CALLER_PWD-}\"; printf 'SESSIONS_CALLER_PWD=%s\\n' \"${SESSIONS_CALLER_PWD-}\"; printf 'OTHER_CALLER_PWD=%s\\n' \"${OTHER_CALLER_PWD-}\"",
-       []}
+      command =
+        [
+          "SESSIONS_CALLER_PWD",
+          "OTHER_CALLER_PWD",
+          "MISE_CONFIG_ROOT",
+          "MISE_TASK_NAME",
+          "usage_message"
+        ]
+        |> Enum.map_join("; ", fn name ->
+          ~s(printf '#{name}=%s\\n' "${#{name}-}")
+        end)
+
+      {command, []}
     end
 
     def process_line(line, state) do
@@ -101,6 +110,95 @@ defmodule Cli.EngineTest do
     end
 
     def extract_partial_text(_partial), do: ""
+  end
+
+  test "real Pi adapter preserves selected executable and requested child boundary" do
+    root =
+      Path.join(System.tmp_dir!(), "sessions-pi-boundary-#{System.unique_integer([:positive])}")
+
+    cwd = Path.join(root, "project")
+    executable = Path.join(root, "selected pi")
+    capture = Path.join(root, "child.txt")
+    mise_data = Path.join(root, "mise")
+    stale_bin = Path.join([mise_data, "installs", "sessions-tool", "1.0", "bin"])
+    shim_bin = Path.join(mise_data, "shims")
+    ordinary_bin = Path.join(root, "ordinary-bin")
+
+    File.mkdir_p!(cwd)
+    File.mkdir_p!(stale_bin)
+    File.mkdir_p!(shim_bin)
+    File.mkdir_p!(ordinary_bin)
+
+    File.write!(
+      executable,
+      """
+      #!/bin/sh
+      {
+        printf 'EXECUTABLE=%s\\n' "$0"
+        printf 'CWD=%s\\n' "$(pwd -P)"
+        printf 'PATH=%s\\n' "$PATH"
+        printf 'MISE_DATA_DIR=%s\\n' "${MISE_DATA_DIR-}"
+        printf 'MISE_CONFIG_ROOT=%s\\n' "${MISE_CONFIG_ROOT-}"
+        printf 'MISE_TASK_NAME=%s\\n' "${MISE_TASK_NAME-}"
+        printf 'usage_message=%s\\n' "${usage_message-}"
+        printf 'SESSIONS_CALLER_PWD=%s\\n' "${SESSIONS_CALLER_PWD-}"
+        printf 'OTHER_CALLER_PWD=%s\\n' "${OTHER_CALLER_PWD-}"
+        printf 'ARGV='; printf '<%s>' "$@"; printf '\\n'
+      } > "#{capture}"
+      """
+    )
+
+    File.chmod!(executable, 0o755)
+
+    try do
+      with_env(
+        %{
+          "PATH" => Enum.join([stale_bin, ordinary_bin], ":"),
+          "MISE_DATA_DIR" => mise_data,
+          "MISE_CONFIG_ROOT" => "/stale/sessions/root",
+          "MISE_TASK_NAME" => "run",
+          "usage_message" => "stale task payload",
+          "SESSIONS_CALLER_PWD" => "/stale/sessions/caller",
+          "OTHER_CALLER_PWD" => "/other/package/context"
+        },
+        fn ->
+          capture_io(fn ->
+            exit_code =
+              Cli.Engine.run(
+                Cli.Harness.Pi,
+                "probe",
+                nil,
+                nil,
+                "openai-codex/gpt-5.5",
+                cwd,
+                nil,
+                harness_executable: executable,
+                project_trust: "approve"
+              )
+
+            send(self(), {:exit_code, exit_code})
+          end)
+        end
+      )
+
+      assert_receive {:exit_code, 0}
+      child = File.read!(capture)
+      {physical_cwd, 0} = System.cmd("pwd", ["-P"], cd: cwd)
+
+      assert child =~ "EXECUTABLE=#{executable}"
+      assert child =~ "CWD=#{String.trim(physical_cwd)}"
+      assert child =~ "PATH=#{shim_bin}:#{ordinary_bin}"
+      assert child =~ "MISE_DATA_DIR=#{mise_data}"
+      assert child =~ "MISE_CONFIG_ROOT=\n"
+      assert child =~ "MISE_TASK_NAME=\n"
+      assert child =~ "usage_message=\n"
+      assert child =~ "SESSIONS_CALLER_PWD=\n"
+      assert child =~ "OTHER_CALLER_PWD=/other/package/context"
+      assert child =~ "<--approve>"
+      refute child =~ stale_bin
+    after
+      File.rm_rf!(root)
+    end
   end
 
   test "sanitizes mise install paths from harness PATH" do

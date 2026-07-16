@@ -3,10 +3,17 @@
 # directly from Bash tasks.
 
 sessions_scrub_caller_pwd_env() {
+  unset SESSIONS_CALLER_PWD
+}
+
+sessions_scrub_task_env() {
   local name
   while IFS= read -r name; do
     case "$name" in
-      CALLER_PWD|*_CALLER_PWD) unset "$name" ;;
+      # MISE_DATA_DIR is user-owned tool storage. Retained shims need it to
+      # resolve target-project tools from a non-default mise installation.
+      MISE_DATA_DIR) ;;
+      MISE_*|usage_*) unset "$name" ;;
     esac
   done < <(compgen -e)
 }
@@ -64,6 +71,9 @@ sessions_sanitize_harness_path() {
 }
 
 sessions_prepare_harness_env() {
-  sessions_scrub_caller_pwd_env
+  # PATH sanitization needs the caller's mise data location before the
+  # task-scoped MISE_* variables are removed from the harness boundary.
   sessions_sanitize_harness_path
+  sessions_scrub_caller_pwd_env
+  sessions_scrub_task_env
 }

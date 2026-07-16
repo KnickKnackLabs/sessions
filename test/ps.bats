@@ -179,7 +179,7 @@ sleep 0.2
 exit 0
 STUB
   chmod +x "$stub_dir/pi"
-  stub_mise_exec_pi "$stub_dir"
+  stub_mise_resolve_pi "$stub_dir"
   session_file=$(session_file_for "$SESSION_1")
 
   PATH="$stub_dir:$PATH" run sessions run \
