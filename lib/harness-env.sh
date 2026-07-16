@@ -15,6 +15,9 @@ sessions_scrub_task_env() {
   local name
   while IFS= read -r name; do
     case "$name" in
+      # MISE_DATA_DIR is user-owned tool storage. Retained shims need it to
+      # resolve target-project tools from a non-default mise installation.
+      MISE_DATA_DIR) ;;
       MISE_*|usage_*) unset "$name" ;;
     esac
   done < <(compgen -e)

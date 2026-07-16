@@ -676,6 +676,7 @@ STUB
   export CALLER_PWD="/stale/caller"
   export SESSIONS_CALLER_PWD="/stale/sessions"
   export OTHER_CALLER_PWD="/stale/other"
+  export MISE_DATA_DIR="$mise_data"
   export usage_stale_probe="stale task value"
 
   PATH="$stale_bin:$pi_bin:$shim_bin:$fresh_bin:$PATH" run sessions run \
@@ -688,6 +689,7 @@ STUB
   grep -q '^CALLER_PWD=$' "$env_capture"
   grep -q '^SESSIONS_CALLER_PWD=$' "$env_capture"
   grep -q '^OTHER_CALLER_PWD=$' "$env_capture"
+  grep -q "^MISE_DATA_DIR=$mise_data$" "$env_capture"
   grep -q '^MISE_CONFIG_ROOT=$' "$env_capture"
   grep -q '^MISE_TASK_NAME=$' "$env_capture"
   grep -q '^usage_message=$' "$env_capture"
