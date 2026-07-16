@@ -20,7 +20,8 @@ defmodule Cli.Engine do
            extensions: boolean(),
            skills: boolean(),
            prompt_templates: boolean(),
-           project_trust: String.t()
+           project_trust: String.t(),
+           harness_executable: String.t() | nil
          ]
 
   @doc """
@@ -91,13 +92,16 @@ defmodule Cli.Engine do
   end
 
   defp harness_env do
-    caller_pwd_env_scrub() ++ path_env()
+    inherited_task_env_scrub() ++ path_env()
   end
 
-  defp caller_pwd_env_scrub do
+  defp inherited_task_env_scrub do
     System.get_env()
     |> Map.keys()
-    |> Enum.filter(&(&1 == "CALLER_PWD" or String.ends_with?(&1, "_CALLER_PWD")))
+    |> Enum.filter(fn name ->
+      name == "CALLER_PWD" or String.ends_with?(name, "_CALLER_PWD") or
+        String.starts_with?(name, "MISE_") or String.starts_with?(name, "usage_")
+    end)
     |> Enum.map(&{String.to_charlist(&1), false})
   end
 

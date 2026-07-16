@@ -11,6 +11,15 @@ sessions_scrub_caller_pwd_env() {
   done < <(compgen -e)
 }
 
+sessions_scrub_task_env() {
+  local name
+  while IFS= read -r name; do
+    case "$name" in
+      MISE_*|usage_*) unset "$name" ;;
+    esac
+  done < <(compgen -e)
+}
+
 sessions_mise_data_dir() {
   if [ -n "${MISE_DATA_DIR:-}" ]; then
     echo "$MISE_DATA_DIR"
@@ -64,6 +73,9 @@ sessions_sanitize_harness_path() {
 }
 
 sessions_prepare_harness_env() {
-  sessions_scrub_caller_pwd_env
+  # PATH sanitization needs the caller's mise data location before the
+  # task-scoped MISE_* variables are removed from the harness boundary.
   sessions_sanitize_harness_path
+  sessions_scrub_caller_pwd_env
+  sessions_scrub_task_env
 }

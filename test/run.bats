@@ -55,7 +55,7 @@ teardown() {
   ! grep -qx '' "$argv_capture"
 }
 
-@test "run interactive resolves pi through sessions mise root by default" {
+@test "run interactive resolves Sessions pi with mise and launches it directly" {
   local stub_dir="$BATS_TEST_TMPDIR/stub-mise-pi"
   local argv_capture="$BATS_TEST_TMPDIR/pi-argv-owned"
   local cwd_capture="$BATS_TEST_TMPDIR/pi-cwd-owned"
@@ -67,10 +67,10 @@ teardown() {
   cat > "$stub_dir/mise" <<STUB
 #!/usr/bin/env bash
 set -euo pipefail
-if [ "\${1:-}" = "-C" ] && [ "\${3:-}" = "exec" ] && [ "\${4:-}" = "--" ] && [ "\${5:-}" = "pi" ]; then
+if [ "\${1:-}" = "-C" ] && [ "\${3:-}" = "which" ] && [ "\${4:-}" = "pi" ]; then
   printf '%s\n' "\$@" > "$mise_capture"
-  shift 5
-  exec pi "\$@"
+  command -v pi
+  exit 0
 fi
 exec "$real_mise" "\$@"
 STUB
@@ -84,13 +84,13 @@ STUB
     --model "openai-codex/gpt-5.5"
   [ "$status" -eq 0 ]
   [ -f "$mise_capture" ]
+  [ "$(sed -n '1p' "$mise_capture")" = "-C" ]
+  [ "$(sed -n '2p' "$mise_capture")" = "$REPO_DIR" ]
+  [ "$(sed -n '3p' "$mise_capture")" = "which" ]
+  [ "$(sed -n '4p' "$mise_capture")" = "pi" ]
   [ -f "$argv_capture" ]
-
-  [ "$(awk 'NR == 1 { print }' "$mise_capture")" = "-C" ]
-  [ "$(awk 'NR == 2 { print }' "$mise_capture")" = "$REPO_DIR" ]
-  [ "$(awk 'NR == 3 { print }' "$mise_capture")" = "exec" ]
-  [ "$(awk 'NR == 4 { print }' "$mise_capture")" = "--" ]
-  [ "$(awk 'NR == 5 { print }' "$mise_capture")" = "pi" ]
+  [ -f "$cwd_capture" ]
+  [ "$(cat "$cwd_capture")" = "$(cd "$run_cwd" && pwd -P)" ]
   grep -qx -- "--model" "$argv_capture"
 }
 
@@ -349,7 +349,7 @@ else
 fi
 STUB
   chmod +x "$stub_dir/pi"
-  stub_mise_exec_pi "$stub_dir"
+  stub_mise_resolve_pi "$stub_dir"
 
   run bash -c 'printf "%s\n" "typed input" | PATH="$1" PI_DIR="$2" mise -C "$3" run -q run --system-prompt-file "$4" --cwd "$5" --model "openai-codex/gpt-5.5"' \
     bash \
@@ -384,7 +384,7 @@ cat "\$prompt_file" > "$prompt_capture"
 exit 0
 STUB
   chmod +x "$stub_dir/pi"
-  stub_mise_exec_pi "$stub_dir"
+  stub_mise_resolve_pi "$stub_dir"
 
   run sessions new --cwd "$BATS_TEST_TMPDIR" --system-prompt "baked prompt from session"
   [ "$status" -eq 0 ]
@@ -516,7 +516,7 @@ cat "\$prompt_file" > "$prompt_capture"
 exit 0
 STUB
   chmod +x "$stub_dir/pi"
-  stub_mise_exec_pi "$stub_dir"
+  stub_mise_resolve_pi "$stub_dir"
 
   run sessions new --cwd "$BATS_TEST_TMPDIR" --system-prompt "baked prompt"
   [ "$status" -eq 0 ]
@@ -556,7 +556,7 @@ cat "\$prompt_file" > "$prompt_capture"
 exit 0
 STUB
   chmod +x "$stub_dir/pi"
-  stub_mise_exec_pi "$stub_dir"
+  stub_mise_resolve_pi "$stub_dir"
 
   : > "$BATS_TEST_TMPDIR/empty-prompt.md"
   run sessions new --cwd "$BATS_TEST_TMPDIR" --system-prompt-file "$BATS_TEST_TMPDIR/empty-prompt.md"
@@ -623,7 +623,7 @@ trap 'printf term > "$term_capture"; exit 143' TERM
 while :; do sleep 1; done
 STUB
   chmod +x "$stub_dir/pi"
-  stub_mise_exec_pi "$stub_dir"
+  stub_mise_resolve_pi "$stub_dir"
 
   PATH="$stub_dir:$PATH" DISPATCH_CONTEXT="generated prompt" PI_DIR="$PI_DIR" \
     mise -C "$REPO_DIR" run -q run --cwd "$BATS_TEST_TMPDIR" --model "openai-codex/gpt-5.5" \
@@ -676,6 +676,7 @@ STUB
   export CALLER_PWD="/stale/caller"
   export SESSIONS_CALLER_PWD="/stale/sessions"
   export OTHER_CALLER_PWD="/stale/other"
+  export usage_stale_probe="stale task value"
 
   PATH="$stale_bin:$pi_bin:$shim_bin:$fresh_bin:$PATH" run sessions run \
     --system-prompt-file "$prompt" \
@@ -687,6 +688,10 @@ STUB
   grep -q '^CALLER_PWD=$' "$env_capture"
   grep -q '^SESSIONS_CALLER_PWD=$' "$env_capture"
   grep -q '^OTHER_CALLER_PWD=$' "$env_capture"
+  grep -q '^MISE_CONFIG_ROOT=$' "$env_capture"
+  grep -q '^MISE_TASK_NAME=$' "$env_capture"
+  grep -q '^usage_message=$' "$env_capture"
+  grep -q '^usage_stale_probe=$' "$env_capture"
   grep -q "$shim_bin" "$env_capture"
   grep -q "$pi_bin" "$env_capture"
   ! grep -q "$stale_bin" "$env_capture"

@@ -59,6 +59,8 @@ source "$MISE_CONFIG_ROOT/lib/processes.sh"
 
 PROMPT_TEMP_FILE=""
 PROCESS_START_ID=""
+HARNESS_NAME=""
+HARNESS_EXECUTABLE=""
 # shellcheck disable=SC2329  # Invoked by EXIT trap below.
 cleanup_prompt_temp() {
   if [ -n "$PROMPT_TEMP_FILE" ]; then
@@ -234,6 +236,18 @@ fi
 
 sessions_validate_project_trust "$PROJECT_TRUST" || exit 1
 
+# Resolve the selected harness and its Sessions-owned executable before any
+# launch environment is sanitized. Unsupported skeleton adapters may return no
+# executable and retain their adapter-level rejection in the Elixir boundary.
+if [ -n "$SESSION" ]; then
+  HARNESS_NAME=$(harness_resolve --session "$SESSION") || exit 1
+else
+  HARNESS_NAME=$(harness_resolve) || exit 1
+fi
+# shellcheck source=/dev/null
+source "$MISE_CONFIG_ROOT/lib/harness/$HARNESS_NAME.sh"
+HARNESS_EXECUTABLE=$(harness_call "$HARNESS_NAME" executable "$MISE_CONFIG_ROOT") || exit 1
+
 # Prompt resolution order:
 #   1. Explicit --system-prompt-file
 #   2. Latest system_prompt entry baked into --session by `sessions new`
@@ -284,33 +298,16 @@ HEADLESS_EOF
 fi
 
 run_interactive() {
-  # shellcheck source=../../lib/harness/dispatch.sh
-  source "$MISE_CONFIG_ROOT/lib/harness/dispatch.sh"
-
-  local harness_name
-  if [ -n "$SESSION" ]; then
-    harness_name=$(harness_resolve --session "$SESSION") || exit 1
-  else
-    harness_name=$(harness_resolve) || exit 1
-  fi
-  # shellcheck source=/dev/null
-  source "$MISE_CONFIG_ROOT/lib/harness/$harness_name.sh"
-
-  if [ "$harness_name" != "pi" ]; then
-    echo "sessions: '$harness_name' harness does not support interactive no-message run yet" >&2
+  if [ "$HARNESS_NAME" != "pi" ]; then
+    echo "sessions: '$HARNESS_NAME' harness does not support interactive no-message run yet" >&2
     exit "$HARNESS_UNSUPPORTED_EXIT"
   fi
 
   sessions_prepare_harness_env
 
-  local -a pi_command=(mise -C "$MISE_CONFIG_ROOT" exec -- pi)
-  if ! command -v mise >/dev/null 2>&1; then
-    echo "Error: mise not found on PATH for sessions-owned pi harness" >&2
-    exit 1
-  fi
-
+  local -a pi_command=("$HARNESS_EXECUTABLE")
   local project_trust_flag
-  project_trust_flag=$(harness_call "$harness_name" project_trust_flag "$PROJECT_TRUST") || exit 1
+  project_trust_flag=$(harness_call "$HARNESS_NAME" project_trust_flag "$PROJECT_TRUST") || exit 1
 
   local pi_args=(--model "$MODEL")
   [ -n "$project_trust_flag" ] && pi_args+=("$project_trust_flag")
@@ -354,6 +351,7 @@ CLI_ARGS=(--cwd "$CWD")
 [ -n "$TIMEOUT" ] && CLI_ARGS+=(--timeout "$TIMEOUT")
 CLI_ARGS+=(--model "$MODEL")
 [ -n "$SESSION" ] && CLI_ARGS+=(--session "$SESSION")
+[ -n "$HARNESS_EXECUTABLE" ] && CLI_ARGS+=(--harness-executable "$HARNESS_EXECUTABLE")
 CLI_ARGS+=(--project-trust "$PROJECT_TRUST")
 [ "$EXTENSIONS" != "true" ] && CLI_ARGS+=(--no-extensions)
 [ "$SKILLS" != "true" ] && CLI_ARGS+=(--no-skills)

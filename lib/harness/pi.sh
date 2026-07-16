@@ -19,6 +19,39 @@
 
 # --- Launch policy ---
 
+# Resolve Pi while Sessions' own mise tool context is still active. The launch
+# boundary carries this exact executable across environment sanitization rather
+# than reactivating Sessions inside the requested project directory.
+harness_pi_executable() {
+  local sessions_root="${1:-}"
+  local executable
+
+  if [ -z "$sessions_root" ] || [ ! -d "$sessions_root" ]; then
+    echo "Error: Sessions root is required to resolve the pi executable" >&2
+    return 1
+  fi
+
+  if ! executable=$(mise -C "$sessions_root" which pi); then
+    echo "Error: Sessions-owned pi executable is unavailable" >&2
+    return 1
+  fi
+
+  case "$executable" in
+    /*) ;;
+    *)
+      echo "Error: Sessions-owned pi executable is not an absolute path: $executable" >&2
+      return 1
+      ;;
+  esac
+
+  if [ ! -x "$executable" ]; then
+    echo "Error: Sessions-owned pi executable is not executable: $executable" >&2
+    return 1
+  fi
+
+  printf '%s\n' "$executable"
+}
+
 # Translate Sessions' generic one-run project trust policy to Pi flags.
 # Empty output means inherit Pi's normal trust behavior.
 harness_pi_project_trust_flag() {

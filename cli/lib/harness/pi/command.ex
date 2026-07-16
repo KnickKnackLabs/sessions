@@ -3,9 +3,9 @@ defmodule Cli.Harness.Pi.Command do
   Pi command construction — builds the shell invocation passed to the
   port under `/bin/sh -c <script> -- $1 $2 ...`.
 
-  User-controlled strings (message, model, system prompt file, session
-  path) are passed as positional `$1`/`$2`/... args so they never enter
-  the shell script as interpolated text.
+  User-controlled strings and the Sessions-selected Pi executable are passed
+  as positional `$1`/`$2`/... args so they never enter the shell script as
+  interpolated text.
 
   Part of the pi harness adapter — see sessions#50 for the
   multi-harness plan.
@@ -15,7 +15,8 @@ defmodule Cli.Harness.Pi.Command do
            extensions: boolean(),
            skills: boolean(),
            prompt_templates: boolean(),
-           project_trust: String.t()
+           project_trust: String.t(),
+           harness_executable: String.t()
          ]
 
   @doc """
@@ -40,6 +41,7 @@ defmodule Cli.Harness.Pi.Command do
     skills = Keyword.get(opts, :skills, true)
     prompt_templates = Keyword.get(opts, :prompt_templates, true)
     project_trust_flag = project_trust_flag(Keyword.get(opts, :project_trust, "inherit"))
+    executable = harness_executable(opts)
 
     qualified_model = model
 
@@ -59,6 +61,9 @@ defmodule Cli.Harness.Pi.Command do
         {" --no-session", positional_after_prompt}
       end
 
+    executable_arg = "$#{length(positional) + 1}"
+    positional = positional ++ [executable]
+
     pi_flags =
       [
         prompt_flag,
@@ -72,7 +77,7 @@ defmodule Cli.Harness.Pi.Command do
       ]
       |> Enum.join("")
 
-    pi_cmd = ~s(mise -C "$MISE_CONFIG_ROOT" exec -- pi -p "$1"#{pi_flags})
+    pi_cmd = ~s("#{executable_arg}" -p "$1"#{pi_flags})
 
     # `echo |` pipes empty stdin so pi doesn't block waiting for a TTY.
     shell_script =
@@ -83,6 +88,20 @@ defmodule Cli.Harness.Pi.Command do
       end
 
     {shell_script, positional}
+  end
+
+  defp harness_executable(opts) do
+    case Keyword.fetch(opts, :harness_executable) do
+      {:ok, executable} when is_binary(executable) and executable != "" ->
+        if Path.type(executable) == :absolute do
+          executable
+        else
+          raise ArgumentError, "pi harness executable must be an absolute path"
+        end
+
+      _ ->
+        raise ArgumentError, "pi harness executable is required"
+    end
   end
 
   defp project_trust_flag("inherit"), do: ""

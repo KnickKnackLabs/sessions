@@ -233,6 +233,12 @@ sessions wake review/pr-50 --model openai-codex/gpt-5.5 --message "You missed th
       </Paragraph>
 
       <Paragraph>
+        {"Before launch, Sessions resolves the selected harness executable from its own declared toolchain. The child then starts in the requested "}
+        <Code>--cwd</Code>
+        {" with Sessions' mise task context and direct tool-install paths removed. This keeps the harness version pinned without replacing the target project or agent home's own tool and resource context."}
+      </Paragraph>
+
+      <Paragraph>
         <Code>sessions run</Code>
         {" remains available as an advanced/compatibility command. It accepts an explicit "}
         <Code>--system-prompt-file</Code>

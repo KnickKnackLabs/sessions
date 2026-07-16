@@ -115,6 +115,8 @@ sessions wake review/pr-50 --model openai-codex/gpt-5.5 --message "You missed th
 
 The spawning stack uses [shell](https://github.com/KnickKnackLabs/shell) for persistent zmx sessions. `sessions wake` calls `sessions run` as its hidden low-level executor. For profile-specific sessions, use `new` + `wake`: bake profile or task instructions into the session with `--system-prompt-file` at creation, then wake it with task messages. If no explicit or baked prompt exists, the harness starts without an appended prompt and can rely on its native cwd context discovery.
 
+Before launch, Sessions resolves the selected harness executable from its own declared toolchain. The child then starts in the requested `--cwd` with Sessions' mise task context and direct tool-install paths removed. This keeps the harness version pinned without replacing the target project or agent home's own tool and resource context.
+
 `sessions run` remains available as an advanced/compatibility command. It accepts an explicit `--system-prompt-file`, uses any prompt baked into the session, and otherwise starts without appending a system prompt. Caller-provided context belongs to the caller, not to `sessions`.
 
 `--model` on `sessions wake` is required and is not remembered across wakes — pass a provider-qualified model (for example `openai-codex/gpt-5.5`) on each wake.

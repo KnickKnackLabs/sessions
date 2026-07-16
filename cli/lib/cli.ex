@@ -55,6 +55,7 @@ defmodule Cli do
     skills = opts[:no_skills] != true
     prompt_templates = opts[:no_prompt_templates] != true
     project_trust = opts[:project_trust] || "inherit"
+    harness_executable = opts[:harness_executable]
 
     print_header(opts, message, timeout, model)
 
@@ -75,7 +76,8 @@ defmodule Cli do
           extensions: extensions,
           skills: skills,
           prompt_templates: prompt_templates,
-          project_trust: project_trust
+          project_trust: project_trust,
+          harness_executable: harness_executable
         )
     end
   end
@@ -129,6 +131,7 @@ defmodule Cli do
           no_skills: :boolean,
           no_prompt_templates: :boolean,
           project_trust: :string,
+          harness_executable: :string,
           help: :boolean
         ],
         aliases: [h: :help]

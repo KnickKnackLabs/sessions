@@ -28,7 +28,7 @@ sessions() {
 }
 export -f sessions
 
-stub_mise_exec_pi() {
+stub_mise_resolve_pi() {
   local stub_dir="$1"
   local real_mise
   real_mise=$(command -v mise)
@@ -37,9 +37,9 @@ stub_mise_exec_pi() {
   cat > "$stub_dir/mise" <<STUB
 #!/usr/bin/env bash
 set -euo pipefail
-if [ "\${1:-}" = "-C" ] && [ "\${3:-}" = "exec" ] && [ "\${4:-}" = "--" ] && [ "\${5:-}" = "pi" ]; then
-  shift 5
-  exec pi "\$@"
+if [ "\${1:-}" = "-C" ] && [ "\${3:-}" = "which" ] && [ "\${4:-}" = "pi" ]; then
+  command -v pi
+  exit 0
 fi
 exec "$real_mise" "\$@"
 STUB
@@ -59,7 +59,7 @@ printf '%s\n' "\$@" > "$argv_capture"
 exit 0
 STUB
   chmod +x "$stub_dir/pi"
-  stub_mise_exec_pi "$stub_dir"
+  stub_mise_resolve_pi "$stub_dir"
 }
 
 stub_pi_capture_env() {
@@ -72,11 +72,15 @@ stub_pi_capture_env() {
 printf 'CALLER_PWD=%s\n' "\${CALLER_PWD-}" > "$env_capture"
 printf 'SESSIONS_CALLER_PWD=%s\n' "\${SESSIONS_CALLER_PWD-}" >> "$env_capture"
 printf 'OTHER_CALLER_PWD=%s\n' "\${OTHER_CALLER_PWD-}" >> "$env_capture"
+printf 'MISE_CONFIG_ROOT=%s\n' "\${MISE_CONFIG_ROOT-}" >> "$env_capture" # codebase:ignore - fixture proves inherited MCR is scrubbed
+printf 'MISE_TASK_NAME=%s\n' "\${MISE_TASK_NAME-}" >> "$env_capture"
+printf 'usage_message=%s\n' "\${usage_message-}" >> "$env_capture"
+printf 'usage_stale_probe=%s\n' "\${usage_stale_probe-}" >> "$env_capture"
 printf 'PATH=%s\n' "\$PATH" >> "$env_capture"
 exit 0
 STUB
   chmod +x "$stub_dir/pi"
-  stub_mise_exec_pi "$stub_dir"
+  stub_mise_resolve_pi "$stub_dir"
 }
 
 stub_shell_exec_payload() {
