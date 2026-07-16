@@ -3,12 +3,7 @@
 # directly from Bash tasks.
 
 sessions_scrub_caller_pwd_env() {
-  local name
-  while IFS= read -r name; do
-    case "$name" in
-      CALLER_PWD|*_CALLER_PWD) unset "$name" ;;
-    esac
-  done < <(compgen -e)
+  unset SESSIONS_CALLER_PWD
 }
 
 sessions_scrub_task_env() {

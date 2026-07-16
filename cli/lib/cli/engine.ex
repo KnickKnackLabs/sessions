@@ -99,7 +99,7 @@ defmodule Cli.Engine do
     System.get_env()
     |> Map.keys()
     |> Enum.filter(fn name ->
-      name == "CALLER_PWD" or String.ends_with?(name, "_CALLER_PWD") or
+      name == "SESSIONS_CALLER_PWD" or
         (String.starts_with?(name, "MISE_") and name != "MISE_DATA_DIR") or
         String.starts_with?(name, "usage_")
     end)

@@ -30,13 +30,8 @@ NO_EXTENSIONS="${usage_no_extensions:-false}"
 NO_SKILLS="${usage_no_skills:-false}"
 NO_PROMPT_TEMPLATES="${usage_no_prompt_templates:-false}"
 
-scrub_caller_pwd_env() {
-  local name
-  while IFS= read -r name; do
-    case "$name" in
-      CALLER_PWD|*_CALLER_PWD) unset "$name" ;;
-    esac
-  done < <(compgen -e)
+scrub_sessions_caller_pwd_env() {
+  unset SESSIONS_CALLER_PWD
 }
 
 if [ -z "$SESSION_ID" ]; then
@@ -246,7 +241,7 @@ if [ -n "$OS_USER" ]; then
   RUN_CMD=("$HOST_RUN_AS_USER" --user "$OS_USER" -- "${RUN_CMD[@]}")
 fi
 
-scrub_caller_pwd_env
+scrub_sessions_caller_pwd_env
 
 if [ "$BACKGROUND" = "true" ]; then
   # Background: launch via shell/zmx (fire-and-forget)

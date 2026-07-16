@@ -485,10 +485,10 @@ STUB
 }
 
 @test "wake forwards session cwd to sessions run" {
-  # `wake` launches from the persisted session cwd, but `sessions run`
-  # also has its own --cwd option and otherwise defaults through
-  # CALLER_PWD. Regression guard: the RUN_CMD handed to shell must carry
-  # the session header cwd explicitly so stale CALLER_PWD cannot win.
+  # `wake` launches from the persisted session cwd, while `sessions run`
+  # also has its own --cwd option. Regression guard: the RUN_CMD handed to
+  # shell must carry the session header cwd explicitly rather than depending
+  # on transient invocation context.
   command -v shell >/dev/null 2>&1 || skip "shell not installed"
 
   local session_cwd="$BATS_TEST_TMPDIR/session-cwd"
@@ -526,11 +526,11 @@ STUB
   [ "$run_cwd" = "$expected_cwd" ]
 }
 
-@test "wake scrubs caller cwd variables before background shell launch" {
+@test "wake scrubs its caller cwd before background shell launch" {
   # `sessions wake --background` starts a long-lived shell/zmx process.
-  # Caller-cwd vars describe the immediate shiv invocation and become stale
-  # ambient state once the shell outlives that invocation, so wake must scrub
-  # them after materializing the explicit --cwd arguments.
+  # Sessions' caller-cwd value becomes stale once the shell outlives that
+  # invocation, so wake scrubs its own variable after materializing --cwd.
+  # Other packages' caller context remains outside Sessions' ownership.
   command -v shell >/dev/null 2>&1 || skip "shell not installed"
 
   local stub_dir="$BATS_TEST_TMPDIR/stub-shell-env"
@@ -538,24 +538,21 @@ STUB
   mkdir -p "$stub_dir"
   cat > "$stub_dir/shell" <<STUB
 #!/usr/bin/env bash
-printf 'CALLER_PWD=%s\n' "\${CALLER_PWD-}" > "$capture"
-printf 'SESSIONS_CALLER_PWD=%s\n' "\${SESSIONS_CALLER_PWD-}" >> "$capture"
+printf 'SESSIONS_CALLER_PWD=%s\n' "\${SESSIONS_CALLER_PWD-}" > "$capture"
 printf 'OTHER_CALLER_PWD=%s\n' "\${OTHER_CALLER_PWD-}" >> "$capture"
 exit 0
 STUB
   chmod +x "$stub_dir/shell"
 
-  export CALLER_PWD="/stale/legacy"
   export SESSIONS_CALLER_PWD="/stale/sessions"
-  export OTHER_CALLER_PWD="/stale/other"
+  export OTHER_CALLER_PWD="/other/package/context"
 
   PATH="$stub_dir:$PATH" run sessions wake "${SESSION_1:0:8}" --background --model "openai-codex/gpt-5.5"
   [ "$status" -eq 0 ]
   [ -f "$capture" ]
 
-  grep -q '^CALLER_PWD=$' "$capture"
   grep -q '^SESSIONS_CALLER_PWD=$' "$capture"
-  grep -q '^OTHER_CALLER_PWD=$' "$capture"
+  grep -q '^OTHER_CALLER_PWD=/other/package/context$' "$capture"
 }
 
 @test "wake normalizes invalid session cwd fallback before forwarding" {

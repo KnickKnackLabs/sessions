@@ -48,17 +48,17 @@ defmodule Cli.EngineTest do
     refute output =~ "Agent reported an error"
   end
 
-  test "scrubs caller, mise-task, and usage context from the harness environment" do
-    inherited = %{
-      "CALLER_PWD" => "/stale/caller",
+  test "scrubs Sessions caller and task context while preserving other package context" do
+    transient = %{
       "SESSIONS_CALLER_PWD" => "/stale/sessions/caller",
-      "OTHER_CALLER_PWD" => "/stale/other/caller",
       "MISE_CONFIG_ROOT" => "/stale/sessions/root",
       "MISE_TASK_NAME" => "run",
       "usage_message" => "stale task payload"
     }
 
-    with_env(inherited, fn ->
+    preserved = %{"OTHER_CALLER_PWD" => "/other/package/context"}
+
+    with_env(Map.merge(transient, preserved), fn ->
       output =
         capture_io(fn ->
           exit_code =
@@ -78,10 +78,12 @@ defmodule Cli.EngineTest do
 
       assert_receive {:exit_code, 0}
 
-      for name <- Map.keys(inherited) do
+      for name <- Map.keys(transient) do
         assert output =~ "#{name}="
-        refute output =~ Map.fetch!(inherited, name)
+        refute output =~ Map.fetch!(transient, name)
       end
+
+      assert output =~ "OTHER_CALLER_PWD=/other/package/context"
     end)
   end
 
@@ -89,7 +91,6 @@ defmodule Cli.EngineTest do
     def build_command(_message, _model, _system_prompt_file, _session, _timeout, _opts) do
       command =
         [
-          "CALLER_PWD",
           "SESSIONS_CALLER_PWD",
           "OTHER_CALLER_PWD",
           "MISE_CONFIG_ROOT",
@@ -140,7 +141,8 @@ defmodule Cli.EngineTest do
         printf 'MISE_CONFIG_ROOT=%s\\n' "${MISE_CONFIG_ROOT-}"
         printf 'MISE_TASK_NAME=%s\\n' "${MISE_TASK_NAME-}"
         printf 'usage_message=%s\\n' "${usage_message-}"
-        printf 'CALLER_PWD=%s\\n' "${CALLER_PWD-}"
+        printf 'SESSIONS_CALLER_PWD=%s\\n' "${SESSIONS_CALLER_PWD-}"
+        printf 'OTHER_CALLER_PWD=%s\\n' "${OTHER_CALLER_PWD-}"
         printf 'ARGV='; printf '<%s>' "$@"; printf '\\n'
       } > "#{capture}"
       """
@@ -156,7 +158,8 @@ defmodule Cli.EngineTest do
           "MISE_CONFIG_ROOT" => "/stale/sessions/root",
           "MISE_TASK_NAME" => "run",
           "usage_message" => "stale task payload",
-          "CALLER_PWD" => "/stale/caller"
+          "SESSIONS_CALLER_PWD" => "/stale/sessions/caller",
+          "OTHER_CALLER_PWD" => "/other/package/context"
         },
         fn ->
           capture_io(fn ->
@@ -189,7 +192,8 @@ defmodule Cli.EngineTest do
       assert child =~ "MISE_CONFIG_ROOT=\n"
       assert child =~ "MISE_TASK_NAME=\n"
       assert child =~ "usage_message=\n"
-      assert child =~ "CALLER_PWD=\n"
+      assert child =~ "SESSIONS_CALLER_PWD=\n"
+      assert child =~ "OTHER_CALLER_PWD=/other/package/context"
       assert child =~ "<--approve>"
       refute child =~ stale_bin
     after

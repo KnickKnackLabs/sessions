@@ -698,9 +698,8 @@ STUB
   local prompt="$BATS_TEST_TMPDIR/prompt.md"
   echo "test prompt" > "$prompt"
 
-  export CALLER_PWD="/stale/caller"
   export SESSIONS_CALLER_PWD="/stale/sessions"
-  export OTHER_CALLER_PWD="/stale/other"
+  export OTHER_CALLER_PWD="/other/package/context"
   export MISE_DATA_DIR="$mise_data"
   export usage_stale_probe="stale task value"
 
@@ -711,9 +710,8 @@ STUB
   [ "$status" -eq 0 ]
   [ -f "$env_capture" ]
 
-  grep -q '^CALLER_PWD=$' "$env_capture"
   grep -q '^SESSIONS_CALLER_PWD=$' "$env_capture"
-  grep -q '^OTHER_CALLER_PWD=$' "$env_capture"
+  grep -q '^OTHER_CALLER_PWD=/other/package/context$' "$env_capture"
   grep -q "^MISE_DATA_DIR=$mise_data$" "$env_capture"
   grep -q '^MISE_CONFIG_ROOT=$' "$env_capture"
   grep -q '^MISE_TASK_NAME=$' "$env_capture"

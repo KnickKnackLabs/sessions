@@ -69,8 +69,7 @@ stub_pi_capture_env() {
   mkdir -p "$stub_dir"
   cat > "$stub_dir/pi" <<STUB
 #!/usr/bin/env bash
-printf 'CALLER_PWD=%s\n' "\${CALLER_PWD-}" > "$env_capture"
-printf 'SESSIONS_CALLER_PWD=%s\n' "\${SESSIONS_CALLER_PWD-}" >> "$env_capture"
+printf 'SESSIONS_CALLER_PWD=%s\n' "\${SESSIONS_CALLER_PWD-}" > "$env_capture"
 printf 'OTHER_CALLER_PWD=%s\n' "\${OTHER_CALLER_PWD-}" >> "$env_capture"
 printf 'MISE_DATA_DIR=%s\n' "\${MISE_DATA_DIR-}" >> "$env_capture"
 printf 'MISE_CONFIG_ROOT=%s\n' "\${MISE_CONFIG_ROOT-}" >> "$env_capture" # codebase:ignore - fixture proves inherited MCR is scrubbed
