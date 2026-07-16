@@ -55,6 +55,31 @@ teardown() {
   ! grep -qx '' "$argv_capture"
 }
 
+@test "run resolves relative requested cwd from the caller in interactive and print paths" {
+  local stub_dir="$BATS_TEST_TMPDIR/stub-pi-relative-cwd"
+  local cwd_capture="$BATS_TEST_TMPDIR/pi-relative-cwd"
+  local argv_capture="$BATS_TEST_TMPDIR/pi-relative-argv"
+  local caller="$BATS_TEST_TMPDIR/caller"
+  local expected="$caller/target"
+
+  mkdir -p "$expected"
+  stub_pi_capture_argv_cwd "$stub_dir" "$argv_capture" "$cwd_capture"
+
+  SESSIONS_CALLER_PWD="$caller" PATH="$stub_dir:$PATH" run sessions run \
+    --cwd target \
+    --model "openai-codex/gpt-5.5"
+  [ "$status" -eq 0 ]
+  [ "$(cat "$cwd_capture")" = "$(cd "$expected" && pwd -P)" ]
+
+  rm "$cwd_capture"
+  SESSIONS_CALLER_PWD="$caller" PATH="$stub_dir:$PATH" run sessions run \
+    --cwd target \
+    --model "openai-codex/gpt-5.5" \
+    "probe"
+  [ "$status" -eq 0 ]
+  [ "$(cat "$cwd_capture")" = "$(cd "$expected" && pwd -P)" ]
+}
+
 @test "run interactive resolves Sessions pi with mise and launches it directly" {
   local stub_dir="$BATS_TEST_TMPDIR/stub-mise-pi"
   local argv_capture="$BATS_TEST_TMPDIR/pi-argv-owned"
