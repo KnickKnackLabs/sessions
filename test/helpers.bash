@@ -72,6 +72,7 @@ stub_pi_capture_env() {
 printf 'CALLER_PWD=%s\n' "\${CALLER_PWD-}" > "$env_capture"
 printf 'SESSIONS_CALLER_PWD=%s\n' "\${SESSIONS_CALLER_PWD-}" >> "$env_capture"
 printf 'OTHER_CALLER_PWD=%s\n' "\${OTHER_CALLER_PWD-}" >> "$env_capture"
+printf 'MISE_DATA_DIR=%s\n' "\${MISE_DATA_DIR-}" >> "$env_capture"
 printf 'MISE_CONFIG_ROOT=%s\n' "\${MISE_CONFIG_ROOT-}" >> "$env_capture" # codebase:ignore - fixture proves inherited MCR is scrubbed
 printf 'MISE_TASK_NAME=%s\n' "\${MISE_TASK_NAME-}" >> "$env_capture"
 printf 'usage_message=%s\n' "\${usage_message-}" >> "$env_capture"
