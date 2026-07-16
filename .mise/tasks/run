@@ -25,7 +25,8 @@ SYSTEM_PROMPT_FILE="${usage_system_prompt_file:-}"
 TIMEOUT="${usage_timeout:-}"
 MODEL="${usage_model:-}"
 SESSION="${usage_session:-}"
-CWD="${usage_cwd:-${SESSIONS_CALLER_PWD:-${CALLER_PWD:-.}}}"
+CALLER_CWD="${SESSIONS_CALLER_PWD:-${CALLER_PWD:-.}}"
+CWD="${usage_cwd:-$CALLER_CWD}"
 HEADLESS="${usage_headless:-false}"
 INTERACTIVE="${usage_interactive:-false}"
 PROJECT_TRUST="${usage_project_trust:-inherit}"
@@ -235,6 +236,17 @@ if [[ "$MODEL" != */* ]]; then
 fi
 
 sessions_validate_project_trust "$PROJECT_TRUST" || exit 1
+
+# Mise tasks run from Sessions' package root. Resolve relative child paths from
+# the invoking caller before either launch path changes directories again.
+case "$CWD" in
+  /*) ;;
+  *) CWD="$CALLER_CWD/$CWD" ;;
+esac
+CWD=$(cd "$CWD" 2>/dev/null && pwd -P) || {
+  echo "Error: --cwd directory not found: ${usage_cwd:-$CALLER_CWD}" >&2
+  exit 1
+}
 
 # Resolve the selected harness and its Sessions-owned executable before any
 # launch environment is sanitized. Unsupported skeleton adapters may return no
