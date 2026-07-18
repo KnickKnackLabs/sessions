@@ -22,4 +22,4 @@ erlang = "28.4.1"
 elixir = "1.19.5-otp-27"
 
 [_.codebase]
-lint = ["mise-settings", "gum-table", "bats-test-helper", "mcr-scope", "or-true", "shellcheck"]
+lint = ["mise-settings", "gum-table", "bats-test-helper", "mcr-scope", "or-true", "shellcheck", "github-actions"]

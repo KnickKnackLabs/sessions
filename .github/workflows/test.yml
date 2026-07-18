@@ -43,15 +43,4 @@ jobs:
         run: mise run lint:python
 
       - name: Run codebase lints
-        run: |
-          for target in \
-            lint:mise-settings \
-            lint:gum-table \
-            lint:bats-test-helper \
-            lint:bats-test-task \
-            lint:mcr-scope \
-            lint:or-true \
-            lint:shellcheck
-          do
-            codebase "$target" "$PWD"
-          done
+        run: codebase lint "$PWD"
