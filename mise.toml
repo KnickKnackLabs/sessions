@@ -16,7 +16,7 @@ bats = "1.13.0"
 "shiv:codebase" = "0.2.0"                  # Codebase linting + migrations
 "shiv:readme" = "0.1"                      # README generation/checks
 "shiv:shell" = "0.1.0"                     # Persistent terminal sessions (used by wake)
-"github:KnickKnackLabs/pi" = "v0.80.6-kkl.1" # Agent harness pinned by sessions
+"github:KnickKnackLabs/pi" = "v0.80.10-kkl.1" # Agent harness pinned by sessions
 erlang = "28.4.1"
 elixir = "1.19.5-otp-27"
 
