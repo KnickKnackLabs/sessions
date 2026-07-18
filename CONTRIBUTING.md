@@ -52,6 +52,25 @@ sys.path.insert(0, os.environ["MISE_CONFIG_ROOT"] + "/lib")
 
 Do not add a mise-managed `python` tool just because a task uses `uv run --script`; `uv` owns the script interpreter unless the repo has a separate reason to expose Python as a tool.
 
+## Parallel BATS contract
+
+`mise run test` uses Rush to schedule independent `.bats` files with a measured
+four-job default. Tests inside each file remain serial because BATS 1.13's
+within-file semaphore polling is disproportionately slow for short tests.
+
+Use `mise run test --jobs 1` for serial debugging. Parallel suites must isolate
+mutable state per file and process through `$BATS_TEST_TMPDIR`, unique process
+names, or `mktemp`. Do not add fixed shared files, ports, services, or repository
+mutations without either isolating them or deliberately retaining a serial
+boundary.
+
+The public `.mise/tasks/test` owns argument translation and help metadata. The
+canonical test workflow belongs in `libexec/test` so parsing, runner selection,
+and failure behavior remain testable without growing the task wrapper.
+`test/test-task.bats` owns this delegated runner contract; the generic Codebase
+`bats-test-task` lint only understands direct BATS invocation and is therefore
+not part of this repository's configured lint set.
+
 ## Validation
 
 Run targeted tests first, then the full suite before merge:
