@@ -50,4 +50,4 @@ policy explicitly or fail as unsupported.
 
 - Elixir 1.19+
 - Jason (JSON parsing)
-- pi (owned by this package via mise: `github:KnickKnackLabs/pi@v0.83.0-kkl.2`)
+- pi (owned by this package via mise: `github:KnickKnackLabs/pi@v0.83.0-kkl.3`)
