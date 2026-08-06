@@ -17,7 +17,7 @@ bats = "1.13.0"
 "shiv:codebase" = "0.3"                    # Codebase linting + migrations
 "shiv:readme" = "0.1"                      # README generation/checks
 "shiv:shell" = "0.1.0"                     # Persistent terminal sessions (used by wake)
-"github:KnickKnackLabs/pi" = "v0.83.0-kkl" # Latest compatible KKL patch on install/refresh
+"github:KnickKnackLabs/pi" = { version = "v0.83.0-kkl", minimum_release_age = "6h" } # Cool compatible KKL patches before install
 erlang = "28.4.1"
 elixir = "1.19.5-otp-27"
 
