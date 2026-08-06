@@ -235,7 +235,7 @@ sessions wake review/pr-50 --model openai-codex/gpt-5.5 --message "You missed th
       <Paragraph>
         {"Before launch, Sessions resolves the selected harness executable from its own declared toolchain. The child then starts in the requested "}
         <Code>--cwd</Code>
-        {" with Sessions' mise task context and direct tool-install paths removed. Sessions selects the latest compatible KKL Pi patch from the `v0.83.0-kkl` release stream when its toolchain is installed or refreshed, without replacing the target project or agent home's own tool and resource context. A fixed Sessions release can therefore resolve a newer Pi patch after refresh."}
+        {" with Sessions' mise task context and direct tool-install paths removed. Sessions selects compatible KKL Pi patches from the `v0.83.0-kkl` release stream after a six-hour cooling period when its toolchain is installed or refreshed, without replacing the target project or agent home's own tool and resource context. A fixed Sessions release can therefore resolve a newer cooled Pi patch after refresh."}
       </Paragraph>
 
       <Paragraph>
