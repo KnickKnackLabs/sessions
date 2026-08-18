@@ -66,6 +66,9 @@ const lifecycle = [
   "$ sessions wait review/pr-50 --assistant-only --timeout 120",
   "┃ assistant  Re-ran CI; all checks are green.",
   "",
+  "$ sessions wait-any review/pr-50 deploy/staging --timeout 120",
+  "review/pr-50  e96bd43a  turn settled (stop)",
+  "",
   "$ sessions ps",
   "  e96bd43a  ikma/den  12345  live  3m ago  openai-codex/gpt-5.5",
   "",
@@ -87,6 +90,7 @@ const stack = [
   "                   └─ pi    harness — processes message or opens interactively",
   "  sessions read             observe the transcript",
   "  sessions wait             block until new transcript messages arrive",
+  "  sessions wait-any         wait across sessions for a settled turn",
   "  sessions ps               show live local session processes",
   "  sessions usage            inspect recorded tokens + costs",
   "  sessions wake (again)     re-enter with corrections",
@@ -153,6 +157,9 @@ sessions read review/pr-50
 
 # Wait for the next assistant message
 sessions wait review/pr-50 --assistant-only --timeout 120
+
+# Wait for any supervised agent to settle
+sessions wait-any review/pr-50 deploy/staging --timeout 120
 
 # Search across all sessions
 sessions search "error handling"
@@ -384,6 +391,34 @@ sessions wait e96bd43a --tools                 # include tool calls/results
 sessions wait e96bd43a --timeout 120 --json`}</CodeBlock>
 
       <Paragraph>
+        <Code>sessions wait-any</Code>
+        {" watches an explicit set of transcripts and returns when any assistant turn settles without another tool call or continuation. Provider errors and empty responses are settled events too, so supervision does not mistake them for silence. If several sessions settle in one poll, the command returns the whole batch."}
+      </Paragraph>
+
+      <CodeBlock lang="bash">{`# One shared structural condition across positional selectors
+sessions wait-any e96bd43a 0e3330f8 --timeout 120
+
+# Named watches plus durable cursors for repeated supervision loops
+sessions wait-any --config watches.json \\
+  --cursor-file /tmp/foreman-cursors.json --timeout 3600 --json`}</CodeBlock>
+
+      <Paragraph>
+        {"A config is a positive allowlist. It gives each session a stable source name without embedding foreman policy or transcript keywords:"}
+      </Paragraph>
+
+      <CodeBlock lang="json">{`{"version":1,"watches":[
+  {"name":"review","session_id":"e96bd43a"},
+  {"name":"deploy","session_id":"0e3330f8"}
+]}`}</CodeBlock>
+
+      <Paragraph>
+        <Code>--cursor-file</Code>
+        {" stores only resolved session paths, harness names, byte offsets, and entry indexes. Reusing it catches settled turns that arrived after the prior invocation returned without reparsing the full transcript; without it, the command deliberately snapshots current state like "}
+        <Code>sessions wait</Code>
+        {". Event cursors advance after output, so an interrupted delivery may replay an event rather than lose it. One sequential supervision loop should own a cursor file; concurrent writers are not coordinated. Timeout exits 124; JSON mode still emits a structured timeout event for a supervising loop."}
+      </Paragraph>
+
+      <Paragraph>
         <Code>sessions ps</Code>
         {" shows currently-live local session processes recorded by "}
         <Code>sessions run</Code>
@@ -473,7 +508,7 @@ mise run test`}</CodeBlock>
         <Link href="https://github.com/bats-core/bats-core">{`BATS ${batsVersion}`}</Link>
         {`. Tasks are bash scripts (session creation, wake, metadata) and Python scripts with `}
         <Link href="https://github.com/Textualize/rich">Rich</Link>
-        {` output (list, read, wait, usage, inspect, search). The shared Python support library is ${libLines} lines in `}
+        {` output (list, read, wait, wait-any, usage, inspect, search). The shared Python support library is ${libLines} lines in `}
         <Code>lib/</Code>
         {"."}
       </Paragraph>
@@ -495,6 +530,7 @@ mise run test`}</CodeBlock>
 │   ├── list         # List + filter sessions (Rich tables)
 │   ├── read         # Windowed transcript reader
 │   ├── wait         # Wait for new transcript messages
+│   ├── wait-any     # Wait across sessions for a settled turn
 │   ├── ps           # Live local process view
 │   ├── usage        # Recorded token/cost aggregation
 │   ├── search       # Full-text regex across transcripts
@@ -511,6 +547,7 @@ mise run test`}</CodeBlock>
 ├── lib/
 │   ├── parse.py        # JSONL parser, session model, filter engine
 │   ├── format.py       # Rich formatting helpers
+│   ├── wait_any.py     # Multi-session settled-turn polling + cursors
 │   ├── ensure-deps.sh  # First-run CLI deps self-heal
 │   ├── find.sh         # Back-compat shim → harness adapter
 │   ├── shell.sh        # Shell helpers
