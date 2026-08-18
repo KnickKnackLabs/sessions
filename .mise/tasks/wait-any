@@ -1,0 +1,139 @@
+#!/usr/bin/env -S uv run --script
+# fmt: off
+#MISE description="Wait for the first settled turn across several sessions"
+#USAGE arg "[session_ids]" var=#true default="" help="Session ID prefixes or names to watch"
+#USAGE flag "--config <path>" default="" help="JSON file containing named session watches"
+#USAGE flag "--cursor-file <path>" default="" help="Persist transcript cursors across invocations"
+#USAGE flag "--timeout <seconds>" default="0" help="Maximum seconds to wait; 0 means no timeout"
+#USAGE flag "--interval <seconds>" default="1" help="Polling interval in seconds"
+#USAGE flag "--json" default=#false help="Output structured JSON for settled and timeout events"
+#USAGE example "sessions wait-any alpha beta --timeout 120" header="Wait across session selectors"
+#USAGE example "sessions wait-any --config watches.json --cursor-file cursors.json --json" header="Use named durable watches"
+# fmt: on
+# /// script
+# requires-python = ">=3.10"
+# dependencies = ["rich"]
+# ///
+
+from __future__ import annotations
+
+import json
+import math
+import os
+import shlex
+import sys
+
+sys.path.insert(0, os.environ["MISE_CONFIG_ROOT"] + "/lib")
+from format import STYLE_DIM, STYLE_ID, STYLE_ROLE_ASSISTANT, console, format_time
+from harness import Unsupported, exit_unsupported
+from rich.text import Text
+from wait_any import (
+    WaitAnyError,
+    WaitResult,
+    load_specs,
+    resolve_input_path,
+    resolve_watches,
+    result_to_dict,
+    save_cursor_state,
+    wait_for_any,
+)
+
+
+def parse_non_negative_float(raw: str, name: str) -> float:
+    try:
+        value = float(raw)
+    except ValueError as error:
+        raise WaitAnyError(f"{name} must be a number") from error
+    if not math.isfinite(value):
+        raise WaitAnyError(f"{name} must be finite")
+    if value < 0:
+        raise WaitAnyError(f"{name} must be non-negative")
+    return value
+
+
+def parse_positive_float(raw: str, name: str) -> float:
+    value = parse_non_negative_float(raw, name)
+    if value <= 0:
+        raise WaitAnyError(f"{name} must be greater than 0")
+    return value
+
+
+def print_text_result(result: WaitResult) -> None:
+    if result.event == "timeout":
+        print(
+            f"Timed out after {result.timeout_seconds:g}s waiting for settled turns "
+            f"in {len(result.watched)} session(s)",
+            file=sys.stderr,
+        )
+        return
+
+    for position, event in enumerate(result.events):
+        if position:
+            console.print()
+        title = Text()
+        title.append(event["source"], style=STYLE_ID)
+        title.append(f"  {event['session_id'][:8]}", style=STYLE_DIM)
+        title.append("  turn settled", style=STYLE_DIM)
+        if event.get("stop_reason"):
+            title.append(f" ({event['stop_reason']})", style=STYLE_DIM)
+        console.print()
+        console.print(title)
+        console.rule(style="dim")
+        console.print()
+
+        header = Text()
+        header.append("🤖 ", style=STYLE_ROLE_ASSISTANT)
+        header.append("Assistant", style=f"bold {STYLE_ROLE_ASSISTANT}")
+        header.append(f"  {format_time(event.get('timestamp', ''))}", style=STYLE_DIM)
+        console.print(header)
+        if event.get("error"):
+            console.print(f"Error: {event['error']}")
+        elif event.get("text"):
+            console.print(event["text"], soft_wrap=True)
+        else:
+            console.print("(empty assistant response)", style=STYLE_DIM)
+
+
+def main() -> int:
+    raw_queries = os.environ.get("usage_session_ids", "")
+    try:
+        queries = [item for item in shlex.split(raw_queries) if item]
+    except ValueError as error:
+        raise WaitAnyError(f"invalid session selectors: {error}") from error
+
+    config_raw = os.environ.get("usage_config", "")
+    cursor_raw = os.environ.get("usage_cursor_file", "")
+    timeout_seconds = parse_non_negative_float(
+        os.environ.get("usage_timeout", "0"), "--timeout"
+    )
+    interval_seconds = parse_positive_float(
+        os.environ.get("usage_interval", "1"), "--interval"
+    )
+    output_json = os.environ.get("usage_json", "") == "true"
+
+    specs = load_specs(queries, config_raw)
+    cursor_path = resolve_input_path(cursor_raw) if cursor_raw else None
+    watches = resolve_watches(specs, cursor_path)
+    result = wait_for_any(
+        watches,
+        timeout_seconds=timeout_seconds,
+        interval_seconds=interval_seconds,
+        cursor_path=cursor_path,
+    )
+
+    if output_json:
+        print(json.dumps(result_to_dict(result), indent=2))
+    else:
+        print_text_result(result)
+    save_cursor_state(cursor_path, watches)
+    return 124 if result.event == "timeout" else 0
+
+
+if __name__ == "__main__":
+    try:
+        raise SystemExit(main())
+    except Unsupported as error:
+        exit_unsupported(error.harness, error.op)
+    except WaitAnyError as error:
+        print(f"Error: {error}", file=sys.stderr)
+        raise SystemExit(1) from error

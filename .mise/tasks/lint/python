@@ -4,12 +4,14 @@ set -euo pipefail
 
 check_targets=(
   .mise/tasks/query
+  .mise/tasks/wait-any
   lib
   test
 )
 
 format_targets=(
   .mise/tasks/query
+  .mise/tasks/wait-any
   lib
   test
 )

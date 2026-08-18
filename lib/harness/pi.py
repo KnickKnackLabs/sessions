@@ -206,7 +206,38 @@ def message_counts(entries: list) -> tuple[int, int]:
     return user_count, assistant_count
 
 
-# --- Text rendering ---
+# --- Turn boundaries and text rendering ---
+
+
+def settled_turn(entry: dict, index: int) -> dict | None:
+    """Normalize a top-level assistant turn that will not invoke another tool.
+
+    Pi records intermediate assistant steps with a ``toolCall`` content block
+    and ``stopReason=toolUse``. A final response, provider failure, or aborted
+    response has no tool call and is therefore a settled attention boundary.
+    """
+    if entry.get("type") != "message":
+        return None
+    message = entry.get("message", {})
+    if message.get("role") != "assistant":
+        return None
+
+    content = message.get("content", [])
+    blocks = content if isinstance(content, list) else []
+    has_tool_call = any(
+        isinstance(block, dict) and block.get("type") == "toolCall" for block in blocks
+    )
+    if has_tool_call or message.get("stopReason") == "toolUse":
+        return None
+
+    text = "\n".join(_extract_text_content(message)).strip()
+    return {
+        "index": index,
+        "timestamp": entry.get("timestamp", ""),
+        "text": text,
+        "stop_reason": message.get("stopReason", ""),
+        "error": message.get("errorMessage", ""),
+    }
 
 
 def text_messages(entries: list) -> list:
