@@ -291,6 +291,52 @@ assert processes._ps_start_time_tokens("unparseable") is None
 PY
 }
 
+@test "process roster isolates malformed PID probes within a batch" {
+  PYTHONPATH="$REPO_DIR/lib" python3 - <<'PY'
+from types import SimpleNamespace
+from unittest.mock import patch
+
+import processes
+
+mixed = SimpleNamespace(
+    returncode=0,
+    stdout="101 Wed Aug 20 12:00:01 2026\nunparseable\n",
+    stderr="",
+)
+with patch("processes._linux_process_start_time_token", return_value=""), \
+     patch("processes.subprocess.run", return_value=mixed):
+    probe = processes.probe_process_start_times([101, 202])
+assert probe.tokens == {101: "ps:Wed Aug 20 12:00:01 2026"}, probe
+assert probe.unknown == {202}, probe
+
+bad_token = SimpleNamespace(returncode=0, stdout="101 not-a-start-time\n", stderr="")
+with patch("processes._linux_process_start_time_token", return_value=""), \
+     patch("processes.subprocess.run", return_value=bad_token):
+    probe = processes.probe_process_start_times([101])
+assert probe.tokens == {}, probe
+assert probe.unknown == {101}, probe
+
+empty_success = SimpleNamespace(returncode=0, stdout="", stderr="")
+with patch("processes._linux_process_start_time_token", return_value=""), \
+     patch("processes.subprocess.run", return_value=empty_success):
+    probe = processes.probe_process_start_times([101])
+assert probe.tokens == {}, probe
+assert probe.unknown == {101}, probe
+
+valid = SimpleNamespace(
+    returncode=0,
+    stdout="101 Wed Aug 20 12:00:01 2026\n",
+    stderr="",
+)
+with patch("processes._linux_process_start_time_token", return_value=""), \
+     patch("processes.subprocess.run", return_value=valid) as run:
+    probe = processes.probe_process_start_times([101, 2**63])
+assert probe.tokens == {101: "ps:Wed Aug 20 12:00:01 2026"}, probe
+assert probe.unknown == {2**63}, probe
+assert run.call_args.args[0][2] == "101", run.call_args
+PY
+}
+
 @test "process roster keeps failed PID probes visible as unknown" {
   PYTHONPATH="$REPO_DIR/lib" python3 - <<'PY'
 import json

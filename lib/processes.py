@@ -29,6 +29,10 @@ _PROCESS_ENTRY_TYPES = {
 _PROCESS_ENTRY_TYPE = re.compile(
     r'"type"\s*:\s*"(?:session|harness|model_change|process_start|process_exit)"'
 )
+_PS_LSTART = re.compile(r"\S+\s+\S+\s+\d{1,2}\s+\d{2}:\d{2}:\d{2}\s+\d{4}")
+# Both procps and BSD ps parse PIDs as signed pid_t values. An out-of-range
+# value rejects the entire comma-separated selection instead of just that row.
+_MAX_PID = (1 << 31) - 1
 
 
 @dataclass
@@ -95,16 +99,46 @@ def _linux_process_start_time_token(pid: int) -> str:
     return f"linux:{token}" if token else ""
 
 
-def _ps_start_time_tokens(output: str) -> dict[int, str] | None:
+@dataclass(frozen=True)
+class _PsStartTimeOutput:
+    tokens: dict[int, str]
+    malformed_pids: set[int]
+    has_unattributed_malformed_line: bool
+
+
+def _parse_ps_start_time_tokens(output: str) -> _PsStartTimeOutput:
     tokens: dict[int, str] = {}
+    malformed_pids: set[int] = set()
+    has_unattributed_malformed_line = False
     for line in output.splitlines():
-        fields = line.split()
+        fields = line.split(maxsplit=1)
         if not fields:
             continue
-        if len(fields) < 2 or not fields[0].isdigit():
-            return None
-        tokens[int(fields[0])] = f"ps:{' '.join(fields[1:])}"
-    return tokens
+        if not fields[0].isdigit():
+            has_unattributed_malformed_line = True
+            continue
+
+        pid = int(fields[0])
+        lstart = fields[1] if len(fields) == 2 else ""
+        if not _PS_LSTART.fullmatch(lstart) or pid in tokens:
+            tokens.pop(pid, None)
+            malformed_pids.add(pid)
+            continue
+        if pid not in malformed_pids:
+            tokens[pid] = f"ps:{lstart}"
+
+    return _PsStartTimeOutput(
+        tokens=tokens,
+        malformed_pids=malformed_pids,
+        has_unattributed_malformed_line=has_unattributed_malformed_line,
+    )
+
+
+def _ps_start_time_tokens(output: str) -> dict[int, str] | None:
+    parsed = _parse_ps_start_time_tokens(output)
+    if parsed.malformed_pids or parsed.has_unattributed_malformed_line:
+        return None
+    return parsed.tokens
 
 
 @dataclass(frozen=True)
@@ -119,6 +153,9 @@ def probe_process_start_times(pids: list[int]) -> ProcessStartTimeProbe:
     tokens: dict[int, str] = {}
     unknown: set[int] = set()
     for pid in dict.fromkeys(pid for pid in pids if pid > 0):
+        if pid > _MAX_PID:
+            unknown.add(pid)
+            continue
         token = _linux_process_start_time_token(pid)
         if token:
             tokens[pid] = token
@@ -141,12 +178,29 @@ def probe_process_start_times(pids: list[int]) -> ProcessStartTimeProbe:
         except (OSError, subprocess.TimeoutExpired):
             unknown.update(chunk)
             continue
-        parsed = _ps_start_time_tokens(result.stdout)
-        clean_empty = result.returncode == 1 and not result.stderr.strip()
-        if (result.returncode != 0 and not clean_empty) or parsed is None:
+        clean_empty = (
+            result.returncode == 1
+            and not result.stdout.strip()
+            and not result.stderr.strip()
+        )
+        if clean_empty:
+            continue
+        if result.returncode != 0 or not result.stdout.strip():
             unknown.update(chunk)
             continue
-        tokens.update(parsed)
+
+        parsed = _parse_ps_start_time_tokens(result.stdout)
+        requested = set(chunk)
+        known = parsed.tokens.keys() & requested
+        tokens.update((pid, parsed.tokens[pid]) for pid in known)
+        unknown.update(parsed.malformed_pids & requested)
+        if (
+            result.stderr.strip()
+            or parsed.has_unattributed_malformed_line
+            or parsed.tokens.keys() - requested
+            or parsed.malformed_pids - requested
+        ):
+            unknown.update(requested - known)
     return ProcessStartTimeProbe(tokens=tokens, unknown=unknown)
 
 
