@@ -28,6 +28,13 @@ sessions() {
 }
 export -f sessions
 
+setup_isolated_mise_data() {
+  # Tests may put fake installs and shims here without touching user-owned Mise state.
+  export MISE_DATA_DIR="$BATS_TEST_TMPDIR/mise-data"
+  export MISE_AUTO_INSTALL=0
+  mkdir -p "$MISE_DATA_DIR/installs" "$MISE_DATA_DIR/shims"
+}
+
 stub_mise_resolve_pi() {
   local stub_dir="$1"
   local real_mise
@@ -72,6 +79,7 @@ stub_pi_capture_env() {
 printf 'SESSIONS_CALLER_PWD=%s\n' "\${SESSIONS_CALLER_PWD-}" > "$env_capture"
 printf 'OTHER_CALLER_PWD=%s\n' "\${OTHER_CALLER_PWD-}" >> "$env_capture"
 printf 'MISE_DATA_DIR=%s\n' "\${MISE_DATA_DIR-}" >> "$env_capture"
+printf 'MISE_AUTO_INSTALL=%s\n' "\${MISE_AUTO_INSTALL-}" >> "$env_capture"
 printf 'MISE_CONFIG_ROOT=%s\n' "\${MISE_CONFIG_ROOT-}" >> "$env_capture" # codebase:ignore - fixture proves inherited MCR is scrubbed
 printf 'MISE_TASK_NAME=%s\n' "\${MISE_TASK_NAME-}" >> "$env_capture"
 printf 'usage_message=%s\n' "\${usage_message-}" >> "$env_capture"

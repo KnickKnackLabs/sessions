@@ -41,21 +41,9 @@ session_file_for() {
   [ "$status" -ne 0 ]
 }
 
-@test "Python proc stat parser matches shell parser cases" {
-  PYTHONPATH="$REPO_DIR/lib" python3 - <<'PY'
-from processes import _linux_proc_stat_start_time
-
-def proc_stat(comm, start="12345"):
-    rest = "S " + " ".join(str(i) for i in range(1, 19)) + f" {start} 999"
-    return f"123 ({comm}) {rest}"
-
-assert _linux_proc_stat_start_time(proc_stat("sleep")) == "12345"
-assert _linux_proc_stat_start_time(proc_stat("sleep space")) == "12345"
-assert _linux_proc_stat_start_time(proc_stat("weird) name")) == "12345"
-assert _linux_proc_stat_start_time("bad stat") == ""
-assert _linux_proc_stat_start_time(proc_stat("zero", "0")) == ""
-assert _linux_proc_stat_start_time(proc_stat("nondigit", "abc")) == ""
-PY
+@test "Python process roster unit tests pass" {
+  run python3 "$REPO_DIR/test/processes_test.py"
+  [ "$status" -eq 0 ]
 }
 
 @test "ps --json shows live process with matching pid start time" {
@@ -119,10 +107,13 @@ assert rows[0]["status"] == "live", rows
 }
 
 @test "ps hides dead missing-exit processes by default" {
-  local session_file
+  local session_file dead_pid
   session_file=$(session_file_for "$SESSION_1")
+  sleep 0.01 &
+  dead_pid=$!
+  wait "$dead_pid"
   cat >> "$session_file" <<JSONL
-{"type":"process_start","id":"p-dead","parentId":"u4","timestamp":"2026-03-14T10:31:00.000Z","pid":999999,"pid_start_time":"ps:not a real process","cwd":"$BATS_TEST_TMPDIR","command":"missing","harness":"pi","model":"openai-codex/gpt-5.5","headless":true}
+{"type":"process_start","id":"p-dead","parentId":"u4","timestamp":"2026-03-14T10:31:00.000Z","pid":$dead_pid,"pid_start_time":"ps:not a real process","cwd":"$BATS_TEST_TMPDIR","command":"missing","harness":"pi","model":"openai-codex/gpt-5.5","headless":true}
 JSONL
 
   run sessions ps --json

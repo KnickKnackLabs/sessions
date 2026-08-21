@@ -23,12 +23,19 @@ const taskFiles = readdirSync(TASK_DIR).filter(
 );
 const taskCount = taskFiles.length;
 
-// Count tests from .bats files
-const testFiles = readdirSync(TEST_DIR).filter((f) => f.endsWith(".bats"));
-const testSrc = testFiles
+// Count public BATS cases and focused Python unit cases.
+const batsTestFiles = readdirSync(TEST_DIR).filter((f) => f.endsWith(".bats"));
+const pythonTestFiles = readdirSync(TEST_DIR).filter((f) => f.endsWith("_test.py"));
+const batsTestSrc = batsTestFiles
   .map((f) => readFileSync(join(TEST_DIR, f), "utf-8"))
   .join("\n");
-const testCount = [...testSrc.matchAll(/@test "/g)].length;
+const pythonTestSrc = pythonTestFiles
+  .map((f) => readFileSync(join(TEST_DIR, f), "utf-8"))
+  .join("\n");
+const batsTestCount = [...batsTestSrc.matchAll(/@test "/g)].length;
+const pythonTestCount = [...pythonTestSrc.matchAll(/^\s+def test_/gm)].length;
+const testCount = batsTestCount + pythonTestCount;
+const testSuiteCount = batsTestFiles.length + pythonTestFiles.length;
 
 // Extract tool versions from mise.toml
 const miseToml = readFileSync(join(ROOT, "mise.toml"), "utf-8");
@@ -91,7 +98,7 @@ const stack = [
   "  sessions read             observe the transcript",
   "  sessions wait             block until new transcript messages arrive",
   "  sessions wait-any         wait across sessions for a settled turn",
-  "  sessions ps               show live local session processes",
+  "  sessions ps               show live or unverified local session processes",
   "  sessions usage            inspect recorded tokens + costs",
   "  sessions wake (again)     re-enter with corrections",
 ].join("\n");
@@ -164,7 +171,7 @@ sessions wait-any review/pr-50 deploy/staging --timeout 120
 # Search across all sessions
 sessions search "error handling"
 
-# Show live local session processes
+# Show live or unverified local session processes
 sessions ps
 
 # Show recorded token usage and cost
@@ -420,16 +427,18 @@ sessions wait-any --config watches.json \\
 
       <Paragraph>
         <Code>sessions ps</Code>
-        {" shows currently-live local session processes recorded by "}
+        {" shows live and unverified local session processes recorded by "}
         <Code>sessions run</Code>
-        {". By default it hides exited processes and dead missing-exit records; pass "}
+        {". If a PID probe fails or returns malformed output, the row remains "}
+        <Code>unknown</Code>
+        {" instead of disappearing as dead. By default it hides exited processes and verified-dead missing-exit records; pass "}
         <Code>--all</Code>
         {" to inspect those records too."}
       </Paragraph>
 
-      <CodeBlock lang="bash">{`sessions ps                  # live managed session processes
+      <CodeBlock lang="bash">{`sessions ps                  # live or unknown managed processes
 sessions ps --project k7r2   # filter by project/session path
-sessions ps --all --json     # include exited/dead records`}</CodeBlock>
+sessions ps --all --json     # include exited and verified-dead records`}</CodeBlock>
 
       <Paragraph>
         <Code>sessions usage</Code>
@@ -504,7 +513,7 @@ mise run test`}</CodeBlock>
 
       <Paragraph>
         <Bold>{`${testCount} tests`}</Bold>
-        {` across ${testFiles.length} suites, using `}
+        {` across ${testSuiteCount} BATS and Python unittest suites. Shell and integration cases use `}
         <Link href="https://github.com/bats-core/bats-core">{`BATS ${batsVersion}`}</Link>
         {`. Tasks are bash scripts (session creation, wake, metadata) and Python scripts with `}
         <Link href="https://github.com/Textualize/rich">Rich</Link>
@@ -555,7 +564,8 @@ mise run test`}</CodeBlock>
 │   └── harness/        # Per-harness adapters (pi, …)
 ├── queries/            # Packaged sessions query SQL presets
 └── test/
-    └── *.bats          # ${testCount} tests`}</CodeBlock>
+    ├── *.bats          # ${batsTestCount} shell and integration tests
+    └── *_test.py       # ${pythonTestCount} focused Python unit tests`}</CodeBlock>
       </Details>
     </Section>
 
