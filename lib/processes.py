@@ -119,7 +119,7 @@ def _parse_ps_start_time_tokens(output: str) -> _PsStartTimeOutput:
             continue
 
         pid = int(fields[0])
-        lstart = fields[1] if len(fields) == 2 else ""
+        lstart = " ".join(fields[1].split()) if len(fields) == 2 else ""
         if not _PS_LSTART.fullmatch(lstart) or pid in tokens:
             tokens.pop(pid, None)
             malformed_pids.add(pid)

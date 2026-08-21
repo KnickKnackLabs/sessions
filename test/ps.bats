@@ -300,7 +300,7 @@ import processes
 
 mixed = SimpleNamespace(
     returncode=0,
-    stdout="101 Wed Aug 20 12:00:01 2026\nunparseable\n",
+    stdout="101 Wed Aug  20 12:00:01 2026   \nunparseable\n",
     stderr="",
 )
 with patch("processes._linux_process_start_time_token", return_value=""), \
