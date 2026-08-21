@@ -214,17 +214,20 @@ def process_start_time_token(pid: int) -> str:
     return process_start_time_tokens([pid]).get(pid, "")
 
 
+def _process_pid(start: dict) -> int | None:
+    pid = start.get("pid")
+    if type(pid) is not int or pid <= 0:
+        return None
+    return pid
+
+
 def process_liveness_status(
     start: dict,
     probe: ProcessStartTimeProbe | None = None,
 ) -> str:
-    try:
-        pid = int(start.get("pid"))
-    except (TypeError, ValueError):
-        return "unknown"
-
+    pid = _process_pid(start)
     expected = start.get("pid_start_time", "")
-    if pid <= 0 or not isinstance(expected, str) or not expected:
+    if pid is None or not isinstance(expected, str) or not expected:
         return "unknown"
     current = probe if probe is not None else probe_process_start_times([pid])
     if pid in current.unknown:
@@ -353,10 +356,9 @@ def collect_process_rows(
     pending = [row for row in rows if row.status == "pending"]
     pids: list[int] = []
     for row in pending:
-        try:
-            pids.append(int(row.start.get("pid")))
-        except (TypeError, ValueError):
-            pass
+        pid = _process_pid(row.start)
+        if pid is not None:
+            pids.append(pid)
     probe = probe_process_start_times(pids)
     for row in pending:
         row.status = process_liveness_status(row.start, probe)

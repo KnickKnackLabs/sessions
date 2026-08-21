@@ -334,6 +334,14 @@ with patch("processes._linux_process_start_time_token", return_value=""), \
 assert probe.tokens == {101: "ps:Wed Aug 20 12:00:01 2026"}, probe
 assert probe.unknown == {2**63}, probe
 assert run.call_args.args[0][2] == "101", run.call_args
+
+known = processes.ProcessStartTimeProbe(tokens={101: "ps:synthetic"}, unknown=set())
+for malformed_pid in ("101", 101.5, True, None, -1):
+    start = {"pid": malformed_pid, "pid_start_time": "ps:synthetic"}
+    assert processes.process_liveness_status(start, known) == "unknown", start
+assert processes.process_liveness_status(
+    {"pid": 101, "pid_start_time": "ps:synthetic"}, known
+) == "live"
 PY
 }
 
