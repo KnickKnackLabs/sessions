@@ -8,7 +8,7 @@ Create sessions with structured metadata, wake agents into them,
 observe transcripts in real time, and query your history.
 
 ![lang: bash + python](https://img.shields.io/badge/lang-bash%20%2B%20python-4EAA25?style=flat&logo=gnubash&logoColor=white)
-[![tests: 352 passing](https://img.shields.io/badge/tests-352%20passing-brightgreen?style=flat)](test/)
+[![tests: 354 passing](https://img.shields.io/badge/tests-354%20passing-brightgreen?style=flat)](test/)
 ![commands: 20](https://img.shields.io/badge/commands-20-blue?style=flat)
 ![license: MIT](https://img.shields.io/badge/license-MIT-blue?style=flat)
 
@@ -303,7 +303,7 @@ cd sessions && mise trust && mise install
 mise run test
 ```
 
-**352 tests** across 23 suites, using [BATS 1.13.0](https://github.com/bats-core/bats-core). Tasks are bash scripts (session creation, wake, metadata) and Python scripts with [Rich](https://github.com/Textualize/rich) output (list, read, wait, wait-any, usage, inspect, search). The shared Python support library is 3279 lines in `lib/`.
+**354 tests** across 24 BATS and Python unittest suites. Shell and integration cases use [BATS 1.13.0](https://github.com/bats-core/bats-core). Tasks are bash scripts (session creation, wake, metadata) and Python scripts with [Rich](https://github.com/Textualize/rich) output (list, read, wait, wait-any, usage, inspect, search). The shared Python support library is 3336 lines in `lib/`.
 
 Python code is checked with [Ruff](https://docs.astral.sh/ruff/) via `mise run lint:python`, and CI runs the same lint/format check in addition to the BATS and Elixir suites.
 
@@ -344,7 +344,8 @@ sessions/
 │   └── harness/        # Per-harness adapters (pi, …)
 ├── queries/            # Packaged sessions query SQL presets
 └── test/
-    └── *.bats          # 352 tests
+    ├── *.bats          # 348 shell and integration tests
+    └── *_test.py       # 6 focused Python unit tests
 ```
 
 </details>
