@@ -27,7 +27,8 @@ _PROCESS_ENTRY_TYPES = {
     "process_exit",
 }
 _PROCESS_ENTRY_TYPE = re.compile(
-    r'"type"\s*:\s*"(?:session|harness|model_change|process_start|process_exit)"'
+    r'^\s*\{\s*"type"\s*:\s*'
+    r'"(?:session|harness|model_change|process_start|process_exit)"'
 )
 
 
