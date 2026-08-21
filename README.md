@@ -8,7 +8,7 @@ Create sessions with structured metadata, wake agents into them,
 observe transcripts in real time, and query your history.
 
 ![lang: bash + python](https://img.shields.io/badge/lang-bash%20%2B%20python-4EAA25?style=flat&logo=gnubash&logoColor=white)
-[![tests: 348 passing](https://img.shields.io/badge/tests-348%20passing-brightgreen?style=flat)](test/)
+[![tests: 352 passing](https://img.shields.io/badge/tests-352%20passing-brightgreen?style=flat)](test/)
 ![commands: 20](https://img.shields.io/badge/commands-20-blue?style=flat)
 ![license: MIT](https://img.shields.io/badge/license-MIT-blue?style=flat)
 
@@ -64,7 +64,7 @@ sessions wait-any review/pr-50 deploy/staging --timeout 120
 # Search across all sessions
 sessions search "error handling"
 
-# Show live local session processes
+# Show live or unverified local session processes
 sessions ps
 
 # Show recorded token usage and cost
@@ -93,7 +93,7 @@ Sessions aren't just transcript files agents leave behind — they're managed ar
   sessions read             observe the transcript
   sessions wait             block until new transcript messages arrive
   sessions wait-any         wait across sessions for a settled turn
-  sessions ps               show live local session processes
+  sessions ps               show live or unverified local session processes
   sessions usage            inspect recorded tokens + costs
   sessions wake (again)     re-enter with corrections
 ```
@@ -240,12 +240,12 @@ A config is a positive allowlist. It gives each session a stable source name wit
 
 `--cursor-file` stores only resolved session paths, harness names, byte offsets, and entry indexes. Reusing it catches settled turns that arrived after the prior invocation returned without reparsing the full transcript; without it, the command deliberately snapshots current state like `sessions wait`. Event cursors advance after output, so an interrupted delivery may replay an event rather than lose it. One sequential supervision loop should own a cursor file; concurrent writers are not coordinated. Timeout exits 124; JSON mode still emits a structured timeout event for a supervising loop.
 
-`sessions ps` shows currently-live local session processes recorded by `sessions run`. By default it hides exited processes and dead missing-exit records; pass `--all` to inspect those records too.
+`sessions ps` shows live and unverified local session processes recorded by `sessions run`. If a PID probe fails or returns malformed output, the row remains `unknown` instead of disappearing as dead. By default it hides exited processes and verified-dead missing-exit records; pass `--all` to inspect those records too.
 
 ```bash
-sessions ps                  # live managed session processes
+sessions ps                  # live or unknown managed processes
 sessions ps --project k7r2   # filter by project/session path
-sessions ps --all --json     # include exited/dead records
+sessions ps --all --json     # include exited and verified-dead records
 ```
 
 `sessions usage` reports recorded token usage and cost. It works for one session, or across recent/date-filtered sessions, and attributes usage by the model active at each turn so model switches are visible.
@@ -303,7 +303,7 @@ cd sessions && mise trust && mise install
 mise run test
 ```
 
-**348 tests** across 23 suites, using [BATS 1.13.0](https://github.com/bats-core/bats-core). Tasks are bash scripts (session creation, wake, metadata) and Python scripts with [Rich](https://github.com/Textualize/rich) output (list, read, wait, wait-any, usage, inspect, search). The shared Python support library is 3169 lines in `lib/`.
+**352 tests** across 23 suites, using [BATS 1.13.0](https://github.com/bats-core/bats-core). Tasks are bash scripts (session creation, wake, metadata) and Python scripts with [Rich](https://github.com/Textualize/rich) output (list, read, wait, wait-any, usage, inspect, search). The shared Python support library is 3279 lines in `lib/`.
 
 Python code is checked with [Ruff](https://docs.astral.sh/ruff/) via `mise run lint:python`, and CI runs the same lint/format check in addition to the BATS and Elixir suites.
 
@@ -344,7 +344,7 @@ sessions/
 │   └── harness/        # Per-harness adapters (pi, …)
 ├── queries/            # Packaged sessions query SQL presets
 └── test/
-    └── *.bats          # 348 tests
+    └── *.bats          # 352 tests
 ```
 
 </details>

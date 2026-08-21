@@ -119,10 +119,13 @@ assert rows[0]["status"] == "live", rows
 }
 
 @test "ps hides dead missing-exit processes by default" {
-  local session_file
+  local session_file dead_pid
   session_file=$(session_file_for "$SESSION_1")
+  sleep 0.01 &
+  dead_pid=$!
+  wait "$dead_pid"
   cat >> "$session_file" <<JSONL
-{"type":"process_start","id":"p-dead","parentId":"u4","timestamp":"2026-03-14T10:31:00.000Z","pid":999999,"pid_start_time":"ps:not a real process","cwd":"$BATS_TEST_TMPDIR","command":"missing","harness":"pi","model":"openai-codex/gpt-5.5","headless":true}
+{"type":"process_start","id":"p-dead","parentId":"u4","timestamp":"2026-03-14T10:31:00.000Z","pid":$dead_pid,"pid_start_time":"ps:not a real process","cwd":"$BATS_TEST_TMPDIR","command":"missing","harness":"pi","model":"openai-codex/gpt-5.5","headless":true}
 JSONL
 
   run sessions ps --json
@@ -191,4 +194,134 @@ STUB
 
   jq -s -e 'any(.[]; .type == "process_start" and .pid > 0 and (.pid_start_time | length > 0) and .harness == "pi" and (.argv | length > 0))' "$session_file" >/dev/null
   jq -s -e 'any(.[]; .type == "process_exit" and .exit_code == 0)' "$session_file" >/dev/null
+}
+
+@test "process roster scans lifecycle lines without decoding message bodies" {
+  PYTHONPATH="$REPO_DIR/lib" python3 - <<'PY'
+import json
+import tempfile
+from pathlib import Path
+from unittest.mock import patch
+
+import processes
+
+with tempfile.TemporaryDirectory() as directory:
+    path = Path(directory) / "2026-08-20T00-00-00-000Z_00000000-0000-4000-8000-000000000000.jsonl"
+    entries = [
+        {"type": "session", "id": "00000000-0000-4000-8000-000000000000", "timestamp": "2026-08-20T00:00:00.000Z"},
+        {"type": "message", "message": {"role": "assistant", "content": [{"type": "text", "text": "unrelated"}]}},
+        {"type": "process_start", "id": "start", "pid": 123, "pid_start_time": "ps:synthetic"},
+    ]
+    path.write_text("\n".join(json.dumps(entry) for entry in entries) + "\n", encoding="utf-8")
+
+    original_loads = processes.json.loads
+    def guarded_loads(raw):
+        if '"type": "message"' in raw:
+            raise AssertionError("message body was decoded")
+        return original_loads(raw)
+
+    with patch.object(processes.json, "loads", side_effect=guarded_loads):
+        session = processes.load_process_session(str(path))
+
+    assert [entry["type"] for entry in session.entries] == ["session", "process_start"]
+PY
+}
+
+@test "process roster applies project filters before opening transcripts" {
+  PYTHONPATH="$REPO_DIR/lib" python3 - <<'PY'
+import json
+import os
+import tempfile
+from pathlib import Path
+from unittest.mock import patch
+
+import processes
+
+with tempfile.TemporaryDirectory() as directory:
+    os.environ["PI_DIR"] = directory
+    sessions = Path(directory) / "agent" / "sessions"
+    for index, name in enumerate(("alpha", "beta"), start=1):
+        project = sessions / f"--Users-test-{name}--"
+        project.mkdir(parents=True)
+        session_id = f"00000000-0000-4000-8000-{index:012d}"
+        path = project / f"2026-08-20T00-00-00-000Z_{session_id}.jsonl"
+        path.write_text(json.dumps({
+            "type": "session",
+            "id": session_id,
+            "timestamp": "2026-08-20T00:00:00.000Z",
+        }) + "\n", encoding="utf-8")
+
+    opened = []
+    original = processes.load_process_session
+    def tracked_load(path):
+        opened.append(path)
+        return original(path)
+
+    with patch.object(processes, "load_process_session", side_effect=tracked_load):
+        rows = processes.collect_process_rows(project_filter="alpha", include_all=True)
+
+assert rows == []
+assert len(opened) == 1, opened
+assert "alpha" in opened[0], opened
+PY
+}
+
+@test "process roster batches fallback PID probes and preserves exact start tokens" {
+  PYTHONPATH="$REPO_DIR/lib" python3 - <<'PY'
+from types import SimpleNamespace
+from unittest.mock import patch
+
+import processes
+
+completed = SimpleNamespace(returncode=0, stdout="101 Wed Aug 20 12:00:01 2026\n202 Wed Aug 20 12:00:02 2026\n", stderr="")
+with patch("processes._linux_process_start_time_token", return_value="") as linux, \
+     patch("processes.subprocess.run", return_value=completed) as run:
+    probe = processes.probe_process_start_times([101, 202, 101])
+
+assert probe.tokens == {
+    101: "ps:Wed Aug 20 12:00:01 2026",
+    202: "ps:Wed Aug 20 12:00:02 2026",
+}
+assert probe.unknown == set()
+assert linux.call_count == 2
+assert run.call_count == 1
+args = run.call_args.args[0]
+assert args[:3] == ["ps", "-p", "101,202"], args
+assert processes._ps_start_time_tokens("unparseable") is None
+PY
+}
+
+@test "process roster keeps failed PID probes visible as unknown" {
+  PYTHONPATH="$REPO_DIR/lib" python3 - <<'PY'
+import json
+import subprocess
+import tempfile
+from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import patch
+
+import processes
+
+with tempfile.TemporaryDirectory() as directory:
+    path = Path(directory) / "2026-08-20T00-00-00-000Z_00000000-0000-4000-8000-000000000000.jsonl"
+    entries = [
+        {"type": "session", "id": "00000000-0000-4000-8000-000000000000", "timestamp": "2026-08-20T00:00:00.000Z"},
+        {"type": "process_start", "id": "start", "pid": 123, "pid_start_time": "ps:synthetic"},
+    ]
+    path.write_text("\n".join(json.dumps(entry) for entry in entries) + "\n", encoding="utf-8")
+
+    with patch("processes._linux_process_start_time_token", return_value=""), \
+         patch("processes.subprocess.run", side_effect=subprocess.TimeoutExpired("ps", 2)):
+        rows = processes.session_process_rows(str(path))
+
+assert len(rows) == 1, rows
+assert rows[0].status == "unknown", rows
+
+failed = SimpleNamespace(returncode=1, stdout="", stderr="ps: invalid process id")
+with patch("processes._linux_process_start_time_token", return_value=""), \
+     patch("processes.subprocess.run", return_value=failed):
+    probe = processes.probe_process_start_times([123, 999999])
+assert probe.tokens == {}
+assert probe.unknown == {123, 999999}
+PY
 }

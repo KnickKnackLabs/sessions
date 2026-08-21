@@ -91,7 +91,7 @@ const stack = [
   "  sessions read             observe the transcript",
   "  sessions wait             block until new transcript messages arrive",
   "  sessions wait-any         wait across sessions for a settled turn",
-  "  sessions ps               show live local session processes",
+  "  sessions ps               show live or unverified local session processes",
   "  sessions usage            inspect recorded tokens + costs",
   "  sessions wake (again)     re-enter with corrections",
 ].join("\n");
@@ -164,7 +164,7 @@ sessions wait-any review/pr-50 deploy/staging --timeout 120
 # Search across all sessions
 sessions search "error handling"
 
-# Show live local session processes
+# Show live or unverified local session processes
 sessions ps
 
 # Show recorded token usage and cost
@@ -420,16 +420,18 @@ sessions wait-any --config watches.json \\
 
       <Paragraph>
         <Code>sessions ps</Code>
-        {" shows currently-live local session processes recorded by "}
+        {" shows live and unverified local session processes recorded by "}
         <Code>sessions run</Code>
-        {". By default it hides exited processes and dead missing-exit records; pass "}
+        {". If a PID probe fails or returns malformed output, the row remains "}
+        <Code>unknown</Code>
+        {" instead of disappearing as dead. By default it hides exited processes and verified-dead missing-exit records; pass "}
         <Code>--all</Code>
         {" to inspect those records too."}
       </Paragraph>
 
-      <CodeBlock lang="bash">{`sessions ps                  # live managed session processes
+      <CodeBlock lang="bash">{`sessions ps                  # live or unknown managed processes
 sessions ps --project k7r2   # filter by project/session path
-sessions ps --all --json     # include exited/dead records`}</CodeBlock>
+sessions ps --all --json     # include exited and verified-dead records`}</CodeBlock>
 
       <Paragraph>
         <Code>sessions usage</Code>

@@ -687,10 +687,12 @@ STUB
 }
 
 @test "run interactive without message scrubs stale harness environment" {
-  local mise_data="${MISE_DATA_DIR:-${XDG_DATA_HOME:-$HOME/.local/share}/mise}"
+  setup_isolated_mise_data
+  local mise_data="$MISE_DATA_DIR"
   local stale_bin="$mise_data/installs/sessions-test-stale/bin"
   local fresh_bin="$mise_data/installs/sessions-test-fresh/bin"
   local shim_bin="$mise_data/shims"
+  mkdir -p "$stale_bin" "$fresh_bin"
   local pi_bin="$BATS_TEST_TMPDIR/pi-bin"
   local env_capture="$BATS_TEST_TMPDIR/pi-env"
   stub_pi_capture_env "$pi_bin" "$env_capture"
@@ -700,7 +702,6 @@ STUB
 
   export SESSIONS_CALLER_PWD="/stale/sessions"
   export OTHER_CALLER_PWD="/other/package/context"
-  export MISE_DATA_DIR="$mise_data"
   export usage_stale_probe="stale task value"
 
   PATH="$stale_bin:$pi_bin:$shim_bin:$fresh_bin:$PATH" run sessions run \
@@ -713,6 +714,7 @@ STUB
   grep -q '^SESSIONS_CALLER_PWD=$' "$env_capture"
   grep -q '^OTHER_CALLER_PWD=/other/package/context$' "$env_capture"
   grep -q "^MISE_DATA_DIR=$mise_data$" "$env_capture"
+  grep -q '^MISE_AUTO_INSTALL=$' "$env_capture"
   grep -q '^MISE_CONFIG_ROOT=$' "$env_capture"
   grep -q '^MISE_TASK_NAME=$' "$env_capture"
   grep -q '^usage_message=$' "$env_capture"
