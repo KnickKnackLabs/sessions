@@ -209,7 +209,18 @@ with tempfile.TemporaryDirectory() as directory:
     path = Path(directory) / "2026-08-20T00-00-00-000Z_00000000-0000-4000-8000-000000000000.jsonl"
     entries = [
         {"type": "session", "id": "00000000-0000-4000-8000-000000000000", "timestamp": "2026-08-20T00:00:00.000Z"},
-        {"type": "message", "message": {"role": "assistant", "content": [{"type": "text", "text": "unrelated"}]}},
+        {
+            "type": "message",
+            "message": {
+                "role": "assistant",
+                "content": [
+                    {
+                        "type": "toolCall",
+                        "arguments": {"entry": {"type": "process_start"}},
+                    }
+                ],
+            },
+        },
         {"type": "process_start", "id": "start", "pid": 123, "pid_start_time": "ps:synthetic"},
     ]
     path.write_text("\n".join(json.dumps(entry) for entry in entries) + "\n", encoding="utf-8")
