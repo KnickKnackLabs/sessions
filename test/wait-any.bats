@@ -56,11 +56,12 @@ wait_for_cursor() {
   [ -f "$cursor" ]
 }
 
-@test "wait-any snapshots past existing settled turns by default" {
+@test "wait-any snapshots past settled turns and emits compact JSON" {
   run --separate-stderr sessions wait-any "$SESSION_1" \
     --timeout 0.15 --interval 0.05 --json
 
   [ "$status" -eq 124 ]
+  [ "${#lines[@]}" -eq 1 ]
   echo "$output" | python3 -c '
 import json, sys
 assert json.load(sys.stdin)["event"] == "timeout"
