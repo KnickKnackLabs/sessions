@@ -3,6 +3,7 @@
 #USAGE arg "<session_id>" help="Session ID or name"
 #USAGE flag "--field <field>" help="Extract a specific field (jq path, e.g. .cwd or .meta.agent.name)"
 #USAGE flag "--json" help="Output raw JSON (default is pretty-printed)"
+#USAGE example "sessions meta review/pr-50 --field .cwd" header="Read one metadata field"
 
 set -euo pipefail
 

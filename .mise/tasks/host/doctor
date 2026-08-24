@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 #MISE description="Check host setup for local OS-user session execution"
 #USAGE flag "--os-user <os_user>" help="Target agent OS user to check"
+#USAGE example "sessions host:doctor --os-user iris" header="Check one agent OS user"
 set -euo pipefail
 
 OS_USER="${usage_os_user:-}"

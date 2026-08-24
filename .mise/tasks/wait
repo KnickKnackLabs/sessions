@@ -9,6 +9,7 @@
 #USAGE flag "--assistant-only" default=#false help="Wait only for assistant messages"
 #USAGE flag "--match <regex>" default="" help="Wait only for messages matching a regex"
 #USAGE flag "--json" default=#false help="Output as JSON"
+#USAGE example "sessions wait review/pr-50 --assistant-only --timeout 120" header="Wait for the next assistant message"
 # /// script
 # requires-python = ">=3.10"
 # dependencies = ["rich"]

@@ -163,8 +163,8 @@ assert rows == [{
 }
 
 @test "query can read packaged SQL presets when caller cwd differs" {
-  run env SESSIONS_CALLER_PWD="$BATS_TEST_TMPDIR" PI_DIR="$PI_DIR" \
-    bash -c "cd '$REPO_DIR' && mise run -q query -- '${SESSION_1:0:8}' --sql-file queries/bash-status.sql --format json"
+  export SESSIONS_CALLER_PWD="$BATS_TEST_TMPDIR"
+  run sessions query "${SESSION_1:0:8}" --sql-file queries/bash-status.sql --format json
   [ "$status" -eq 0 ]
   echo "$output" | python3 -c "
 import json, sys

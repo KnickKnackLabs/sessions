@@ -40,7 +40,7 @@ const testSuiteCount = batsTestFiles.length + pythonTestFiles.length;
 // Extract tool versions from mise.toml
 const miseToml = readFileSync(join(ROOT, "mise.toml"), "utf-8");
 const batsVersion =
-  miseToml.match(/bats\s*=\s*"([^"]+)"/)?.[1] ?? "latest";
+  miseToml.match(/"aqua:KnickKnackLabs\/bats-core"\s*=\s*"([^"]+)"/)?.[1] ?? "latest";
 
 // Count Python lib lines for the "how it works" credibility
 const libDir = join(ROOT, "lib");
@@ -514,7 +514,7 @@ mise run test`}</CodeBlock>
       <Paragraph>
         <Bold>{`${testCount} tests`}</Bold>
         {` across ${testSuiteCount} BATS and Python unittest suites. Shell and integration cases use `}
-        <Link href="https://github.com/bats-core/bats-core">{`BATS ${batsVersion}`}</Link>
+        <Link href="https://github.com/KnickKnackLabs/bats-core">{`KKL BATS ${batsVersion}`}</Link>
         {`. Tasks are bash scripts (session creation, wake, metadata) and Python scripts with `}
         <Link href="https://github.com/Textualize/rich">Rich</Link>
         {` output (list, read, wait, wait-any, usage, inspect, search). The shared Python support library is ${libLines} lines in `}

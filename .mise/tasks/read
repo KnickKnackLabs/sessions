@@ -7,6 +7,7 @@
 #USAGE flag "--tools" default=#false help="Include tool_use/tool_result blocks (hidden by default)"
 #USAGE flag "--user-only" default=#false help="Show only user messages"
 #USAGE flag "--json" default=#false help="Output as JSON"
+#USAGE example "sessions read review/pr-50 --last 5" header="Read the latest messages"
 # /// script
 # requires-python = ">=3.10"
 # dependencies = ["rich"]

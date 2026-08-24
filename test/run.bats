@@ -650,8 +650,8 @@ STUB
   chmod +x "$stub_dir/pi"
   stub_mise_resolve_pi "$stub_dir"
 
-  PATH="$stub_dir:$PATH" DISPATCH_CONTEXT="generated prompt" PI_DIR="$PI_DIR" \
-    mise -C "$REPO_DIR" run -q run --cwd "$BATS_TEST_TMPDIR" --model "openai-codex/gpt-5.5" \
+  PATH="$stub_dir:$PATH" DISPATCH_CONTEXT="generated prompt" \
+    sessions run --cwd "$BATS_TEST_TMPDIR" --model "openai-codex/gpt-5.5" \
     >"$stdout_capture" 2>"$stderr_capture" &
   local mise_pid=$!
 

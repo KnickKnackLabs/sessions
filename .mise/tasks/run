@@ -327,7 +327,7 @@ run_interactive() {
   [ "$SKILLS" = "true" ] || pi_args+=(--no-skills)
   [ "$PROMPT_TEMPLATES" = "true" ] || pi_args+=(--no-prompt-templates)
   if [ -n "$SYSTEM_PROMPT_FILE" ]; then
-    pi_args=(--append-system-prompt "$SYSTEM_PROMPT_FILE" "${pi_args[@]}")
+    pi_args=(--append-system-prompt "$SYSTEM_PROMPT_FILE" ${pi_args[@]+"${pi_args[@]}"})
   fi
   if [ -n "$SESSION" ]; then
     pi_args+=(--session "$SESSION")
@@ -344,10 +344,10 @@ run_interactive() {
       echo "Error: timeout command is required for --timeout" >&2
       exit 1
     fi
-    run_and_exit timeout "$TIMEOUT" "${pi_command[@]}" "${pi_args[@]}"
+    run_and_exit timeout "$TIMEOUT" ${pi_command[@]+"${pi_command[@]}"} ${pi_args[@]+"${pi_args[@]}"}
   fi
 
-  run_and_exit "${pi_command[@]}" "${pi_args[@]}"
+  run_and_exit ${pi_command[@]+"${pi_command[@]}"} ${pi_args[@]+"${pi_args[@]}"}
 }
 
 if [ "$INTERACTIVE" = "true" ] || [ -z "$MESSAGE" ]; then
@@ -376,4 +376,4 @@ source "$MISE_CONFIG_ROOT/lib/ensure-deps.sh"
 ensure_cli_deps "$CLI_DIR"
 
 cd "$CLI_DIR"
-run_and_exit mix sessions "${CLI_ARGS[@]}" "$MESSAGE"
+run_and_exit mix sessions ${CLI_ARGS[@]+"${CLI_ARGS[@]}"} "$MESSAGE"

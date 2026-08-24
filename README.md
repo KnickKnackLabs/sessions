@@ -303,7 +303,7 @@ cd sessions && mise trust && mise install
 mise run test
 ```
 
-**354 tests** across 24 BATS and Python unittest suites. Shell and integration cases use [BATS 1.13.0](https://github.com/bats-core/bats-core). Tasks are bash scripts (session creation, wake, metadata) and Python scripts with [Rich](https://github.com/Textualize/rich) output (list, read, wait, wait-any, usage, inspect, search). The shared Python support library is 3336 lines in `lib/`.
+**354 tests** across 24 BATS and Python unittest suites. Shell and integration cases use [KKL BATS 1.14.0-kkl.1](https://github.com/KnickKnackLabs/bats-core). Tasks are bash scripts (session creation, wake, metadata) and Python scripts with [Rich](https://github.com/Textualize/rich) output (list, read, wait, wait-any, usage, inspect, search). The shared Python support library is 3336 lines in `lib/`.
 
 Python code is checked with [Ruff](https://docs.astral.sh/ruff/) via `mise run lint:python`, and CI runs the same lint/format check in addition to the BATS and Elixir suites.
 

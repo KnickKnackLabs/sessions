@@ -4,6 +4,7 @@
 #USAGE flag "--project <filter>" default="" help="Filter by project directory/name substring"
 #USAGE flag "--all" default=#false help="Include exited and verified-dead process records"
 #USAGE flag "--json" default=#false help="Output as JSON"
+#USAGE example "sessions ps --all --json" header="Inspect all recorded processes as JSON"
 # /// script
 # requires-python = ">=3.10"
 # dependencies = ["rich"]

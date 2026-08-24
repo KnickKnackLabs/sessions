@@ -2,6 +2,7 @@
 #MISE description="Repair host setup for local OS-user session execution"
 #USAGE flag "--os-user <os_user>" help="Target agent OS user to include in the agents group"
 #USAGE flag "--dry-run" help="Print planned host changes without applying them"
+#USAGE example "sessions host:fix --os-user iris --dry-run" header="Preview host repairs"
 set -euo pipefail
 
 OS_USER="${usage_os_user:-}"
@@ -49,7 +50,7 @@ fi
 
 if [ "$DRY_RUN" = "true" ]; then
   echo "Would apply these host changes:"
-  printf '  %s\n' "${planned[@]}"
+  printf '  %s\n' ${planned[@]+"${planned[@]}"}
   exit 0
 fi
 

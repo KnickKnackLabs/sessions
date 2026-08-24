@@ -55,7 +55,7 @@ Do not add a mise-managed `python` tool just because a task uses `uv run --scrip
 ## Parallel BATS contract
 
 `mise run test` uses Rush to schedule independent `.bats` files with a measured
-four-job default. Tests inside each file remain serial because BATS 1.13's
+four-job default. Tests inside each file remain serial because BATS'
 within-file semaphore polling is disproportionately slow for short tests.
 
 Use `mise run test --jobs 1` for serial debugging. Parallel suites must isolate
@@ -64,12 +64,9 @@ names, or `mktemp`. Do not add fixed shared files, ports, services, or repositor
 mutations without either isolating them or deliberately retaining a serial
 boundary.
 
-The public `.mise/tasks/test` owns argument translation and help metadata. The
-canonical test workflow belongs in `libexec/test` so parsing, runner selection,
-and failure behavior remain testable without growing the task wrapper.
-`test/test-task.bats` owns this delegated runner contract; the generic Codebase
-`bats-test-task` lint only understands direct BATS invocation and is therefore
-not part of this repository's configured lint set.
+The public `.mise/tasks/test` owns argument translation, runner selection,
+failure behavior, and help metadata. `test/test-task.bats` exercises that public
+Sessions wrapper while replacing BATS and Rush with isolated test doubles.
 
 ## Validation
 
@@ -82,4 +79,4 @@ readme build --check
 git diff --check
 ```
 
-The BATS suite includes `test/lint.bats`, which runs the configured `[_.codebase].lint` subtasks individually. The installed `codebase` package may not expose an aggregate `lint` task, so use `codebase lint:<name>` for each configured lint.
+The BATS suite includes `test/lint.bats`, which runs the configured Codebase lint portfolio through its aggregate public command.

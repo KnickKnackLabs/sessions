@@ -16,6 +16,7 @@
 #USAGE flag "--browser" default=#false help="Render results to temporary HTML and open in the default browser"
 #USAGE flag "--title <title>" default="sessions query" help="HTML/browser result title"
 #USAGE flag "--out <path>" default="" help="Write query output to a file"
+#USAGE example "sessions query e96bd43a --sql-file queries/bash-status.sql --format grid" header="Run a packaged query"
 # fmt: on
 
 from __future__ import annotations
