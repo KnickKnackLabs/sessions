@@ -3,6 +3,7 @@
 #USAGE flag "--context <context>" help="Optional context for why the fork was created"
 #USAGE flag "--name <name>" help="Optional label for the fork"
 #USAGE arg "<session_id>" help="Session ID or name to copy"
+#USAGE example "sessions copy review/pr-50 --name review-followup" header="Copy a named session"
 
 set -euo pipefail
 shopt -s nullglob

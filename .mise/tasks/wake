@@ -13,6 +13,7 @@
 #USAGE flag "--no-skills" default=#false help="Disable harness skills for this run"
 #USAGE flag "--no-prompt-templates" default=#false help="Disable harness prompt templates for this run"
 #USAGE flag "--meta <meta>" var=#true default="" help="Metadata for the wake event (repeatable, dotted paths or jq expressions)"
+#USAGE example "sessions wake review/pr-50 --model openai-codex/gpt-5.5 --message 'Review PR #50'" header="Wake a session with a message"
 
 set -euo pipefail
 
@@ -209,7 +210,7 @@ fi
 
 # --- Resolve working directory from session ---
 
-SESSION_CWD=$("${mise_run[@]}" meta "${FULL_SESSION_ID:0:8}" --field .cwd 2>/dev/null) || SESSION_CWD=""
+SESSION_CWD=$(${mise_run[@]+"${mise_run[@]}"} meta "${FULL_SESSION_ID:0:8}" --field .cwd 2>/dev/null) || SESSION_CWD=""
 if [ -z "$SESSION_CWD" ] || [ ! -d "$SESSION_CWD" ]; then
   echo "Warning: session cwd '$SESSION_CWD' not found, using current directory" >&2
   SESSION_CWD="."
@@ -219,7 +220,7 @@ SESSION_CWD=$(cd "$SESSION_CWD" && pwd -P)
 # --- Launch ---
 
 RUN_CMD=(
-  "${mise_run[@]}" run
+  ${mise_run[@]+"${mise_run[@]}"} run
   --session "$SESSION_FILE"
   --cwd "$SESSION_CWD"
   --model "$MODEL"
@@ -238,14 +239,14 @@ elif [ -n "$MESSAGE" ]; then
 fi
 
 if [ -n "$OS_USER" ]; then
-  RUN_CMD=("$HOST_RUN_AS_USER" --user "$OS_USER" -- "${RUN_CMD[@]}")
+  RUN_CMD=("$HOST_RUN_AS_USER" --user "$OS_USER" -- ${RUN_CMD[@]+"${RUN_CMD[@]}"})
 fi
 
 scrub_sessions_caller_pwd_env
 
 if [ "$BACKGROUND" = "true" ]; then
   # Background: launch via shell/zmx (fire-and-forget)
-  CHAT_IDENTITY="$SHELL_NAME" shell run "$SHELL_NAME" --cwd "$SESSION_CWD" "${RUN_CMD[@]}"
+  CHAT_IDENTITY="$SHELL_NAME" shell run "$SHELL_NAME" --cwd "$SESSION_CWD" ${RUN_CMD[@]+"${RUN_CMD[@]}"}
 
   echo "$FULL_SESSION_ID"
   if [ -n "$SESSION_NAME" ]; then
@@ -264,5 +265,5 @@ else
   fi
 
   cd "$SESSION_CWD"
-  CHAT_IDENTITY="$SHELL_NAME" exec "${RUN_CMD[@]}"
+  CHAT_IDENTITY="$SHELL_NAME" exec ${RUN_CMD[@]+"${RUN_CMD[@]}"}
 fi

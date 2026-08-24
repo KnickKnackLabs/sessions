@@ -5,6 +5,7 @@
 #USAGE flag "--filter <filter>" var=#true help="Filter sessions (type.meta.key=value, supports indexing e.g. wake[0].meta.by=ikma)"
 #USAGE flag "--all" default=#false help="Include empty/stub sessions hidden by default"
 #USAGE flag "--json" help="Output as JSON"
+#USAGE example "sessions list --limit 5 --json" header="List five recent sessions as JSON"
 # /// script
 # requires-python = ">=3.10"
 # dependencies = ["rich"]

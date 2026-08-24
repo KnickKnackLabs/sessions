@@ -2,6 +2,7 @@
 #MISE description="Remove a session (kill shell if running, delete session file)"
 #USAGE arg "<session_id>" help="Session ID or name to remove"
 #USAGE flag "--force" help="Skip confirmation prompt"
+#USAGE example "sessions remove review/pr-50 --force" header="Remove a session without prompting"
 
 set -euo pipefail
 

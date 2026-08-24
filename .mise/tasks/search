@@ -9,6 +9,7 @@
 #USAGE flag "--before <date>" default="" help="Only matches before this date (YYYY-MM-DD)"
 #USAGE flag "--tools" default=#false help="Include matches in tool inputs/outputs (excluded by default)"
 #USAGE flag "--json" default=#false help="Output as JSON"
+#USAGE example "sessions search 'error handling' --limit 10" header="Search recent transcripts"
 # /// script
 # requires-python = ">=3.10"
 # dependencies = ["rich"]

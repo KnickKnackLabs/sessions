@@ -16,5 +16,5 @@ format_targets=(
   test
 )
 
-ruff check "${check_targets[@]}"
-ruff format --check "${format_targets[@]}"
+ruff check ${check_targets[@]+"${check_targets[@]}"}
+ruff format --check ${format_targets[@]+"${format_targets[@]}"}

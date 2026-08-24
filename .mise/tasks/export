@@ -3,6 +3,7 @@
 #USAGE arg "<session_id>" help="Session ID (prefix match supported)"
 #USAGE flag "--output <path>" help="Output directory (default: ./exports/)"
 #USAGE flag "--format <fmt>" default="bundle" help="Export format: bundle (JSONL+meta), markdown, jsonl"
+#USAGE example "sessions export e96bd43a --output ./exports" header="Export a session bundle"
 # /// script
 # requires-python = ">=3.10"
 # ///

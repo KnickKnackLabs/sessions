@@ -2,6 +2,7 @@
 #MISE description="Show forensic metadata for a session (model, context, duration, compaction)"
 #USAGE arg "<session_id>" help="Session ID (prefix match supported)"
 #USAGE flag "--json" help="Output as JSON"
+#USAGE example "sessions inspect e96bd43a --json" header="Inspect forensic metadata as JSON"
 # /// script
 # requires-python = ">=3.10"
 # dependencies = ["rich"]

@@ -10,6 +10,7 @@
 #USAGE flag "--all" default=#false help="Scan all sessions in aggregate mode"
 #USAGE flag "--turns" default=#false help="Show per-turn usage records"
 #USAGE flag "--json" default=#false help="Output as JSON"
+#USAGE example "sessions usage review/pr-50 --turns" header="Show per-turn session usage"
 # /// script
 # requires-python = ">=3.10"
 # dependencies = ["rich"]
