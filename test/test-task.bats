@@ -3,207 +3,106 @@
 load helpers
 bats_require_minimum_version 1.5.0
 
-setup() {
-  export PI_DIR="$BATS_TEST_TMPDIR/pi-test"
-  MOCK_DIR="$BATS_TEST_TMPDIR/mock-bin"
-  BATS_LOG="$BATS_TEST_TMPDIR/bats.log"
-  mkdir -p "$MOCK_DIR"
-  export BATS_LOG
-
-  cat > "$MOCK_DIR/bats" <<'SH'
-#!/usr/bin/env bash
-set -euo pipefail
-{
-  printf 'jobs=%s\n' "${BATS_NUMBER_OF_PARALLEL_JOBS:-}"
-  printf 'runner=%s\n' "${BATS_PARALLEL_BINARY_NAME:-}"
-  for arg in "$@"; do
-    printf 'arg=%s\n' "$arg"
-  done
-} > "$BATS_LOG"
-SH
-
-  cat > "$MOCK_DIR/rush" <<'SH'
-#!/usr/bin/env bash
-exit 0
-SH
-
-  chmod +x "$MOCK_DIR/bats" "$MOCK_DIR/rush"
-
-  export BATS_COMMAND="$MOCK_DIR/bats"
-  export RUSH_COMMAND="$MOCK_DIR/rush"
-  unset BATS_NUMBER_OF_PARALLEL_JOBS BATS_PARALLEL_BINARY_NAME
+write_passing_test() {
+  local path="$1" name="$2"
+  mkdir -p "$(dirname "$path")"
+  local test_keyword='@test'
+  printf '%s\n' \
+    '#!/usr/bin/env bats' \
+    "$test_keyword \"$name\" {" \
+    '  true' \
+    '}' > "$path"
 }
 
-log_value() {
-  local key="$1"
-  awk -F= -v key="$key" '$1 == key { print substr($0, length(key) + 2); exit }' "$BATS_LOG"
-}
+@test "options-only calls use the configured Sessions test directory" {
+  run sessions test --jobs 1 --filter '^copy creates a new session file$'
 
-arg_count() {
-  local expected="$1"
-  awk -F= -v expected="$expected" '$1 == "arg" && substr($0, 5) == expected { count++ } END { print count + 0 }' "$BATS_LOG"
-}
-
-logged_arguments() {
-  sed -n 's/^arg=//p' "$BATS_LOG"
-}
-
-@test "test task defaults to four Rush jobs across files" {
-  run sessions test copy --filter doctor
   [ "$status" -eq 0 ]
-  [[ "$output" == *"4 jobs across files"* ]]
-  [ "$(log_value jobs)" = "4" ]
-  [ "$(log_value runner)" = "$MOCK_DIR/rush" ]
-  [ "$(arg_count --no-parallelize-within-files)" -eq 1 ]
-  [ "$(arg_count "$REPO_DIR/test/copy.bats")" -eq 1 ]
-  [ "$(arg_count --filter)" -eq 1 ]
-  [ "$(arg_count doctor)" -eq 1 ]
+  [[ "$output" == *'1..1'* ]]
+  [[ "$output" == *'ok 1 copy creates a new session file'* ]]
 }
 
-@test "explicit jobs override is forwarded once" {
-  run sessions test --jobs 3 copy
+@test "an explicit test target takes precedence over the configured default" {
+  local target="$BATS_TEST_TMPDIR/explicit.bats"
+  write_passing_test "$target" 'explicit target only'
+
+  run sessions test --jobs 1 "$target"
+
   [ "$status" -eq 0 ]
-  [[ "$output" == *"3 jobs across files"* ]]
-  [ "$(log_value jobs)" = "" ]
-  [ "$(arg_count --jobs)" -eq 1 ]
-  [ "$(arg_count 3)" -eq 1 ]
-  [ "$(arg_count --no-parallelize-within-files)" -eq 1 ]
+  [[ "$output" == *'1..1'* ]]
+  [[ "$output" == *'ok 1 explicit target only'* ]]
 }
 
-@test "environment jobs override the detected default" {
-  export BATS_NUMBER_OF_PARALLEL_JOBS=2
+@test "relative test targets resolve from the repository root" {
+  run sessions test --jobs 1 test/copy.bats \
+    --filter '^copy creates a new session file$'
 
-  run sessions test copy
   [ "$status" -eq 0 ]
-  [[ "$output" == *"2 jobs across files"* ]]
-  [ "$(log_value jobs)" = "2" ]
-  [ "$(arg_count --jobs)" -eq 0 ]
+  [[ "$output" == *'1..1'* ]]
+  [[ "$output" == *'ok 1 copy creates a new session file'* ]]
 }
 
-@test "environment serial opt-out does not require Rush" {
-  export BATS_NUMBER_OF_PARALLEL_JOBS=1
-  export RUSH_COMMAND="$MOCK_DIR/missing-rush"
+@test "whitespace-bearing explicit test targets remain one argument" {
+  local target="$BATS_TEST_TMPDIR/explicit target/passing test.bats"
+  write_passing_test "$target" 'whitespace target'
 
-  run sessions test copy
+  run sessions test --jobs 2 "$target"
+
   [ "$status" -eq 0 ]
-  [[ "$output" == *"BATS parallelism: serial"* ]]
-  [ "$(arg_count --no-parallelize-within-files)" -eq 0 ]
+  [[ "$output" == *'1..1'* ]]
+  [[ "$output" == *'ok 1 whitespace target'* ]]
 }
 
-@test "CLI serial opt-out does not require Rush" {
-  export RUSH_COMMAND="$MOCK_DIR/missing-rush"
+@test "public Sessions test path runs separate BATS files concurrently" {
+  local probe_dir="$BATS_TEST_TMPDIR/across-file-probe"
+  export PROBE_DIR="$BATS_TEST_TMPDIR/across-file-barrier"
+  mkdir -p "$probe_dir" "$PROBE_DIR"
+  local test_keyword='@test'
 
-  run sessions test --jobs 1 copy
-  [ "$status" -eq 0 ]
-  [[ "$output" == *"BATS parallelism: serial"* ]]
-  [ "$(arg_count --no-parallelize-within-files)" -eq 0 ]
-}
-
-@test "parallel execution fails clearly when the selected runner is unavailable" {
-  export RUSH_COMMAND="$MOCK_DIR/missing-rush"
-
-  run -127 sessions test copy
-  [ "$status" -eq 127 ]
-  [[ "$output" == *"parallel runner '$MOCK_DIR/missing-rush' is unavailable for 4 jobs"* ]]
-  [[ "$output" == *"run 'mise install' or use --jobs 1"* ]]
-  [ ! -e "$BATS_LOG" ]
-}
-
-@test "environment runner override is preserved" {
-  cp "$MOCK_DIR/rush" "$MOCK_DIR/alternate-runner"
-  export BATS_PARALLEL_BINARY_NAME="$MOCK_DIR/alternate-runner"
-
-  run sessions test copy
-  [ "$status" -eq 0 ]
-  [ "$(log_value runner)" = "$MOCK_DIR/alternate-runner" ]
-}
-
-@test "CLI runner override is preserved" {
-  cp "$MOCK_DIR/rush" "$MOCK_DIR/alternate-runner"
-
-  run sessions test --parallel-binary-name "$MOCK_DIR/alternate-runner" copy
-  [ "$status" -eq 0 ]
-  [ "$(arg_count --parallel-binary-name)" -eq 1 ]
-  [ "$(arg_count "$MOCK_DIR/alternate-runner")" -eq 1 ]
-}
-
-@test "invalid job override fails before BATS" {
-  export BATS_NUMBER_OF_PARALLEL_JOBS=lots
-
-  run sessions test copy
-  [ "$status" -eq 2 ]
-  [[ "$output" == *"must be a positive integer"* ]]
-  [ ! -e "$BATS_LOG" ]
-}
-
-@test "missing job override fails before BATS" {
-  run sessions test --jobs
-  [ "$status" -eq 2 ]
-  [[ "$output" == *"--jobs requires a positive integer"* ]]
-  [ ! -e "$BATS_LOG" ]
-}
-
-@test "filter values that resemble parallel flags remain filter values" {
-  run sessions test --filter --jobs copy
-  [ "$status" -eq 0 ]
-  [[ "$output" == *"4 jobs across files"* ]]
-  [ "$(logged_arguments)" = "$(printf '%s\n' \
-    --print-output-on-failure \
-    --no-parallelize-within-files \
-    --filter \
-    --jobs \
-    "$REPO_DIR/test/copy.bats")" ]
-}
-
-@test "filter values that match suite names are not resolved as targets" {
-  run sessions test --filter copy test-task
-  [ "$status" -eq 0 ]
-  [ "$(logged_arguments)" = "$(printf '%s\n' \
-    --print-output-on-failure \
-    --no-parallelize-within-files \
-    --filter \
-    copy \
-    "$REPO_DIR/test/test-task.bats")" ]
-}
-
-@test "canonical task runs separate BATS files concurrently" {
-  probe_dir="$BATS_TEST_TMPDIR/parallel-probe"
-  barrier_dir="$BATS_TEST_TMPDIR/barrier"
-  mkdir -p "$probe_dir" "$barrier_dir"
-
-  test_keyword='@test'
-  {
-    printf '%s\n' '#!/usr/bin/env bats'
-    printf '%s\n' "$test_keyword \"first worker observes second worker\" {"
-    cat <<'BATS'
-  touch "$PROBE_DIR/one"
+  for side in one two; do
+    other=one
+    [ "$side" = one ] && other=two
+    cat > "$probe_dir/$side.bats" <<BATS
+#!/usr/bin/env bats
+$test_keyword "$side worker observes $other worker" {
+  touch "\$PROBE_DIR/$side"
   for _ in {1..50}; do
-    [ ! -e "$PROBE_DIR/two" ] || return 0
+    [ ! -e "\$PROBE_DIR/$other" ] || return 0
     sleep 0.05
   done
   false
 }
 BATS
-  } > "$probe_dir/one.bats"
-
-  {
-    printf '%s\n' '#!/usr/bin/env bats'
-    printf '%s\n' "$test_keyword \"second worker observes first worker\" {"
-    cat <<'BATS'
-  touch "$PROBE_DIR/two"
-  for _ in {1..50}; do
-    [ ! -e "$PROBE_DIR/one" ] || return 0
-    sleep 0.05
   done
-  false
-}
-BATS
-  } > "$probe_dir/two.bats"
 
-  export PROBE_DIR="$barrier_dir"
-  unset BATS_COMMAND RUSH_COMMAND
   run sessions test "$probe_dir"
 
   [ "$status" -eq 0 ]
-  [[ "$output" == *"jobs across files"* ]]
+}
+
+@test "public Sessions test path keeps tests within one BATS file serial" {
+  local target="$BATS_TEST_TMPDIR/within-file.bats"
+  export PROBE_DIR="$BATS_TEST_TMPDIR/within-file-barrier"
+  mkdir -p "$PROBE_DIR"
+  local test_keyword='@test'
+
+  cat > "$target" <<BATS
+#!/usr/bin/env bats
+$test_keyword "first test runs alone" {
+  touch "\$PROBE_DIR/one"
+  sleep 0.2
+  [ ! -e "\$PROBE_DIR/two" ]
+  rm "\$PROBE_DIR/one"
+}
+$test_keyword "second test runs alone" {
+  touch "\$PROBE_DIR/two"
+  sleep 0.2
+  [ ! -e "\$PROBE_DIR/one" ]
+  rm "\$PROBE_DIR/two"
+}
+BATS
+
+  run sessions test "$target"
+
+  [ "$status" -eq 0 ]
 }

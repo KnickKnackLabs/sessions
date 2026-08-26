@@ -64,9 +64,10 @@ names, or `mktemp`. Do not add fixed shared files, ports, services, or repositor
 mutations without either isolating them or deliberately retaining a serial
 boundary.
 
-The public `.mise/tasks/test` owns argument translation, runner selection,
-failure behavior, and help metadata. `test/test-task.bats` exercises that public
-Sessions wrapper while replacing BATS and Rush with isolated test doubles.
+The public `.mise/tasks/test` sets repository policy and forwards arguments to
+BATS. BATS owns default-target selection, option parsing, path handling, runner
+selection, and validation. `test/test-task.bats` exercises the public Sessions
+test path with real BATS behavior.
 
 ## Validation
 
