@@ -29,6 +29,7 @@ teardown() { teardown_test_sessions; }
   header=$(head -1 "$new_file")
   echo "$header" | jq -e '.type == "session"'
   echo "$header" | jq -e '.version == 3'
+  echo "$header" | jq -e '.segmentTrackingVersion == 1'
   echo "$header" | jq -e '.id' | grep -q "$new_id"
 }
 
