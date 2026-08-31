@@ -203,7 +203,7 @@ harness_pi_header_entry() {
     --arg cwd "$cwd_abs"
   )
   # shellcheck disable=SC2016  # jq expression: $id, $ts, $cwd are jq variables bound by --arg, not bash expansions
-  local expr='{type: "session", version: 3, id: $id, timestamp: $ts, cwd: $cwd}'
+  local expr='{type: "session", version: 3, id: $id, timestamp: $ts, cwd: $cwd, segmentTrackingVersion: 1}'
 
   if [ -n "$name" ]; then
     args+=(--arg name "$name")
