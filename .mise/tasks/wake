@@ -110,15 +110,6 @@ if [ "$PROJECT_TRUST" != "inherit" ]; then
   harness_call "$HARNESS_NAME" project_trust_flag "$PROJECT_TRUST" >/dev/null
 fi
 
-if [ "$HEADLESS" != "true" ] && [ "$HARNESS_NAME" != "pi" ]; then
-  if [ -z "$MESSAGE" ]; then
-    echo "sessions: '$HARNESS_NAME' harness does not support interactive no-message wake yet" >&2
-  else
-    echo "sessions: '$HARNESS_NAME' harness does not support interactive wake with --message yet" >&2
-  fi
-  exit "$HARNESS_UNSUPPORTED_EXIT"
-fi
-
 FULL_SESSION_ID=$(head -1 "$SESSION_FILE" | jq -r '.id // empty')
 if [ -z "$FULL_SESSION_ID" ]; then
   FULL_SESSION_ID="$SESSION_ID"
@@ -205,7 +196,12 @@ if [ -n "$CONTEXT" ]; then
   LAST_ID="$WAKE_ID"
   MSG_ID=$(uuidgen | tr '[:upper:]' '[:lower:]' | cut -c1-8)
 
-  harness_call "$HARNESS_NAME" user_message_entry "$MSG_ID" "$LAST_ID" "$NOW_ISO" "$CONTEXT" >> "$SESSION_FILE"
+  # Built before the append, not piped into it: the adapter may read the
+  # session file to build the entry (claude needs the session id and cwd
+  # from the header), and reading a file inside its own append is both
+  # fragile and a shellcheck SC2094 violation.
+  CONTEXT_ENTRY=$(harness_call "$HARNESS_NAME" user_message_entry "$MSG_ID" "$LAST_ID" "$NOW_ISO" "$CONTEXT" "$SESSION_FILE")
+  printf '%s\n' "$CONTEXT_ENTRY" >> "$SESSION_FILE"
 fi
 
 # --- Resolve working directory from session ---

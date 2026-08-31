@@ -466,22 +466,33 @@ STUB
   [ "$(wc -l < "$src_file" | tr -d ' ')" = "$before" ]
 }
 
-@test "wake rejects unsupported non-default project trust before recording wake" {
+@test "wake consults the harness about a non-default project trust before recording wake" {
+  # Until sessions#50 step 4 this asserted that claude rejected every
+  # non-default policy. Claude now maps them (approve is native, deny is
+  # --safe-mode), so the assertion here is the other half of the same
+  # contract: wake asks the adapter first, and a policy the adapter
+  # accepts is recorded rather than refused. The ordering guarantee for
+  # a policy that is *not* accepted stays covered by the invalid-policy
+  # test above, which still rejects before touching the file.
   local src_file
   src_file=$(find "$PROJECT_DIR" -name "*${SESSION_1}.jsonl")
   echo '{"type":"harness","id":"h-claude","parentId":"u4","timestamp":"2026-03-14T10:31:00.000Z","name":"claude"}' >> "$src_file"
   local before
   before=$(wc -l < "$src_file" | tr -d ' ')
 
-  run sessions wake "$SESSION_1" \
-    --headless \
-    --background \
-    --model "openai-codex/gpt-5.5" \
+  local stub_dir="$BATS_TEST_TMPDIR/stub-claude-trust"
+  stub_claude_capture_argv_cwd \
+    "$stub_dir" \
+    "$BATS_TEST_TMPDIR/claude-argv-trust" \
+    "$BATS_TEST_TMPDIR/claude-cwd-trust"
+
+  PATH="$stub_dir:$PATH" run sessions wake "$SESSION_1" \
+    --model "anthropic/claude-opus-5" \
     --message "review" \
-    --project-trust approve
-  [ "$status" -eq 10 ]
-  echo "$output" | grep -q -- "claude.*does not support.*project_trust"
-  [ "$(wc -l < "$src_file" | tr -d ' ')" = "$before" ]
+    --project-trust deny
+  [ "$status" -eq 0 ]
+  grep -q -- "--safe-mode" "$BATS_TEST_TMPDIR/claude-argv-trust"
+  [ "$(wc -l < "$src_file" | tr -d ' ')" -gt "$before" ]
 }
 
 @test "wake forwards session cwd to sessions run" {
@@ -616,34 +627,49 @@ STUB
   [ "$after" = "$before" ]
 }
 
-@test "wake interactive without --message rejects unsupported harness before recording wake" {
+@test "wake interactive without --message launches a claude session" {
+  # sessions#50 step 4: interactive wake is no longer pi-only. The
+  # harness gate this test used to assert is gone; what remains worth
+  # guarding is that a no-message interactive wake reaches the harness
+  # with no synthetic prompt appended.
   src_file=$(find "$PROJECT_DIR" -name "*${SESSION_1}.jsonl")
-  local before
-  before=$(wc -l < "$src_file" | tr -d ' ')
   echo '{"type":"harness","id":"h-claude","parentId":"u4","timestamp":"2026-03-14T10:31:00.000Z","name":"claude"}' >> "$src_file"
 
-  run sessions wake "$SESSION_1" --background --model "openai-codex/gpt-5.5"
-  [ "$status" -eq 10 ]
-  echo "$output" | grep -q -- "claude.*does not support interactive no-message wake"
+  local stub_dir="$BATS_TEST_TMPDIR/stub-claude-nomsg"
+  local argv_capture="$BATS_TEST_TMPDIR/claude-argv-nomsg"
+  stub_claude_capture_argv_cwd "$stub_dir" "$argv_capture" "$BATS_TEST_TMPDIR/claude-cwd-nomsg"
 
-  local after
-  after=$(wc -l < "$src_file" | tr -d ' ')
-  [ "$after" = "$((before + 1))" ]
+  PATH="$stub_dir:$PATH" run sessions wake "$SESSION_1" --model "anthropic/claude-opus-5"
+  [ "$status" -eq 0 ]
+
+  grep -q -- "--resume" "$argv_capture"
+  # No message means no trailing `--` prompt guard and no prompt text.
+  ! grep -qx -- "--" "$argv_capture"
 }
 
-@test "wake interactive with --message rejects unsupported harness before recording wake" {
+@test "wake interactive with --message passes the prompt to claude" {
+  # Companion to the no-message case above: step 4 replaced the harness
+  # gate, so the guard is now that the initial prompt survives the trip
+  # through wake and run into the harness argv.
   src_file=$(find "$PROJECT_DIR" -name "*${SESSION_1}.jsonl")
   local before
   before=$(wc -l < "$src_file" | tr -d ' ')
   echo '{"type":"harness","id":"h-claude","parentId":"u4","timestamp":"2026-03-14T10:31:00.000Z","name":"claude"}' >> "$src_file"
 
-  run sessions wake "$SESSION_1" --background --model "openai-codex/gpt-5.5" --message "stay attached"
-  [ "$status" -eq 10 ]
-  echo "$output" | grep -q -- "claude.*does not support interactive wake with --message"
+  local stub_dir="$BATS_TEST_TMPDIR/stub-claude-msg"
+  local argv_capture="$BATS_TEST_TMPDIR/claude-argv-msg"
+  stub_claude_capture_argv_cwd "$stub_dir" "$argv_capture" "$BATS_TEST_TMPDIR/claude-cwd-msg"
 
-  local after
-  after=$(wc -l < "$src_file" | tr -d ' ')
-  [ "$after" = "$((before + 1))" ]
+  PATH="$stub_dir:$PATH" run sessions wake "$SESSION_1" \
+    --model "anthropic/claude-opus-5" \
+    --message "stay attached"
+  [ "$status" -eq 0 ]
+
+  grep -qx -- "stay attached" "$argv_capture"
+  grep -qx -- "--" "$argv_capture"
+
+  # The wake event is recorded on the way through.
+  [ "$(wc -l < "$src_file" | tr -d ' ')" -gt "$((before + 1))" ]
 }
 
 @test "wake interactive without --message records no synthetic message" {

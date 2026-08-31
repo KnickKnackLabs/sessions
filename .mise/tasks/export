@@ -15,7 +15,13 @@ import sys
 from datetime import datetime, timezone
 
 sys.path.insert(0, os.environ["MISE_CONFIG_ROOT"] + "/lib")
+import harness
 import parse
+
+# A claude session resolves but its entry normalization is still
+# UNSUPPORTED; report that as the documented clean error rather than
+# a traceback.
+harness.install_unsupported_excepthook()
 
 session_id = os.environ.get("usage_session_id", "")
 if not session_id:
