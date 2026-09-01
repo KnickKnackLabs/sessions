@@ -28,6 +28,65 @@ assert rows[0]['total_entries'] > 0
 "
 }
 
+@test "query projects managed process lifecycle and live status" {
+  local session_file="${PROJECT_DIR}2026-03-14T10-00-00-000Z_${SESSION_1}.jsonl"
+  local live_pid="$$"
+  local live_start
+  live_start=$(PYTHONPATH="$REPO_DIR/lib" python3 -c \
+    'import processes, sys; print(processes.process_start_time_token(int(sys.argv[1])))' \
+    "$live_pid")
+  [ -n "$live_start" ]
+
+  cat >> "$session_file" <<JSONL
+{"type":"process_start","id":"process-live","timestamp":"2026-03-14T10:31:00.000Z","pid":${live_pid},"pid_start_time":"${live_start}","cwd":"/test/project","harness":"pi","model":"test-model","headless":true}
+{"type":"process_start","id":"process-exited","timestamp":"2026-03-14T10:32:00.000Z","pid":999999,"pid_start_time":"test:old","cwd":"/test/project","harness":"pi","model":"test-model","headless":false}
+{"type":"process_exit","id":"exit-old","timestamp":"2026-03-14T10:33:00.000Z","process_start_id":"process-exited","exit_code":0}
+JSONL
+
+  run sessions query "${SESSION_1:0:8}" --sql "
+select session_id, process_start_id, pid, pid_start_time, status,
+       started_at, exited_at, exit_code, cwd, harness, model, headless
+from processes
+order by started_at
+" --format json
+
+  [ "$status" -eq 0 ]
+  echo "$output" | python3 -c "
+import json, sys
+rows = json.load(sys.stdin)
+assert rows == [
+    {
+        'session_id': '${SESSION_1}',
+        'process_start_id': 'process-live',
+        'pid': ${live_pid},
+        'pid_start_time': '${live_start}',
+        'status': 'live',
+        'started_at': '2026-03-14T10:31:00.000Z',
+        'exited_at': None,
+        'exit_code': None,
+        'cwd': '/test/project',
+        'harness': 'pi',
+        'model': 'test-model',
+        'headless': 1,
+    },
+    {
+        'session_id': '${SESSION_1}',
+        'process_start_id': 'process-exited',
+        'pid': 999999,
+        'pid_start_time': 'test:old',
+        'status': 'exited',
+        'started_at': '2026-03-14T10:32:00.000Z',
+        'exited_at': '2026-03-14T10:33:00.000Z',
+        'exit_code': 0,
+        'cwd': '/test/project',
+        'harness': 'pi',
+        'model': 'test-model',
+        'headless': 0,
+    },
+], rows
+"
+}
+
 @test "query supports project and limit corpus scope" {
   run sessions query --project test/project --limit 2 \
     --sql "select count(*) as n from sessions" \
