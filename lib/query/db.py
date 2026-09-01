@@ -29,6 +29,7 @@ def create_schema(conn: sqlite3.Connection) -> None:
           project text,
           name text,
           slug text,
+          meta text,
           model text,
           first_timestamp text,
           last_timestamp text,
@@ -122,7 +123,7 @@ def insert_session(
 ) -> None:
     conn.execute(
         """
-        insert into sessions values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        insert into sessions values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             entry.session_id,
@@ -130,6 +131,11 @@ def insert_session(
             entry.project,
             entry.name,
             entry.slug,
+            (
+                json.dumps(entry.meta, separators=(",", ":"), sort_keys=True)
+                if entry.meta is not None
+                else None
+            ),
             entry.model,
             entry.first_timestamp,
             entry.last_timestamp,

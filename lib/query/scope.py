@@ -13,20 +13,22 @@ from .util import safe_float, safe_int
 
 
 def entry_from_session(session: parse.Session) -> ScopeEntry:
-    meta = session.metadata()
+    metadata = session.metadata()
+    session_meta = metadata.get("meta")
     adapter = harness.resolve(filepath=session.filepath, entries=session.entries)
     return ScopeEntry(
-        session_id=str(meta.get("session_id") or ""),
-        name=str(meta.get("name") or ""),
-        project=str(meta.get("project") or ""),
-        slug=str(meta.get("slug") or ""),
-        model=str(meta.get("model") or ""),
-        first_timestamp=str(meta.get("first_timestamp") or ""),
-        last_timestamp=str(meta.get("last_timestamp") or ""),
-        total_entries=safe_int(meta.get("total_entries")),
-        user_messages=safe_int(meta.get("user_messages")),
-        assistant_messages=safe_int(meta.get("assistant_messages")),
-        filepath=str(meta.get("filepath") or session.filepath),
+        session_id=str(metadata.get("session_id") or ""),
+        name=str(metadata.get("name") or ""),
+        project=str(metadata.get("project") or ""),
+        slug=str(metadata.get("slug") or ""),
+        meta=session_meta if isinstance(session_meta, dict) else None,
+        model=str(metadata.get("model") or ""),
+        first_timestamp=str(metadata.get("first_timestamp") or ""),
+        last_timestamp=str(metadata.get("last_timestamp") or ""),
+        total_entries=safe_int(metadata.get("total_entries")),
+        user_messages=safe_int(metadata.get("user_messages")),
+        assistant_messages=safe_int(metadata.get("assistant_messages")),
+        filepath=str(metadata.get("filepath") or session.filepath),
         runtime=adapter.__name__.split(".")[-1],
     )
 

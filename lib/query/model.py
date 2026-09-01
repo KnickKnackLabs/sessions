@@ -9,6 +9,7 @@ class ScopeEntry:
     name: str = ""
     project: str = ""
     slug: str = ""
+    meta: dict | None = None
     model: str = ""
     first_timestamp: str = ""
     last_timestamp: str = ""

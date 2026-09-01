@@ -14,7 +14,7 @@ only with explicit local privacy approval.
 
 Tables/views:
 
-- `sessions(session_id, runtime, project, name, model, first_timestamp,
+- `sessions(session_id, runtime, project, name, slug, meta, model, first_timestamp,
   last_timestamp, duration_ms, total_entries, user_messages,
   assistant_messages, filepath, calls, *_tokens, cost_total)`
 - `processes(session_id, process_start_id, pid, pid_start_time, status,
@@ -30,6 +30,10 @@ Tables/views:
   duration_ms, tool_call_id, tool_name, command, command_category, is_error,
   exit_status, output_bytes, output_lines, output_excerpt)`
 - `bash_calls` view over `tool_pairs where tool_name = 'bash'`
+
+`sessions.meta` contains generic session-header metadata as JSON, or `NULL` when
+none exists. Use SQLite JSON functions such as `json_extract(meta, '$.agent.name')`
+to query caller-defined metadata without baking those conventions into Sessions.
 
 Examples:
 
