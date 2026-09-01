@@ -28,6 +28,41 @@ assert rows[0]['total_entries'] > 0
 "
 }
 
+@test "query projects generic session metadata as JSON" {
+  run sessions query --project test/project --limit 10 --sql "
+select session_id,
+       meta is null as meta_is_null,
+       json_valid(meta) as meta_is_valid,
+       json_extract(meta, '$.agent.name') as agent_name,
+       json_extract(meta, '$.purpose') as purpose
+from sessions
+where session_id in ('${SESSION_1}', '${SESSION_3}')
+order by session_id
+" --format json
+
+  [ "$status" -eq 0 ]
+  echo "$output" | python3 -c "
+import json, sys
+rows = json.load(sys.stdin)
+assert rows == [
+    {
+        'session_id': '${SESSION_3}',
+        'meta_is_null': 0,
+        'meta_is_valid': 1,
+        'agent_name': 'ikma',
+        'purpose': 'scout-report',
+    },
+    {
+        'session_id': '${SESSION_1}',
+        'meta_is_null': 1,
+        'meta_is_valid': None,
+        'agent_name': None,
+        'purpose': None,
+    },
+], rows
+"
+}
+
 @test "query projects managed process lifecycle and live status" {
   local session_file="${PROJECT_DIR}2026-03-14T10-00-00-000Z_${SESSION_1}.jsonl"
   local live_pid="$$"
