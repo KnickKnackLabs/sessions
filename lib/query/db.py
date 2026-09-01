@@ -6,6 +6,8 @@ import sqlite3
 from pathlib import Path
 
 from .model import ScopeEntry, ToolCallRecord, ToolResultRecord, UsageTotals
+from .process_projection import create_schema as create_process_schema
+from .process_projection import project_processes
 from .scope import scope_entries
 from .util import (
     collect_text_blocks,
@@ -112,6 +114,7 @@ def create_schema(conn: sqlite3.Connection) -> None:
           select * from tool_pairs where tool_name = 'bash';
         """
     )
+    create_process_schema(conn)
 
 
 def insert_session(
@@ -340,4 +343,5 @@ def build_db(args: argparse.Namespace) -> sqlite3.Connection:
                 max_output_chars=args.max_output_chars,
                 max_message_chars=args.max_message_chars,
             )
+        project_processes(conn, entries)
     return conn

@@ -17,6 +17,8 @@ Tables/views:
 - `sessions(session_id, runtime, project, name, model, first_timestamp,
   last_timestamp, duration_ms, total_entries, user_messages,
   assistant_messages, filepath, calls, *_tokens, cost_total)`
+- `processes(session_id, process_start_id, pid, pid_start_time, status,
+  started_at, exited_at, exit_code, cwd, harness, model, headless)`
 - `events(session_id, seq, timestamp, type, role)`
 - `messages(session_id, seq, timestamp, role, text_chars, text_excerpt,
   has_usage)`
