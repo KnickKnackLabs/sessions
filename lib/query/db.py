@@ -47,14 +47,19 @@ def create_schema(conn: sqlite3.Connection) -> None:
           cost_total real
         );
 
-        create table events (
+        create table entries (
           session_id text,
           seq integer,
+          entry_id text,
+          parent_id text,
           timestamp text,
           type text,
           role text,
           primary key (session_id, seq)
         );
+
+        create view events as
+          select session_id, seq, timestamp, type, role from entries;
 
         create table messages (
           session_id text,
@@ -188,16 +193,30 @@ def ingest_session(
                 obj = json.loads(line)
             except json.JSONDecodeError:
                 continue
+            entry_id = obj.get("id")
+            if not isinstance(entry_id, str) or not entry_id:
+                entry_id = None
+            parent_id = obj.get("parentId")
+            if not isinstance(parent_id, str) or not parent_id:
+                parent_id = None
             timestamp = str(obj.get("timestamp") or "")
-            event_type = str(obj.get("type") or "")
+            entry_type = str(obj.get("type") or "")
             message = obj.get("message") if isinstance(obj.get("message"), dict) else {}
             role = str(message.get("role") or "") if message else ""
             conn.execute(
-                "insert into events values (?, ?, ?, ?, ?)",
-                (entry.session_id, seq, timestamp, event_type, role),
+                "insert into entries values (?, ?, ?, ?, ?, ?, ?)",
+                (
+                    entry.session_id,
+                    seq,
+                    entry_id,
+                    parent_id,
+                    timestamp,
+                    entry_type,
+                    role,
+                ),
             )
 
-            if event_type != "message":
+            if entry_type != "message":
                 continue
 
             text = collect_text_blocks(message.get("content"))
