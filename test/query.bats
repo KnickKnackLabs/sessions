@@ -44,8 +44,8 @@ assert rows[0]['total_entries'] > 0
 JSONL
 
   run sessions query "${SESSION_1:0:8}" --sql "
-select process_start_id, status, started_at, exited_at, exit_code,
-       cwd, harness, model, headless
+select session_id, process_start_id, pid, pid_start_time, status,
+       started_at, exited_at, exit_code, cwd, harness, model, headless
 from processes
 order by started_at
 " --format json
@@ -56,7 +56,10 @@ import json, sys
 rows = json.load(sys.stdin)
 assert rows == [
     {
+        'session_id': '${SESSION_1}',
         'process_start_id': 'process-live',
+        'pid': ${live_pid},
+        'pid_start_time': '${live_start}',
         'status': 'live',
         'started_at': '2026-03-14T10:31:00.000Z',
         'exited_at': None,
@@ -67,7 +70,10 @@ assert rows == [
         'headless': 1,
     },
     {
+        'session_id': '${SESSION_1}',
         'process_start_id': 'process-exited',
+        'pid': 999999,
+        'pid_start_time': 'test:old',
         'status': 'exited',
         'started_at': '2026-03-14T10:32:00.000Z',
         'exited_at': '2026-03-14T10:33:00.000Z',
