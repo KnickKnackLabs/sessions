@@ -28,6 +28,63 @@ assert rows[0]['total_entries'] > 0
 "
 }
 
+@test "query projects addressable entries and parent links" {
+  run sessions query "${SESSION_1:0:8}" --sql "
+select seq, entry_id, parent_id, type, role
+from entries
+where seq between 1 and 3
+order by seq
+" --format json
+
+  [ "$status" -eq 0 ]
+  echo "$output" | python3 -c "
+import json, sys
+rows = json.load(sys.stdin)
+assert rows == [
+    {
+        'seq': 1,
+        'entry_id': '${SESSION_1}',
+        'parent_id': None,
+        'type': 'session',
+        'role': '',
+    },
+    {
+        'seq': 2,
+        'entry_id': 'mc1',
+        'parent_id': None,
+        'type': 'model_change',
+        'role': '',
+    },
+    {
+        'seq': 3,
+        'entry_id': 'u1',
+        'parent_id': 'mc1',
+        'type': 'message',
+        'role': 'user',
+    },
+], rows
+"
+}
+
+@test "query retains the events compatibility view" {
+  run sessions query "${SESSION_1:0:8}" --sql "
+select * from events where seq = 3
+" --format json
+
+  [ "$status" -eq 0 ]
+  echo "$output" | python3 -c "
+import json, sys
+rows = json.load(sys.stdin)
+assert rows == [{
+    'session_id': '${SESSION_1}',
+    'seq': 3,
+    'timestamp': '2026-03-14T10:00:01.000Z',
+    'type': 'message',
+    'role': 'user',
+}], rows
+"
+}
+
 @test "query projects generic session metadata as JSON" {
   run sessions query --project test/project --limit 10 --sql "
 select session_id,
