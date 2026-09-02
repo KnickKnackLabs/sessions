@@ -208,12 +208,35 @@ assert data['messages'][0]['text'] == 'json wait message'
 "
 }
 
-@test "wait can watch settled turns across several sessions" {
+@test "wait can watch settled segments across several sessions" {
   file=$(session_path "$SESSION_2")
-  cursor="$BATS_TEST_TMPDIR/cursors.json"
+  cursor="$BATS_TEST_TMPDIR/segment-cursors.json"
   (
     sleep 1
     append_assistant_text "$file" "a-wait-settled" "second session settled"
+  ) &
+  appender=$!
+
+  run sessions wait "$SESSION_1" "$SESSION_2" --event segment.settled \
+    --cursor-file "$cursor" --timeout 5 --interval 0.1 --json
+  wait "$appender"
+
+  [ "$status" -eq 0 ]
+  echo "$output" | python3 -c "
+import json, sys
+data = json.load(sys.stdin)
+assert data['event'] == 'segment.settled'
+assert data['events'][0]['session_id'] == '$SESSION_2'
+assert data['events'][0]['text'] == 'second session settled'
+"
+}
+
+@test "wait turn.settled emits a complete tool-use model turn" {
+  file=$(session_path "$SESSION_2")
+  cursor="$BATS_TEST_TMPDIR/turn-cursors.json"
+  (
+    sleep 1
+    append_assistant_tool_only "$file" "a-wait-tool-turn" "printf working"
   ) &
   appender=$!
 
@@ -227,8 +250,21 @@ import json, sys
 data = json.load(sys.stdin)
 assert data['event'] == 'turn.settled'
 assert data['events'][0]['session_id'] == '$SESSION_2'
-assert data['events'][0]['text'] == 'second session settled'
+assert data['events'][0]['stop_reason'] == 'toolUse'
 "
+}
+
+@test "settled-event cursors cannot cross turn and segment semantics" {
+  cursor="$BATS_TEST_TMPDIR/scoped-cursors.json"
+
+  run sessions wait "$SESSION_1" --event segment.settled \
+    --cursor-file "$cursor" --timeout 0.1 --interval 0.05 --json
+  [ "$status" -eq 124 ]
+
+  run sessions wait "$SESSION_1" --event turn.settled \
+    --cursor-file "$cursor" --timeout 0.1 --interval 0.05 --json
+  [ "$status" -ne 0 ]
+  echo "$output" | grep -q "cursor file event is 'segment.settled', expected 'turn.settled'"
 }
 
 @test "wait keeps message events single-session" {

@@ -1,10 +1,10 @@
 #!/usr/bin/env -S uv run --script
 #MISE description="Wait for an event across selected session transcripts"
 #USAGE arg "[session_ids]" var=#true default="" help="Session ID prefixes or names to watch"
-#USAGE flag "--event <event>" default="message" help="Event to wait for: message or turn.settled"
+#USAGE flag "--event <event>" default="message" help="Event to wait for: message, turn.settled, or segment.settled"
 #USAGE flag "--state <state>" default="" help="Current state to wait for: idle"
 #USAGE flag "--config <path>" default="" help="JSON file containing named session watches"
-#USAGE flag "--cursor-file <path>" default="" help="Persist transcript cursors for turn.settled"
+#USAGE flag "--cursor-file <path>" default="" help="Persist event-scoped transcript cursors for settled events"
 #USAGE flag "--count <n>" default="1" help="Number of new matching messages to wait for (default: 1)"
 #USAGE flag "--timeout <seconds>" default="0" help="Maximum seconds to wait; 0 means no timeout"
 #USAGE flag "--interval <seconds>" default="1" help="Polling interval in seconds (default: 1)"
@@ -14,7 +14,8 @@
 #USAGE flag "--match <regex>" default="" help="Wait only for message events matching a regex"
 #USAGE flag "--json" default=#false help="Output as JSON"
 #USAGE example "sessions wait review/pr-50 --assistant-only --timeout 120" header="Wait for the next assistant message"
-#USAGE example "sessions wait alpha beta --event turn.settled --cursor-file cursors.json" header="Wait for a settled turn across sessions"
+#USAGE example "sessions wait alpha beta --event turn.settled --cursor-file turn-cursors.json" header="Wait for a settled model turn across sessions"
+#USAGE example "sessions wait alpha beta --event segment.settled --cursor-file segment-cursors.json" header="Wait for a settled control segment across sessions"
 # /// script
 # requires-python = ">=3.10"
 # dependencies = ["rich"]
@@ -95,7 +96,7 @@ if state:
 
     try:
         specs = load_specs(session_queries, config_raw)
-        watches = resolve_watches(specs, None)
+        watches = resolve_watches(specs, None, "segment.settled")
         result = wait_for_state(
             watches,
             state=state,
@@ -120,7 +121,7 @@ if state:
             )
     sys.exit(124 if result["event"] == "timeout" else 0)
 
-if event == "turn.settled":
+if event in {"turn.settled", "segment.settled"}:
     if (
         os.environ.get("usage_count", "1") != "1"
         or os.environ.get("usage_tools", "") == "true"
@@ -129,7 +130,7 @@ if event == "turn.settled":
         or os.environ.get("usage_match", "")
     ):
         print(
-            "Error: message filters cannot be used with --event turn.settled",
+            f"Error: message filters cannot be used with --event {event}",
             file=sys.stderr,
         )
         sys.exit(1)
@@ -140,11 +141,14 @@ if event == "turn.settled":
     raise AssertionError("wait-any returned without exiting")
 
 if event != "message":
-    print("Error: --event must be message or turn.settled", file=sys.stderr)
+    print(
+        "Error: --event must be message, turn.settled, or segment.settled",
+        file=sys.stderr,
+    )
     sys.exit(1)
 if config_raw or cursor_raw:
     print(
-        "Error: --config and --cursor-file require --event turn.settled",
+        "Error: --config and --cursor-file require a settled event",
         file=sys.stderr,
     )
     sys.exit(1)

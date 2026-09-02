@@ -1,6 +1,6 @@
 #!/usr/bin/env -S uv run --script
 # fmt: off
-#MISE description="Wait for the first settled turn across several sessions"
+#MISE description="Wait for the first settled segment across several sessions"
 #USAGE arg "[session_ids]" var=#true default="" help="Session ID prefixes or names to watch"
 #USAGE flag "--config <path>" default="" help="JSON file containing named session watches"
 #USAGE flag "--cursor-file <path>" default="" help="Persist transcript cursors across invocations"
@@ -58,10 +58,10 @@ def parse_positive_float(raw: str, name: str) -> float:
     return value
 
 
-def print_text_result(result: WaitResult) -> None:
+def print_text_result(result: WaitResult, event_name: str) -> None:
     if result.event == "timeout":
         print(
-            f"Timed out after {result.timeout_seconds:g}s waiting for settled turns "
+            f"Timed out after {result.timeout_seconds:g}s waiting for {event_name} "
             f"in {len(result.watched)} session(s)",
             file=sys.stderr,
         )
@@ -73,7 +73,7 @@ def print_text_result(result: WaitResult) -> None:
         title = Text()
         title.append(event["source"], style=STYLE_ID)
         title.append(f"  {event['session_id'][:8]}", style=STYLE_DIM)
-        title.append("  turn settled", style=STYLE_DIM)
+        title.append(f"  {result.event.replace('.', ' ')}", style=STYLE_DIM)
         if event.get("stop_reason"):
             title.append(f" ({event['stop_reason']})", style=STYLE_DIM)
         console.print()
@@ -110,12 +110,16 @@ def main() -> int:
         os.environ.get("usage_interval", "1"), "--interval"
     )
     output_json = os.environ.get("usage_json", "") == "true"
+    event_name = os.environ.get("usage_event", "segment.settled")
+    if event_name not in {"turn.settled", "segment.settled"}:
+        raise WaitAnyError(f"unsupported settled event: {event_name}")
 
     specs = load_specs(queries, config_raw)
     cursor_path = resolve_input_path(cursor_raw) if cursor_raw else None
-    watches = resolve_watches(specs, cursor_path)
+    watches = resolve_watches(specs, cursor_path, event_name)
     result = wait_for_any(
         watches,
+        event_name=event_name,
         timeout_seconds=timeout_seconds,
         interval_seconds=interval_seconds,
         cursor_path=cursor_path,
@@ -124,8 +128,8 @@ def main() -> int:
     if output_json:
         print(json.dumps(result_to_dict(result), separators=(",", ":")))
     else:
-        print_text_result(result)
-    save_cursor_state(cursor_path, watches)
+        print_text_result(result, event_name)
+    save_cursor_state(cursor_path, watches, event_name)
     return 124 if result.event == "timeout" else 0
 
 

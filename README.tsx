@@ -74,7 +74,7 @@ const lifecycle = [
   "┃ assistant  Re-ran CI; all checks are green.",
   "",
   "$ sessions wait-any review/pr-50 deploy/staging --timeout 120",
-  "review/pr-50  e96bd43a  turn settled (stop)",
+  "review/pr-50  e96bd43a  segment settled (stop)",
   "",
   "$ sessions ps",
   "  e96bd43a  ikma/den  12345  live  3m ago  openai-codex/gpt-5.5",
@@ -97,7 +97,7 @@ const stack = [
   "                   └─ pi    harness — processes message or opens interactively",
   "  sessions read             observe the transcript",
   "  sessions wait             block until new transcript messages arrive",
-  "  sessions wait-any         wait across sessions for a settled turn",
+  "  sessions wait-any         compatibility alias for settled segments",
   "  sessions ps               show live or unverified local session processes",
   "  sessions usage            inspect recorded tokens + costs",
   "  sessions wake (again)     re-enter with corrections",
@@ -399,17 +399,20 @@ sessions wait e96bd43a --timeout 120 --json`}</CodeBlock>
 
       <Paragraph>
         <Code>sessions wait --event turn.settled</Code>
-        {" watches an explicit set of transcripts and returns when any assistant turn settles without another tool call or continuation. Provider errors and empty responses are settled events too. If several sessions settle in one poll, the command returns the whole batch. "}
+        {" returns after any complete assistant model response, including a response that requests tools and continues the enclosing control segment. "}
+        <Code>sessions wait --event segment.settled</Code>
+        {" returns only when an assistant response gives control back without another tool call or continuation. Provider errors and empty responses settle both boundaries. If several sessions settle in one poll, the command returns the whole batch. "}
         <Code>sessions wait-any</Code>
-        {" remains as a compatibility command for this event."}
+        {" remains as a compatibility command for segment.settled."}
       </Paragraph>
 
-      <CodeBlock lang="bash">{`# One shared structural condition across positional selectors
-sessions wait e96bd43a 0e3330f8 --event turn.settled --timeout 120
+      <CodeBlock lang="bash">{`# Observe the next model turn during a long-running segment
+sessions wait e96bd43a 0e3330f8 --event turn.settled \\
+  --cursor-file /tmp/turn-cursors.json --timeout 120
 
-# Named watches plus durable cursors for repeated supervision loops
-sessions wait --event turn.settled --config watches.json \\
-  --cursor-file /tmp/foreman-cursors.json --timeout 3600 --json`}</CodeBlock>
+# Observe the next return-of-control boundary
+sessions wait --event segment.settled --config watches.json \\
+  --cursor-file /tmp/segment-cursors.json --timeout 3600 --json`}</CodeBlock>
 
       <Paragraph>
         <Code>sessions wait --state idle</Code>
@@ -429,7 +432,7 @@ sessions wait --event turn.settled --config watches.json \\
 
       <Paragraph>
         <Code>--cursor-file</Code>
-        {" stores only resolved session paths, harness names, byte offsets, and entry indexes. Reusing it catches settled turns that arrived after the prior invocation returned without reparsing the full transcript; without it, the command deliberately snapshots current state like "}
+        {" stores the selected event type plus resolved session paths, harness names, byte offsets, and entry indexes. Turn and segment cursors cannot be reused across event types. Legacy version 1 cursors are upgraded only for segment settlement, which preserves their original meaning. Reusing one catches matching boundaries that arrived after the prior invocation returned without reparsing the full transcript; without it, the command deliberately snapshots current state like "}
         <Code>sessions wait</Code>
         {". Event cursors advance after output, so an interrupted delivery may replay an event rather than lose it. One sequential supervision loop should own a cursor file; concurrent writers are not coordinated. Timeout exits 124; JSON mode still emits a structured timeout event for a supervising loop."}
       </Paragraph>
@@ -548,7 +551,7 @@ mise run test`}</CodeBlock>
 │   ├── list         # List + filter sessions (Rich tables)
 │   ├── read         # Windowed transcript reader
 │   ├── wait         # Wait for new transcript messages
-│   ├── wait-any     # Wait across sessions for a settled turn
+│   ├── wait-any     # Compatibility alias for settled segments
 │   ├── ps           # Live local process view
 │   ├── usage        # Recorded token/cost aggregation
 │   ├── search       # Full-text regex across transcripts
@@ -565,7 +568,7 @@ mise run test`}</CodeBlock>
 ├── lib/
 │   ├── parse.py        # JSONL parser, session model, filter engine
 │   ├── format.py       # Rich formatting helpers
-│   ├── wait_any.py     # Multi-session settled-turn polling + cursors
+│   ├── wait_any.py     # Multi-session settled-boundary polling + cursors
 │   ├── ensure-deps.sh  # First-run CLI deps self-heal
 │   ├── find.sh         # Back-compat shim → harness adapter
 │   ├── shell.sh        # Shell helpers

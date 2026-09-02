@@ -1,4 +1,4 @@
-"""Wait for structural turn boundaries across several session transcripts."""
+"""Wait for structural turn or segment boundaries across session transcripts."""
 
 from __future__ import annotations
 
@@ -43,7 +43,7 @@ class Watch:
 
 @dataclass
 class WaitResult:
-    """First observed batch of settled turns, or a timeout tick."""
+    """First observed batch of settled boundaries, or a timeout tick."""
 
     event: str
     events: list[dict]
@@ -156,36 +156,46 @@ def _initial_entries(filepath: str) -> tuple[list[dict], int]:
     return _read_complete_entries(filepath, 0)
 
 
-def _load_cursor_state(path: Path | None) -> dict:
+def _load_cursor_state(path: Path | None, event_name: str) -> dict:
     if path is None or not path.exists():
-        return {"version": 1, "sessions": {}}
+        return {"version": 2, "event": event_name, "sessions": {}}
     try:
         state = json.loads(path.read_text(encoding="utf-8"))
     except OSError as error:
         raise WaitAnyError(f"cannot read cursor file {path}: {error}") from error
     except json.JSONDecodeError as error:
         raise WaitAnyError(f"invalid cursor JSON {path}: {error}") from error
-    if (
-        not isinstance(state, dict)
-        or type(state.get("version")) is not int
-        or state["version"] != 1
-    ):
-        raise WaitAnyError("cursor file version must be 1")
+    if not isinstance(state, dict) or type(state.get("version")) is not int:
+        raise WaitAnyError("cursor file version must be 1 or 2")
+    if state["version"] == 1:
+        if event_name != "segment.settled":
+            raise WaitAnyError(
+                "cursor file version 1 represents 'segment.settled', "
+                f"expected {event_name!r}"
+            )
+        state = {**state, "version": 2, "event": "segment.settled"}
+    elif state["version"] != 2:
+        raise WaitAnyError("cursor file version must be 1 or 2")
+    if state.get("event") != event_name:
+        raise WaitAnyError(
+            f"cursor file event is {state.get('event')!r}, expected {event_name!r}"
+        )
     sessions = state.get("sessions")
     if not isinstance(sessions, dict):
         raise WaitAnyError("cursor file sessions must be an object")
     return state
 
 
-def save_cursor_state(path: Path | None, watches: list[Watch]) -> None:
-    """Atomically persist cursor metadata without transcript content."""
+def save_cursor_state(path: Path | None, watches: list[Watch], event_name: str) -> None:
+    """Atomically persist event-scoped cursor metadata without transcript content."""
     if path is None:
         return
     parent = path.parent
     if not parent.is_dir():
         raise WaitAnyError(f"cursor file parent does not exist: {parent}")
     state = {
-        "version": 1,
+        "version": 2,
+        "event": event_name,
         "sessions": {
             watch.session_id: {
                 "filepath": watch.filepath,
@@ -218,9 +228,11 @@ def save_cursor_state(path: Path | None, watches: list[Watch]) -> None:
         raise WaitAnyError(f"cannot write cursor file {path}: {error}") from error
 
 
-def resolve_watches(specs: list[WatchSpec], cursor_path: Path | None) -> list[Watch]:
-    """Resolve session selectors and restore or initialize durable cursors."""
-    state = _load_cursor_state(cursor_path)
+def resolve_watches(
+    specs: list[WatchSpec], cursor_path: Path | None, event_name: str
+) -> list[Watch]:
+    """Resolve session selectors and restore event-scoped durable cursors."""
+    state = _load_cursor_state(cursor_path, event_name)
     stored_sessions = state["sessions"]
     stored_by_path = {
         stored.get("filepath"): (session_id, stored)
@@ -297,7 +309,7 @@ def resolve_watches(specs: list[WatchSpec], cursor_path: Path | None) -> list[Wa
             )
         )
 
-    save_cursor_state(cursor_path, watches)
+    save_cursor_state(cursor_path, watches, event_name)
     return watches
 
 
@@ -312,7 +324,7 @@ def current_session_state(watch: Watch) -> dict:
         message = entry.get("message", {})
         role = message.get("role")
         if role == "assistant":
-            settled = watch.adapter.settled_turn(entry, index)
+            settled = watch.adapter.settled_segment(entry, index)
             if settled is not None:
                 transcript_state = "idle"
                 basis = {
@@ -392,7 +404,7 @@ def wait_for_state(
             time.sleep(sleep_for)
 
 
-def _poll_watch(watch: Watch) -> list[dict]:
+def _poll_watch(watch: Watch, event_name: str) -> list[dict]:
     entries, next_offset = _read_complete_entries(watch.filepath, watch.offset)
     events = []
     next_index = watch.index
@@ -404,7 +416,12 @@ def _poll_watch(watch: Watch) -> list[dict]:
             except ValueError as error:
                 raise WaitAnyError(str(error)) from error
             watch.harness_name = entry["name"]
-        event = watch.adapter.settled_turn(entry, next_index)
+        normalize = (
+            watch.adapter.settled_turn
+            if event_name == "turn.settled"
+            else watch.adapter.settled_segment
+        )
+        event = normalize(entry, next_index)
         if event is None:
             continue
         events.append(
@@ -423,11 +440,12 @@ def _poll_watch(watch: Watch) -> list[dict]:
 def wait_for_any(
     watches: list[Watch],
     *,
+    event_name: str,
     timeout_seconds: float,
     interval_seconds: float,
     cursor_path: Path | None,
 ) -> WaitResult:
-    """Return the first polling batch containing one or more settled turns."""
+    """Return the first polling batch containing settled event boundaries."""
     deadline = time.monotonic() + timeout_seconds if timeout_seconds > 0 else None
 
     while True:
@@ -435,7 +453,7 @@ def wait_for_any(
         cursors_changed = False
         for watch in watches:
             previous_offset = watch.offset
-            events.extend(_poll_watch(watch))
+            events.extend(_poll_watch(watch, event_name))
             cursors_changed = cursors_changed or watch.offset != previous_offset
 
         if events:
@@ -449,14 +467,14 @@ def wait_for_any(
             for event in events:
                 event.pop("_watch_order", None)
             return WaitResult(
-                event="turn.settled",
+                event=event_name,
                 events=events,
                 watched=[],
                 timeout_seconds=timeout_seconds,
             )
 
         if cursors_changed:
-            save_cursor_state(cursor_path, watches)
+            save_cursor_state(cursor_path, watches, event_name)
         if deadline is not None and time.monotonic() >= deadline:
             return WaitResult(
                 event="timeout",
@@ -476,7 +494,7 @@ def wait_for_any(
 
 
 def result_to_dict(result: WaitResult) -> dict:
-    if result.event == "turn.settled":
+    if result.event != "timeout":
         return {"event": result.event, "events": result.events}
     return {
         "event": result.event,
