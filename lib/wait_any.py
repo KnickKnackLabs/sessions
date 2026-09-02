@@ -12,6 +12,7 @@ from typing import Any
 
 import harness
 import parse
+import processes
 
 
 class WaitAnyError(Exception):
@@ -298,6 +299,97 @@ def resolve_watches(specs: list[WatchSpec], cursor_path: Path | None) -> list[Wa
 
     save_cursor_state(cursor_path, watches)
     return watches
+
+
+def current_session_state(watch: Watch) -> dict:
+    """Reduce transcript and managed-process evidence to a current state."""
+    entries, _offset = _initial_entries(watch.filepath)
+    transcript_state = "unknown"
+    basis = None
+    for index, entry in enumerate(entries):
+        if entry.get("type") != "message":
+            continue
+        message = entry.get("message", {})
+        role = message.get("role")
+        if role == "assistant":
+            settled = watch.adapter.settled_turn(entry, index)
+            if settled is not None:
+                transcript_state = "idle"
+                basis = {
+                    key: settled[key]
+                    for key in ("index", "timestamp", "stop_reason", "error")
+                }
+            else:
+                transcript_state = "working"
+                basis = None
+        elif role in {"user", "toolResult"}:
+            transcript_state = "working"
+            basis = None
+
+    rows = processes.session_process_rows(watch.filepath, include_all=True)
+    statuses = {row.status for row in rows}
+    if "live" in statuses:
+        process_state = "live"
+    elif "unknown" in statuses or not statuses:
+        process_state = "unknown"
+    elif statuses <= {"dead", "exited"}:
+        process_state = "exited"
+    else:
+        process_state = "unknown"
+
+    if process_state != "live":
+        state = "exited" if process_state in {"dead", "exited"} else "unknown"
+        basis = None
+    else:
+        state = transcript_state
+
+    return {
+        "source": watch.name,
+        "session_id": watch.session_id,
+        "state": state,
+        "process_state": process_state,
+        "basis": basis,
+    }
+
+
+def wait_for_state(
+    watches: list[Watch],
+    *,
+    state: str,
+    timeout_seconds: float,
+    interval_seconds: float,
+) -> dict:
+    """Return immediately for a current match, or wait for one to appear."""
+    deadline = time.monotonic() + timeout_seconds if timeout_seconds > 0 else None
+    initial = True
+    while True:
+        matches = [
+            observed
+            for watch in watches
+            if (observed := current_session_state(watch))["state"] == state
+        ]
+        if matches:
+            return {
+                "event": "state.current" if initial else "state.changed",
+                "state": state,
+                "sessions": matches,
+            }
+        initial = False
+        if deadline is not None and time.monotonic() >= deadline:
+            return {
+                "event": "timeout",
+                "state": state,
+                "timeout_seconds": timeout_seconds,
+                "watched": [
+                    {"source": watch.name, "session_id": watch.session_id}
+                    for watch in watches
+                ],
+            }
+        sleep_for = interval_seconds
+        if deadline is not None:
+            sleep_for = min(sleep_for, max(0, deadline - time.monotonic()))
+        if sleep_for > 0:
+            time.sleep(sleep_for)
 
 
 def _poll_watch(watch: Watch) -> list[dict]:

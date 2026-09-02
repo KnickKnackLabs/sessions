@@ -387,7 +387,7 @@ sessions read e96bd43a --tools             # include tool calls`}</CodeBlock>
 
       <Paragraph>
         <Code>sessions wait</Code>
-        {" snapshots the current transcript and blocks until new matching messages arrive. It is useful for supervising long-running or parallel sessions without hand-written sleep loops."}
+        {" snapshots the current transcript and blocks until a selected event arrives. The default message event preserves the original single-session behavior."}
       </Paragraph>
 
       <CodeBlock lang="bash">{`sessions wait e96bd43a                         # next non-tool message
@@ -398,16 +398,25 @@ sessions wait e96bd43a --tools                 # include tool calls/results
 sessions wait e96bd43a --timeout 120 --json`}</CodeBlock>
 
       <Paragraph>
+        <Code>sessions wait --event turn.settled</Code>
+        {" watches an explicit set of transcripts and returns when any assistant turn settles without another tool call or continuation. Provider errors and empty responses are settled events too. If several sessions settle in one poll, the command returns the whole batch. "}
         <Code>sessions wait-any</Code>
-        {" watches an explicit set of transcripts and returns when any assistant turn settles without another tool call or continuation. Provider errors and empty responses are settled events too, so supervision does not mistake them for silence. If several sessions settle in one poll, the command returns the whole batch."}
+        {" remains as a compatibility command for this event."}
       </Paragraph>
 
       <CodeBlock lang="bash">{`# One shared structural condition across positional selectors
-sessions wait-any e96bd43a 0e3330f8 --timeout 120
+sessions wait e96bd43a 0e3330f8 --event turn.settled --timeout 120
 
 # Named watches plus durable cursors for repeated supervision loops
-sessions wait-any --config watches.json \\
+sessions wait --event turn.settled --config watches.json \\
   --cursor-file /tmp/foreman-cursors.json --timeout 3600 --json`}</CodeBlock>
+
+      <Paragraph>
+        <Code>sessions wait --state idle</Code>
+        {" is level-triggered: it returns immediately when a selected live process already has a terminal assistant response as its latest activity, or waits until that becomes true. Newer user, tool-call, or tool-result activity remains working; dead processes are exited and missing liveness evidence is unknown. JSON output names whether the result was observed as current state or as a later change and cites the supporting transcript entry."}
+      </Paragraph>
+
+      <CodeBlock lang="bash">{`sessions wait e96bd43a --state idle --json`}</CodeBlock>
 
       <Paragraph>
         {"A config is a positive allowlist. It gives each session a stable source name without embedding foreman policy or transcript keywords:"}
