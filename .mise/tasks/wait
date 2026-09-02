@@ -1,23 +1,32 @@
 #!/usr/bin/env -S uv run --script
-#MISE description="Wait for new messages in a session transcript"
-#USAGE arg "<session_id>" help="Session ID (prefix match supported)"
+#MISE description="Wait for an event across selected session transcripts"
+#USAGE arg "[session_ids]" var=#true default="" help="Session ID prefixes or names to watch"
+#USAGE flag "--event <event>" default="message" help="Event to wait for: message or turn.settled"
+#USAGE flag "--state <state>" default="" help="Current state to wait for: idle"
+#USAGE flag "--config <path>" default="" help="JSON file containing named session watches"
+#USAGE flag "--cursor-file <path>" default="" help="Persist transcript cursors for turn.settled"
 #USAGE flag "--count <n>" default="1" help="Number of new matching messages to wait for (default: 1)"
 #USAGE flag "--timeout <seconds>" default="0" help="Maximum seconds to wait; 0 means no timeout"
 #USAGE flag "--interval <seconds>" default="1" help="Polling interval in seconds (default: 1)"
-#USAGE flag "--tools" default=#false help="Include tool_use/tool_result blocks (hidden by default)"
-#USAGE flag "--user-only" default=#false help="Wait only for user messages"
-#USAGE flag "--assistant-only" default=#false help="Wait only for assistant messages"
-#USAGE flag "--match <regex>" default="" help="Wait only for messages matching a regex"
+#USAGE flag "--tools" default=#false help="Include tool_use/tool_result blocks for message events"
+#USAGE flag "--user-only" default=#false help="Wait only for user message events"
+#USAGE flag "--assistant-only" default=#false help="Wait only for assistant message events"
+#USAGE flag "--match <regex>" default="" help="Wait only for message events matching a regex"
 #USAGE flag "--json" default=#false help="Output as JSON"
 #USAGE example "sessions wait review/pr-50 --assistant-only --timeout 120" header="Wait for the next assistant message"
+#USAGE example "sessions wait alpha beta --event turn.settled --cursor-file cursors.json" header="Wait for a settled turn across sessions"
 # /// script
 # requires-python = ">=3.10"
 # dependencies = ["rich"]
 # ///
 
 import json
+import math
 import os
+from pathlib import Path
 import re
+import runpy
+import shlex
 import sys
 import time
 
@@ -35,10 +44,114 @@ from format import (
 from messages import filter_text_messages, split_message
 from rich.text import Text
 
-session_id = os.environ.get("usage_session_id", "")
-if not session_id:
-    print("Usage: sessions wait <session_id>", file=sys.stderr)
+try:
+    session_queries = [
+        item
+        for item in shlex.split(os.environ.get("usage_session_ids", ""))
+        if item
+    ]
+except ValueError as error:
+    print(f"Error: invalid session selectors: {error}", file=sys.stderr)
     sys.exit(1)
+
+event = os.environ.get("usage_event", "message")
+state = os.environ.get("usage_state", "")
+config_raw = os.environ.get("usage_config", "")
+cursor_raw = os.environ.get("usage_cursor_file", "")
+
+if state:
+    if state != "idle":
+        print("Error: --state must be idle", file=sys.stderr)
+        sys.exit(1)
+    if event != "message":
+        print("Error: --state and --event are mutually exclusive", file=sys.stderr)
+        sys.exit(1)
+    if cursor_raw:
+        print("Error: --cursor-file applies to events, not current state", file=sys.stderr)
+        sys.exit(1)
+    if (
+        os.environ.get("usage_count", "1") != "1"
+        or os.environ.get("usage_tools", "") == "true"
+        or os.environ.get("usage_user_only", "") == "true"
+        or os.environ.get("usage_assistant_only", "") == "true"
+        or os.environ.get("usage_match", "")
+    ):
+        print("Error: message filters cannot be used with --state", file=sys.stderr)
+        sys.exit(1)
+    try:
+        state_timeout = float(os.environ.get("usage_timeout", "0"))
+        state_interval = float(os.environ.get("usage_interval", "1"))
+    except ValueError:
+        print("Error: timeout and interval must be numbers", file=sys.stderr)
+        sys.exit(1)
+    if not math.isfinite(state_timeout) or state_timeout < 0:
+        print("Error: --timeout must be finite and non-negative", file=sys.stderr)
+        sys.exit(1)
+    if not math.isfinite(state_interval) or state_interval <= 0:
+        print("Error: --interval must be finite and greater than 0", file=sys.stderr)
+        sys.exit(1)
+    from harness import Unsupported, exit_unsupported
+    from wait_any import WaitAnyError, load_specs, resolve_watches, wait_for_state
+
+    try:
+        specs = load_specs(session_queries, config_raw)
+        watches = resolve_watches(specs, None)
+        result = wait_for_state(
+            watches,
+            state=state,
+            timeout_seconds=state_timeout,
+            interval_seconds=state_interval,
+        )
+    except Unsupported as error:
+        exit_unsupported(error.harness, error.op)
+    except WaitAnyError as error:
+        print(f"Error: {error}", file=sys.stderr)
+        sys.exit(1)
+
+    if os.environ.get("usage_json", "") == "true":
+        print(json.dumps(result, separators=(",", ":")))
+    elif result["event"] == "timeout":
+        print(f"Timed out waiting for state {state}", file=sys.stderr)
+    else:
+        for observed in result["sessions"]:
+            print(
+                f"{observed['source']}  {observed['session_id'][:8]}  "
+                f"{state} ({result['event']})"
+            )
+    sys.exit(124 if result["event"] == "timeout" else 0)
+
+if event == "turn.settled":
+    if (
+        os.environ.get("usage_count", "1") != "1"
+        or os.environ.get("usage_tools", "") == "true"
+        or os.environ.get("usage_user_only", "") == "true"
+        or os.environ.get("usage_assistant_only", "") == "true"
+        or os.environ.get("usage_match", "")
+    ):
+        print(
+            "Error: message filters cannot be used with --event turn.settled",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+    runpy.run_path(
+        str(Path(os.environ["MISE_CONFIG_ROOT"]) / ".mise/tasks/wait-any"),
+        run_name="__main__",
+    )
+    raise AssertionError("wait-any returned without exiting")
+
+if event != "message":
+    print("Error: --event must be message or turn.settled", file=sys.stderr)
+    sys.exit(1)
+if config_raw or cursor_raw:
+    print(
+        "Error: --config and --cursor-file require --event turn.settled",
+        file=sys.stderr,
+    )
+    sys.exit(1)
+if len(session_queries) != 1:
+    print("Error: message events require exactly one session ID", file=sys.stderr)
+    sys.exit(1)
+session_id = session_queries[0]
 
 try:
     target_count = int(os.environ.get("usage_count", "1"))

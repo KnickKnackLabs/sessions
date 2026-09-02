@@ -8,7 +8,7 @@ Create sessions with structured metadata, wake agents into them,
 observe transcripts in real time, and query your history.
 
 ![lang: bash + python](https://img.shields.io/badge/lang-bash%20%2B%20python-4EAA25?style=flat&logo=gnubash&logoColor=white)
-[![tests: 347 passing](https://img.shields.io/badge/tests-347%20passing-brightgreen?style=flat)](test/)
+[![tests: 359 passing](https://img.shields.io/badge/tests-359%20passing-brightgreen?style=flat)](test/)
 ![commands: 20](https://img.shields.io/badge/commands-20-blue?style=flat)
 ![license: MIT](https://img.shields.io/badge/license-MIT-blue?style=flat)
 
@@ -207,7 +207,7 @@ sessions read e96bd43a --from -5           # last 5 messages
 sessions read e96bd43a --tools             # include tool calls
 ```
 
-`sessions wait` snapshots the current transcript and blocks until new matching messages arrive. It is useful for supervising long-running or parallel sessions without hand-written sleep loops.
+`sessions wait` snapshots the current transcript and blocks until a selected event arrives. The default message event preserves the original single-session behavior.
 
 ```bash
 sessions wait e96bd43a                         # next non-tool message
@@ -218,15 +218,21 @@ sessions wait e96bd43a --tools                 # include tool calls/results
 sessions wait e96bd43a --timeout 120 --json
 ```
 
-`sessions wait-any` watches an explicit set of transcripts and returns when any assistant turn settles without another tool call or continuation. Provider errors and empty responses are settled events too, so supervision does not mistake them for silence. If several sessions settle in one poll, the command returns the whole batch.
+`sessions wait --event turn.settled` watches an explicit set of transcripts and returns when any assistant turn settles without another tool call or continuation. Provider errors and empty responses are settled events too. If several sessions settle in one poll, the command returns the whole batch. `sessions wait-any` remains as a compatibility command for this event.
 
 ```bash
 # One shared structural condition across positional selectors
-sessions wait-any e96bd43a 0e3330f8 --timeout 120
+sessions wait e96bd43a 0e3330f8 --event turn.settled --timeout 120
 
 # Named watches plus durable cursors for repeated supervision loops
-sessions wait-any --config watches.json \
+sessions wait --event turn.settled --config watches.json \
   --cursor-file /tmp/foreman-cursors.json --timeout 3600 --json
+```
+
+`sessions wait --state idle` is level-triggered: it returns immediately when a selected live process already has a terminal assistant response as its latest activity, or waits until that becomes true. Newer user, tool-call, or tool-result activity remains working; dead processes are exited and missing liveness evidence is unknown. JSON output names whether the result was observed as current state or as a later change and cites the supporting transcript entry.
+
+```bash
+sessions wait e96bd43a --state idle --json
 ```
 
 A config is a positive allowlist. It gives each session a stable source name without embedding foreman policy or transcript keywords:
@@ -303,7 +309,7 @@ cd sessions && mise trust && mise install
 mise run test
 ```
 
-**347 tests** across 24 BATS and Python unittest suites. Shell and integration cases use [KKL BATS 1.14.0-kkl.3](https://github.com/KnickKnackLabs/bats-core). Tasks are bash scripts (session creation, wake, metadata) and Python scripts with [Rich](https://github.com/Textualize/rich) output (list, read, wait, wait-any, usage, inspect, search). The shared Python support library is 3336 lines in `lib/`.
+**359 tests** across 24 BATS and Python unittest suites. Shell and integration cases use [KKL BATS 1.14.0-kkl.3](https://github.com/KnickKnackLabs/bats-core). Tasks are bash scripts (session creation, wake, metadata) and Python scripts with [Rich](https://github.com/Textualize/rich) output (list, read, wait, wait-any, usage, inspect, search). The shared Python support library is 3545 lines in `lib/`.
 
 Python code is checked with [Ruff](https://docs.astral.sh/ruff/) via `mise run lint:python`, and CI runs the same lint/format check in addition to the BATS and Elixir suites.
 
@@ -344,7 +350,7 @@ sessions/
 │   └── harness/        # Per-harness adapters (pi, …)
 ├── queries/            # Packaged sessions query SQL presets
 └── test/
-    ├── *.bats          # 341 shell and integration tests
+    ├── *.bats          # 353 shell and integration tests
     └── *_test.py       # 6 focused Python unit tests
 ```
 
