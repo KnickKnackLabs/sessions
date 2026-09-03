@@ -1,5 +1,6 @@
 #!/usr/bin/env bats
 
+bats_require_minimum_version 1.5.0
 load helpers
 
 setup() { setup_test_sessions; }
@@ -11,6 +12,235 @@ teardown() { teardown_test_sessions; }
   [ "$status" -eq 0 ]
   echo "$output" | grep -q "# sessions query"
   echo "$output" | grep -q "bash_calls"
+}
+
+@test "query requires an explicit database and refresh boundary" {
+  db="$BATS_TEST_TMPDIR/missing.sqlite"
+  source=$(find "$PROJECT_DIR" -name "*_${SESSION_1}.jsonl")
+  source_hash=$(shasum -a 256 "$source" | awk '{print $1}')
+
+  run sessions query --refresh
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"--refresh requires --db"* ]]
+
+  run sessions query --db "$db" --sql "select count(*) from sessions"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"create it with --refresh"* ]]
+  [ ! -e "$db" ]
+
+  run sessions query "${SESSION_1:0:8}" --db "$source" --refresh \
+    --sql "select count(*) from sessions"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"Refusing to replace session source"* ]]
+  [ "$(shasum -a 256 "$source" | awk '{print $1}')" = "$source_hash" ]
+}
+
+@test "query refreshes and reuses a private database with visible freshness" {
+  caller="$BATS_TEST_TMPDIR/caller"
+  mkdir -p "$caller"
+  export SESSIONS_CALLER_PWD="$caller"
+  db="$caller/query?private.sqlite"
+  requested_db="query?private.sqlite"
+  file=$(find "$PROJECT_DIR" -name "*_${SESSION_1}.jsonl")
+
+  run --separate-stderr sessions query "${SESSION_1:0:8}" \
+    --db "$requested_db" --refresh \
+    --sql "select count(*) as entries from entries" --format json
+  [ "$status" -eq 0 ]
+  [ -f "$db" ]
+  [ ! -e "$caller/query" ]
+  echo "$output" | python3 -c 'import json, sys; assert json.load(sys.stdin)[0]["entries"] == 9'
+  python3 -c 'import os, sys; assert os.stat(sys.argv[1]).st_mode & 0o777 == 0o600' "$db"
+  [[ "$stderr" == *"database: fresh"* ]]
+  [[ "$stderr" == *"scope=selected=1"* ]]
+
+  printf '%s\n' '{"type":"custom","id":"later","parentId":"a1","timestamp":"2026-03-14T10:02:00.000Z"}' >> "$file"
+
+  run --separate-stderr sessions query --db "$requested_db" \
+    --sql "select count(*) as entries from entries" --format json
+  [ "$status" -eq 0 ]
+  echo "$output" | python3 -c 'import json, sys; assert json.load(sys.stdin)[0]["entries"] == 9'
+  [[ "$stderr" == *"database: stale"* ]]
+  [[ "$stderr" == *"changed=1"* ]]
+
+  run --separate-stderr sessions query "${SESSION_1:0:8}" \
+    --db "$requested_db" --refresh \
+    --sql "select count(*) as entries from entries" --format json
+  [ "$status" -eq 0 ]
+  echo "$output" | python3 -c 'import json, sys; assert json.load(sys.stdin)[0]["entries"] == 10'
+  [[ "$stderr" == *"database: fresh"* ]]
+
+  db_hash=$(shasum -a 256 "$db" | awk '{print $1}')
+  run sessions query --db "$requested_db" --out "$requested_db" \
+    --sql "select count(*) from sessions"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"--out must not replace the --db projection"* ]]
+  [ "$(shasum -a 256 "$db" | awk '{print $1}')" = "$db_hash" ]
+}
+
+@test "query refresh can build a reusable database without SQL" {
+  db="$BATS_TEST_TMPDIR/query.sqlite"
+
+  run --separate-stderr sessions query "${SESSION_1:0:8}" \
+    --db "$db" --refresh --text none
+
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+  [ -f "$db" ]
+  [[ "$stderr" == *"database: fresh"* ]]
+  python3 - "$db" <<'PY'
+import sqlite3
+import sys
+
+with sqlite3.connect(sys.argv[1]) as conn:
+    assert conn.execute("select count(*) from sessions").fetchone()[0] == 1
+PY
+}
+
+@test "query rejects incompatible reusable databases without a traceback" {
+  db="$BATS_TEST_TMPDIR/incompatible.sqlite"
+  python3 - "$db" <<'PY'
+import sqlite3
+import sys
+
+with sqlite3.connect(sys.argv[1]) as conn:
+    conn.execute("create table projection_meta (key text primary key, value text not null)")
+    conn.executemany("insert into projection_meta values (?, ?)", [
+        ("schema_version", "1"),
+        ("built_at", "2026-09-03T00:00:00+00:00"),
+        ("text_mode", "none"),
+        ("project", ""),
+        ("limit", "20"),
+        ("session_ids", '["aaaaaaaa"]'),
+    ])
+    conn.execute("create table projection_sources (source_key text, state_key text)")
+PY
+
+  run --separate-stderr sessions query --db "$db" --sql "select 1"
+
+  [ "$status" -ne 0 ]
+  [ -z "$output" ]
+  [[ "$stderr" == *"Not a sessions query database"* ]]
+  [[ "$stderr" != *"Traceback"* ]]
+}
+
+@test "query freshness includes corpus candidates omitted from the projection" {
+  db="$BATS_TEST_TMPDIR/corpus.sqlite"
+  candidate="$PROJECT_DIR/newest-invalid.jsonl"
+  printf '%s\n' 'not-json' > "$candidate"
+  touch "$candidate"
+
+  run --separate-stderr sessions query --project test/project --limit 2 \
+    --db "$db" --refresh --text none \
+    --sql "select count(*) as sessions, \
+                  (select count(*) from projection_sources) as candidates, \
+                  (select min(length(source_key)) from projection_sources) as key_chars, \
+                  (select min(length(state_key)) from projection_sources) as state_chars \
+           from sessions" --format json
+  [ "$status" -eq 0 ]
+  echo "$output" | python3 -c '
+import json, sys
+row = json.load(sys.stdin)[0]
+assert row["sessions"] == 2, row
+assert row["candidates"] > row["sessions"], row
+assert row["key_chars"] == 64, row
+assert row["state_chars"] == 64, row
+'
+  [[ "$stderr" == *"database: fresh"* ]]
+  [[ "$stderr" == *"scope=project=test/project,limit=2"* ]]
+
+  printf '%s\n' 'still-not-json' >> "$candidate"
+
+  run --separate-stderr sessions query --db "$db" \
+    --sql "select count(*) as sessions from sessions" --format json
+  [ "$status" -eq 0 ]
+  [[ "$stderr" == *"database: stale"* ]]
+  [[ "$stderr" == *"changed=1"* ]]
+}
+
+@test "query marks a source change during refresh as stale" {
+  db="$BATS_TEST_TMPDIR/raced.sqlite"
+  source=$(find "$PROJECT_DIR" -name "*_${SESSION_1}.jsonl")
+
+  run env PYTHONPATH="$REPO_DIR/lib" python3 - "$db" "$source" "${SESSION_1:0:8}" <<'PY'
+import sys
+from pathlib import Path
+from unittest.mock import patch
+
+from query import snapshot
+from query.cli import parse_args
+
+path = Path(sys.argv[1])
+source = Path(sys.argv[2])
+args = parse_args([sys.argv[3], "--db", str(path), "--refresh", "--text", "none"])
+original = snapshot.build_db
+
+
+def build_then_change(namespace):
+    connection = original(namespace)
+    with source.open("a") as handle:
+        handle.write('{"type":"custom","id":"during-build"}\n')
+    return connection
+
+
+with patch.object(snapshot, "build_db", side_effect=build_then_change):
+    connection = snapshot.refresh_snapshot(args, path)
+try:
+    freshness = snapshot._freshness(connection)
+finally:
+    connection.close()
+assert "database: stale" in freshness, freshness
+assert "changed=1" in freshness, freshness
+PY
+
+  [ "$status" -eq 0 ]
+}
+
+@test "query refresh failure preserves the old database and removes its temporary" {
+  db="$BATS_TEST_TMPDIR/existing.sqlite"
+  printf '%s' 'existing database' > "$db"
+
+  run env PYTHONPATH="$REPO_DIR/lib" python3 - "$db" "${SESSION_1:0:8}" <<'PY'
+import sys
+from pathlib import Path
+from unittest.mock import patch
+
+from query import snapshot
+from query.cli import parse_args
+
+path = Path(sys.argv[1])
+args = parse_args([sys.argv[2], "--db", str(path), "--refresh", "--text", "none"])
+with patch.object(snapshot.os, "replace", side_effect=OSError("injected failure")):
+    try:
+        snapshot.refresh_snapshot(args, path)
+    except OSError as exc:
+        assert str(exc) == "injected failure", exc
+    else:
+        raise AssertionError("refresh unexpectedly replaced the target")
+assert path.read_bytes() == b"existing database"
+assert list(path.parent.glob(f".{path.name}.*.tmp")) == []
+PY
+
+  [ "$status" -eq 0 ]
+}
+
+@test "query projection indexes parent and tool-call identity lookups" {
+  run sessions query "${SESSION_1:0:8}" --sql "
+select name
+from sqlite_master
+where type = 'index'
+  and name in ('entries_session_entry_id', 'tool_calls_session_call_id')
+order by name
+" --format json
+
+  [ "$status" -eq 0 ]
+  echo "$output" | python3 -c "
+import json, sys
+assert [row['name'] for row in json.load(sys.stdin)] == [
+    'entries_session_entry_id',
+    'tool_calls_session_call_id',
+]
+"
 }
 
 @test "query supports single-session prefix scope" {

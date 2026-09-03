@@ -516,6 +516,23 @@ sessions query e96bd43a --text compact \\
         <Code>--browser</Code>
         {" for a temporary local table with sticky headers and row filtering. Richer browser table controls are tracked separately so the first query surface can stay small."}
       </Paragraph>
+
+      <Paragraph>
+        {"One-off queries build a fresh ephemeral projection. For repeated analysis, explicitly build and reuse a private SQLite projection:"}
+      </Paragraph>
+
+      <CodeBlock lang="bash">{`sessions query --db /tmp/sessions.sqlite --refresh --text none \\
+  --sql 'select count(*) from sessions'
+sessions query --db /tmp/sessions.sqlite \\
+  --sql-file queries/slow-tools.sql --format grid`}</CodeBlock>
+
+      <Paragraph>
+        {"Reusable databases are created atomically with mode "}
+        <Code>0600</Code>
+        {". A refresh records opaque candidate-source fingerprints before scanning, so a source that changes during the build makes the result visibly stale without exposing paths outside the selected projection. Each reuse reports its build time, stored scope and text mode, and changed, missing, or new source files. Scope and text flags apply when building, not when reusing. Run again with "}
+        <Code>--refresh</Code>
+        {" when fresh results are required; Sessions never silently refreshes or treats a stale database as current."}
+      </Paragraph>
     </Section>
 
     <Section title="Development">

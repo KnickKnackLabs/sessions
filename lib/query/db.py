@@ -19,6 +19,8 @@ from .util import (
     redact,
 )
 
+QUERY_SCHEMA_VERSION = "1"
+
 
 def create_schema(conn: sqlite3.Connection) -> None:
     conn.executescript(
@@ -58,6 +60,9 @@ def create_schema(conn: sqlite3.Connection) -> None:
           primary key (session_id, seq)
         );
 
+        create index entries_session_entry_id
+          on entries(session_id, entry_id);
+
         create view events as
           select session_id, seq, timestamp, type, role from entries;
 
@@ -82,6 +87,9 @@ def create_schema(conn: sqlite3.Connection) -> None:
           command_category text,
           primary key (session_id, seq, tool_call_id)
         );
+
+        create index tool_calls_session_call_id
+          on tool_calls(session_id, tool_call_id);
 
         create table tool_results (
           session_id text,
@@ -357,16 +365,20 @@ def build_db(args: argparse.Namespace) -> sqlite3.Connection:
     entries, usage = scope_entries(args)
     conn = sqlite3.connect(":memory:")
     conn.row_factory = sqlite3.Row
-    create_schema(conn)
-    with conn:
-        for entry in entries:
-            ingest_session(
-                conn,
-                entry,
-                usage.get(entry.session_id, UsageTotals()),
-                text_mode=args.text,
-                max_output_chars=args.max_output_chars,
-                max_message_chars=args.max_message_chars,
-            )
-        project_processes(conn, entries)
+    try:
+        create_schema(conn)
+        with conn:
+            for entry in entries:
+                ingest_session(
+                    conn,
+                    entry,
+                    usage.get(entry.session_id, UsageTotals()),
+                    text_mode=args.text,
+                    max_output_chars=args.max_output_chars,
+                    max_message_chars=args.max_message_chars,
+                )
+            project_processes(conn, entries)
+    except BaseException:
+        conn.close()
+        raise
     return conn
