@@ -300,10 +300,10 @@ harness_claude_find_session() {
 
 # Session header entry (first line of every session file).
 #
-# Deliberately the same shape pi writes. Claude ignores it, and in
-# exchange `sessions meta`, `sessions wake`'s id/name reads and
-# name-based lookup all work against claude sessions with no
-# per-harness branching.
+# Deliberately the shape pi writes, minus pi's segment tracking, which
+# is pi-specific. Claude ignores the header, and in exchange `sessions
+# meta`, `sessions wake`'s id/name reads and name-based lookup all work
+# against claude sessions with no per-harness branching.
 #
 #   $1 session_id, $2 timestamp_iso, $3 cwd_abs, $4 name (optional),
 #   $5 meta_json (optional, "{}" or "" for none)
