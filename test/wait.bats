@@ -36,6 +36,25 @@ append_assistant_tool_only() {
 JSONL
 }
 
+append_live_process() {
+  local file="$1"
+  local token
+  token=$(PYTHONPATH="$REPO_DIR/lib" python3 -c \
+    'import processes, sys; print(processes.process_start_time_token(int(sys.argv[1])))' \
+    "$$")
+  cat >> "$file" <<JSONL
+{"type":"process_start","id":"wait-live","timestamp":"2026-03-14T10:30:00.000Z","pid":$$,"pid_start_time":"$token","cwd":"$BATS_TEST_TMPDIR","harness":"pi","model":"test","headless":false}
+JSONL
+}
+
+append_exited_process() {
+  local file="$1"
+  cat >> "$file" <<JSONL
+{"type":"process_start","id":"wait-exited","timestamp":"2026-03-14T10:31:00.000Z","pid":999999,"pid_start_time":"test:gone","cwd":"$BATS_TEST_TMPDIR","harness":"pi","model":"test","headless":false}
+{"type":"process_exit","id":"wait-exit","process_start_id":"wait-exited","timestamp":"2026-03-14T10:31:01.000Z","exit_code":0}
+JSONL
+}
+
 @test "wait returns the next appended rendered message" {
   file=$(session_path "$SESSION_1")
   (
@@ -187,4 +206,157 @@ assert data['session_id'] == '$SESSION_1'
 assert len(data['messages']) == 1
 assert data['messages'][0]['text'] == 'json wait message'
 "
+}
+
+@test "wait can watch settled segments across several sessions" {
+  file=$(session_path "$SESSION_2")
+  cursor="$BATS_TEST_TMPDIR/segment-cursors.json"
+  (
+    sleep 1
+    append_assistant_text "$file" "a-wait-settled" "second session settled"
+  ) &
+  appender=$!
+
+  run sessions wait "$SESSION_1" "$SESSION_2" --event segment.settled \
+    --cursor-file "$cursor" --timeout 5 --interval 0.1 --json
+  wait "$appender"
+
+  [ "$status" -eq 0 ]
+  echo "$output" | python3 -c "
+import json, sys
+data = json.load(sys.stdin)
+assert data['event'] == 'segment.settled'
+assert data['events'][0]['session_id'] == '$SESSION_2'
+assert data['events'][0]['text'] == 'second session settled'
+"
+}
+
+@test "wait turn.settled emits a complete tool-use model turn" {
+  file=$(session_path "$SESSION_2")
+  cursor="$BATS_TEST_TMPDIR/turn-cursors.json"
+  (
+    sleep 1
+    append_assistant_tool_only "$file" "a-wait-tool-turn" "printf working"
+  ) &
+  appender=$!
+
+  run sessions wait "$SESSION_1" "$SESSION_2" --event turn.settled \
+    --cursor-file "$cursor" --timeout 5 --interval 0.1 --json
+  wait "$appender"
+
+  [ "$status" -eq 0 ]
+  echo "$output" | python3 -c "
+import json, sys
+data = json.load(sys.stdin)
+assert data['event'] == 'turn.settled'
+assert data['events'][0]['session_id'] == '$SESSION_2'
+assert data['events'][0]['stop_reason'] == 'toolUse'
+"
+}
+
+@test "settled-event cursors cannot cross turn and segment semantics" {
+  cursor="$BATS_TEST_TMPDIR/scoped-cursors.json"
+
+  run sessions wait "$SESSION_1" --event segment.settled \
+    --cursor-file "$cursor" --timeout 0.1 --interval 0.05 --json
+  [ "$status" -eq 124 ]
+
+  run sessions wait "$SESSION_1" --event turn.settled \
+    --cursor-file "$cursor" --timeout 0.1 --interval 0.05 --json
+  [ "$status" -ne 0 ]
+  echo "$output" | grep -q "cursor file event is 'segment.settled', expected 'turn.settled'"
+}
+
+@test "wait keeps message events single-session" {
+  run sessions wait "$SESSION_1" "$SESSION_2" --timeout 1
+
+  [ "$status" -ne 0 ]
+  echo "$output" | grep -q "message events require exactly one session ID"
+}
+
+@test "wait --state idle returns immediately for a live idle session" {
+  file=$(session_path "$SESSION_2")
+  append_live_process "$file"
+
+  run sessions wait "$SESSION_2" --state idle --json
+
+  [ "$status" -eq 0 ]
+  echo "$output" | python3 -c '
+import json, sys
+result = json.load(sys.stdin)
+assert result["event"] == "state.current"
+assert result["state"] == "idle"
+observed = result["sessions"][0]
+assert observed["process_state"] == "live"
+assert observed["basis"]["stop_reason"] == "stop"
+'
+}
+
+@test "wait --state idle waits for a working session to settle" {
+  file=$(session_path "$SESSION_1")
+  append_live_process "$file"
+  (
+    sleep 0.3
+    append_assistant_text "$file" "a-wait-idle" "now idle"
+  ) &
+  appender=$!
+
+  run sessions wait "$SESSION_1" --state idle \
+    --timeout 3 --interval 0.05 --json
+  wait "$appender"
+
+  [ "$status" -eq 0 ]
+  echo "$output" | python3 -c '
+import json, sys
+result = json.load(sys.stdin)
+assert result["event"] == "state.changed"
+assert result["state"] == "idle"
+assert result["sessions"][0]["basis"]["stop_reason"] == "stop"
+'
+}
+
+@test "wait --state idle prefers a live process across lifecycle rows" {
+  file=$(session_path "$SESSION_2")
+  append_live_process "$file"
+  append_exited_process "$file"
+
+  run sessions wait "$SESSION_2" --state idle --json
+
+  [ "$status" -eq 0 ]
+  echo "$output" | python3 -c '
+import json, sys
+observed = json.load(sys.stdin)["sessions"][0]
+assert observed["state"] == "idle"
+assert observed["process_state"] == "live"
+'
+}
+
+@test "wait --state idle reports a clean missing-selector error" {
+  run sessions wait --state idle --timeout 0.1
+
+  [ "$status" -eq 1 ]
+  echo "$output" | grep -q "Error: provide at least one session ID or --config"
+  ! echo "$output" | grep -q "Traceback"
+}
+
+@test "wait --state idle reports a clean malformed-config error" {
+  config="$BATS_TEST_TMPDIR/invalid-watches.json"
+  printf '%s\n' '{not-json' > "$config"
+
+  run sessions wait --state idle --config "$config" --timeout 0.1
+
+  [ "$status" -eq 1 ]
+  echo "$output" | grep -q "Error: invalid JSON config"
+  ! echo "$output" | grep -q "Traceback"
+}
+
+@test "wait --state idle preserves unsupported harness exit semantics" {
+  file=$(session_path "$SESSION_2")
+  printf '%s\n' '{"type":"harness","name":"claude"}' >> "$file"
+
+  run sessions wait "$SESSION_2" --state idle --timeout 0.1
+
+  [ "$status" -eq 10 ]
+  echo "$output" | grep -q "sessions: 'claude' harness does not support 'session_id' yet"
+  ! echo "$output" | grep -q "Traceback"
 }

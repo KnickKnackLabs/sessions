@@ -75,6 +75,10 @@ def settled_turn(entry: dict, index: int) -> dict | None:
     raise Unsupported("settled_turn", harness="claude")
 
 
+def settled_segment(entry: dict, index: int) -> dict | None:
+    raise Unsupported("settled_segment", harness="claude")
+
+
 def usage_records(entries: list) -> list:
     raise Unsupported("usage", harness="claude")
 

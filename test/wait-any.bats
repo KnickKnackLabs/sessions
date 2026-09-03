@@ -56,7 +56,7 @@ wait_for_cursor() {
   [ -f "$cursor" ]
 }
 
-@test "wait-any snapshots past settled turns and emits compact JSON" {
+@test "wait-any snapshots past settled segments and emits compact JSON" {
   run --separate-stderr sessions wait-any "$SESSION_1" \
     --timeout 0.15 --interval 0.05 --json
 
@@ -68,7 +68,7 @@ assert json.load(sys.stdin)["event"] == "timeout"
 '
 }
 
-@test "wait-any returns the first structural settled turn" {
+@test "wait-any returns the first structural settled segment" {
   file_one=$(session_path "$SESSION_1")
   file_two=$(session_path "$SESSION_2")
   cursor="$BATS_TEST_TMPDIR/cursors.json"
@@ -107,7 +107,7 @@ assert json.load(sys.stdin)["event"] == "timeout"
   echo "$output" | python3 -c '
 import json, sys
 result = json.load(sys.stdin)
-assert result["event"] == "turn.settled"
+assert result["event"] == "segment.settled"
 assert len(result["events"]) == 1
 event = result["events"][0]
 assert event["stop_reason"] == "error"
@@ -116,7 +116,7 @@ assert event["text"] == ""
 '
 }
 
-@test "wait-any returns every settled turn observed in the winning poll" {
+@test "wait-any returns every settled segment observed in the winning poll" {
   file_one=$(session_path "$SESSION_1")
   file_two=$(session_path "$SESSION_2")
   cursor="$BATS_TEST_TMPDIR/cursors.json"
@@ -206,6 +206,65 @@ PY
   run --separate-stderr sessions wait-any --config "$config" \
     --cursor-file "$cursor" --timeout 0.15 --interval 0.05 --json
   [ "$status" -eq 124 ]
+}
+
+@test "wait-any migrates legacy cursors only to segment semantics" {
+  cursor="$BATS_TEST_TMPDIR/legacy-segment-cursors.json"
+  turn_cursor="$BATS_TEST_TMPDIR/legacy-turn-cursors.json"
+
+  run --separate-stderr sessions wait-any "$SESSION_1" \
+    --cursor-file "$cursor" --timeout 0.15 --interval 0.05 --json
+  [ "$status" -eq 124 ]
+
+  python3 - "$cursor" "$turn_cursor" <<'PY'
+import json, pathlib, shutil, sys
+path = pathlib.Path(sys.argv[1])
+state = json.loads(path.read_text())
+state["version"] = 1
+state.pop("event")
+path.write_text(json.dumps(state) + "\n")
+shutil.copyfile(path, sys.argv[2])
+PY
+  append_assistant_text "$(session_path "$SESSION_1")" \
+    "a-any-legacy" "arrived after the legacy cursor"
+
+  run sessions wait-any "$SESSION_1" --cursor-file "$cursor" \
+    --timeout 2 --interval 0.05 --json
+  [ "$status" -eq 0 ]
+  echo "$output" | python3 -c '
+import json, sys
+assert json.load(sys.stdin)["events"][0]["text"] == "arrived after the legacy cursor"
+'
+  python3 - "$cursor" <<'PY'
+import json, pathlib, sys
+state = json.loads(pathlib.Path(sys.argv[1]).read_text())
+assert state["version"] == 2
+assert state["event"] == "segment.settled"
+PY
+
+  run sessions wait "$SESSION_1" --event turn.settled \
+    --cursor-file "$turn_cursor" --timeout 0.1 --interval 0.05 --json
+  [ "$status" -ne 0 ]
+  echo "$output" | grep -q \
+    "cursor file version 1 represents 'segment.settled', expected 'turn.settled'"
+}
+
+@test "wait-any applies appended harness declarations before normalization" {
+  cursor="$BATS_TEST_TMPDIR/harness-cursors.json"
+  file=$(session_path "$SESSION_1")
+
+  run --separate-stderr sessions wait-any "$SESSION_1" \
+    --cursor-file "$cursor" --timeout 0.15 --interval 0.05 --json
+  [ "$status" -eq 124 ]
+
+  printf '%s\n' '{"type":"harness","name":"claude"}' >> "$file"
+  append_assistant_text "$file" "a-any-claude" "must use the declared adapter"
+
+  run sessions wait-any "$SESSION_1" --cursor-file "$cursor" \
+    --timeout 2 --interval 0.05 --json
+  [ "$status" -eq 10 ]
+  echo "$output" | grep -q \
+    "sessions: 'claude' harness does not support 'settled_segment' yet"
 }
 
 @test "wait-any cursor does not consume a partial JSONL entry" {

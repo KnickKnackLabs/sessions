@@ -334,6 +334,19 @@ def session_process_rows(
     return rows
 
 
+def resolve_process_liveness(rows: list[ProcessRow]) -> None:
+    """Resolve deferred process rows with one bounded PID probe."""
+    pending = [row for row in rows if row.status == "pending"]
+    pids: list[int] = []
+    for row in pending:
+        pid = _process_pid(row.start)
+        if pid is not None:
+            pids.append(pid)
+    probe = probe_process_start_times(pids)
+    for row in pending:
+        row.status = process_liveness_status(row.start, probe)
+
+
 def collect_process_rows(
     *,
     limit: int = 20,
@@ -354,15 +367,7 @@ def collect_process_rows(
         except Exception:
             continue
 
-    pending = [row for row in rows if row.status == "pending"]
-    pids: list[int] = []
-    for row in pending:
-        pid = _process_pid(row.start)
-        if pid is not None:
-            pids.append(pid)
-    probe = probe_process_start_times(pids)
-    for row in pending:
-        row.status = process_liveness_status(row.start, probe)
+    resolve_process_liveness(rows)
 
     if not include_all:
         rows = [row for row in rows if row.status in ("live", "unknown")]

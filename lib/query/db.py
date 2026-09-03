@@ -6,6 +6,8 @@ import sqlite3
 from pathlib import Path
 
 from .model import ScopeEntry, ToolCallRecord, ToolResultRecord, UsageTotals
+from .process_projection import create_schema as create_process_schema
+from .process_projection import project_processes
 from .scope import scope_entries
 from .util import (
     collect_text_blocks,
@@ -27,6 +29,7 @@ def create_schema(conn: sqlite3.Connection) -> None:
           project text,
           name text,
           slug text,
+          meta text,
           model text,
           first_timestamp text,
           last_timestamp text,
@@ -44,14 +47,19 @@ def create_schema(conn: sqlite3.Connection) -> None:
           cost_total real
         );
 
-        create table events (
+        create table entries (
           session_id text,
           seq integer,
+          entry_id text,
+          parent_id text,
           timestamp text,
           type text,
           role text,
           primary key (session_id, seq)
         );
+
+        create view events as
+          select session_id, seq, timestamp, type, role from entries;
 
         create table messages (
           session_id text,
@@ -112,6 +120,7 @@ def create_schema(conn: sqlite3.Connection) -> None:
           select * from tool_pairs where tool_name = 'bash';
         """
     )
+    create_process_schema(conn)
 
 
 def insert_session(
@@ -119,7 +128,7 @@ def insert_session(
 ) -> None:
     conn.execute(
         """
-        insert into sessions values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        insert into sessions values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             entry.session_id,
@@ -127,6 +136,11 @@ def insert_session(
             entry.project,
             entry.name,
             entry.slug,
+            (
+                json.dumps(entry.meta, separators=(",", ":"), sort_keys=True)
+                if entry.meta is not None
+                else None
+            ),
             entry.model,
             entry.first_timestamp,
             entry.last_timestamp,
@@ -179,16 +193,30 @@ def ingest_session(
                 obj = json.loads(line)
             except json.JSONDecodeError:
                 continue
+            entry_id = obj.get("id")
+            if not isinstance(entry_id, str) or not entry_id:
+                entry_id = None
+            parent_id = obj.get("parentId")
+            if not isinstance(parent_id, str) or not parent_id:
+                parent_id = None
             timestamp = str(obj.get("timestamp") or "")
-            event_type = str(obj.get("type") or "")
+            entry_type = str(obj.get("type") or "")
             message = obj.get("message") if isinstance(obj.get("message"), dict) else {}
             role = str(message.get("role") or "") if message else ""
             conn.execute(
-                "insert into events values (?, ?, ?, ?, ?)",
-                (entry.session_id, seq, timestamp, event_type, role),
+                "insert into entries values (?, ?, ?, ?, ?, ?, ?)",
+                (
+                    entry.session_id,
+                    seq,
+                    entry_id,
+                    parent_id,
+                    timestamp,
+                    entry_type,
+                    role,
+                ),
             )
 
-            if event_type != "message":
+            if entry_type != "message":
                 continue
 
             text = collect_text_blocks(message.get("content"))
@@ -340,4 +368,5 @@ def build_db(args: argparse.Namespace) -> sqlite3.Connection:
                 max_output_chars=args.max_output_chars,
                 max_message_chars=args.max_message_chars,
             )
+        project_processes(conn, entries)
     return conn

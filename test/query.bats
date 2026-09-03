@@ -28,6 +28,157 @@ assert rows[0]['total_entries'] > 0
 "
 }
 
+@test "query projects addressable entries and parent links" {
+  run sessions query "${SESSION_1:0:8}" --sql "
+select seq, entry_id, parent_id, type, role
+from entries
+where seq between 1 and 3
+order by seq
+" --format json
+
+  [ "$status" -eq 0 ]
+  echo "$output" | python3 -c "
+import json, sys
+rows = json.load(sys.stdin)
+assert rows == [
+    {
+        'seq': 1,
+        'entry_id': '${SESSION_1}',
+        'parent_id': None,
+        'type': 'session',
+        'role': '',
+    },
+    {
+        'seq': 2,
+        'entry_id': 'mc1',
+        'parent_id': None,
+        'type': 'model_change',
+        'role': '',
+    },
+    {
+        'seq': 3,
+        'entry_id': 'u1',
+        'parent_id': 'mc1',
+        'type': 'message',
+        'role': 'user',
+    },
+], rows
+"
+}
+
+@test "query retains the events compatibility view" {
+  run sessions query "${SESSION_1:0:8}" --sql "
+select * from events where seq = 3
+" --format json
+
+  [ "$status" -eq 0 ]
+  echo "$output" | python3 -c "
+import json, sys
+rows = json.load(sys.stdin)
+assert rows == [{
+    'session_id': '${SESSION_1}',
+    'seq': 3,
+    'timestamp': '2026-03-14T10:00:01.000Z',
+    'type': 'message',
+    'role': 'user',
+}], rows
+"
+}
+
+@test "query projects generic session metadata as JSON" {
+  run sessions query --project test/project --limit 10 --sql "
+select session_id,
+       meta is null as meta_is_null,
+       json_valid(meta) as meta_is_valid,
+       json_extract(meta, '$.agent.name') as agent_name,
+       json_extract(meta, '$.purpose') as purpose
+from sessions
+where session_id in ('${SESSION_1}', '${SESSION_3}')
+order by session_id
+" --format json
+
+  [ "$status" -eq 0 ]
+  echo "$output" | python3 -c "
+import json, sys
+rows = json.load(sys.stdin)
+assert rows == [
+    {
+        'session_id': '${SESSION_3}',
+        'meta_is_null': 0,
+        'meta_is_valid': 1,
+        'agent_name': 'ikma',
+        'purpose': 'scout-report',
+    },
+    {
+        'session_id': '${SESSION_1}',
+        'meta_is_null': 1,
+        'meta_is_valid': None,
+        'agent_name': None,
+        'purpose': None,
+    },
+], rows
+"
+}
+
+@test "query projects managed process lifecycle and live status" {
+  local session_file="${PROJECT_DIR}2026-03-14T10-00-00-000Z_${SESSION_1}.jsonl"
+  local live_pid="$$"
+  local live_start
+  live_start=$(PYTHONPATH="$REPO_DIR/lib" python3 -c \
+    'import processes, sys; print(processes.process_start_time_token(int(sys.argv[1])))' \
+    "$live_pid")
+  [ -n "$live_start" ]
+
+  cat >> "$session_file" <<JSONL
+{"type":"process_start","id":"process-live","timestamp":"2026-03-14T10:31:00.000Z","pid":${live_pid},"pid_start_time":"${live_start}","cwd":"/test/project","harness":"pi","model":"test-model","headless":true}
+{"type":"process_start","id":"process-exited","timestamp":"2026-03-14T10:32:00.000Z","pid":999999,"pid_start_time":"test:old","cwd":"/test/project","harness":"pi","model":"test-model","headless":false}
+{"type":"process_exit","id":"exit-old","timestamp":"2026-03-14T10:33:00.000Z","process_start_id":"process-exited","exit_code":0}
+JSONL
+
+  run sessions query "${SESSION_1:0:8}" --sql "
+select session_id, process_start_id, pid, pid_start_time, status,
+       started_at, exited_at, exit_code, cwd, harness, model, headless
+from processes
+order by started_at
+" --format json
+
+  [ "$status" -eq 0 ]
+  echo "$output" | python3 -c "
+import json, sys
+rows = json.load(sys.stdin)
+assert rows == [
+    {
+        'session_id': '${SESSION_1}',
+        'process_start_id': 'process-live',
+        'pid': ${live_pid},
+        'pid_start_time': '${live_start}',
+        'status': 'live',
+        'started_at': '2026-03-14T10:31:00.000Z',
+        'exited_at': None,
+        'exit_code': None,
+        'cwd': '/test/project',
+        'harness': 'pi',
+        'model': 'test-model',
+        'headless': 1,
+    },
+    {
+        'session_id': '${SESSION_1}',
+        'process_start_id': 'process-exited',
+        'pid': 999999,
+        'pid_start_time': 'test:old',
+        'status': 'exited',
+        'started_at': '2026-03-14T10:32:00.000Z',
+        'exited_at': '2026-03-14T10:33:00.000Z',
+        'exit_code': 0,
+        'cwd': '/test/project',
+        'harness': 'pi',
+        'model': 'test-model',
+        'headless': 0,
+    },
+], rows
+"
+}
+
 @test "query supports project and limit corpus scope" {
   run sessions query --project test/project --limit 2 \
     --sql "select count(*) as n from sessions" \
