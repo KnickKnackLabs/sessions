@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # fmt: off
-#MISE description="Query local sessions through an ephemeral SQLite projection"
+#MISE description="Query local sessions through a SQLite projection"
 #USAGE arg "[session_ids]" var=#true default="" help="Optional session ID prefixes to query"
 #USAGE flag "--project <filter>" default="" help="Project substring filter when querying a corpus"
 #USAGE flag "--limit <n>" default="20" help="Max sessions for corpus scope"
@@ -16,7 +16,10 @@
 #USAGE flag "--browser" default=#false help="Render results to temporary HTML and open in the default browser"
 #USAGE flag "--title <title>" default="sessions query" help="HTML/browser result title"
 #USAGE flag "--out <path>" default="" help="Write query output to a file"
+#USAGE flag "--db <path>" default="" help="Reuse an explicit SQLite projection"
+#USAGE flag "--refresh" default=#false help="Atomically rebuild the --db projection"
 #USAGE example "sessions query e96bd43a --sql-file queries/bash-status.sql --format grid" header="Run a packaged query"
+#USAGE example "sessions query --db /tmp/sessions.sqlite --refresh --sql 'select count(*) from sessions'" header="Build and query a reusable projection"
 # fmt: on
 
 from __future__ import annotations
@@ -62,6 +65,9 @@ def build_argv() -> list[str]:
 
     add_value(argv, "--title", env("usage_title", "sessions query"))
     add_value(argv, "--out", env("usage_out"))
+    add_value(argv, "--db", env("usage_db"))
+    if env("usage_refresh", "false") == "true":
+        argv.append("--refresh")
     return argv
 
 

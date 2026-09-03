@@ -8,7 +8,7 @@ Create sessions with structured metadata, wake agents into them,
 observe transcripts in real time, and query your history.
 
 ![lang: bash + python](https://img.shields.io/badge/lang-bash%20%2B%20python-4EAA25?style=flat&logo=gnubash&logoColor=white)
-[![tests: 363 passing](https://img.shields.io/badge/tests-363%20passing-brightgreen?style=flat)](test/)
+[![tests: 371 passing](https://img.shields.io/badge/tests-371%20passing-brightgreen?style=flat)](test/)
 ![commands: 20](https://img.shields.io/badge/commands-20-blue?style=flat)
 ![license: MIT](https://img.shields.io/badge/license-MIT-blue?style=flat)
 
@@ -302,6 +302,17 @@ sessions query e96bd43a --text compact \
 
 Large result sets can be rendered as `--format html` or opened with `--browser` for a temporary local table with sticky headers and row filtering. Richer browser table controls are tracked separately so the first query surface can stay small.
 
+One-off queries build a fresh ephemeral projection. For repeated analysis, explicitly build and reuse a private SQLite projection:
+
+```bash
+sessions query --db /tmp/sessions.sqlite --refresh --text none \
+  --sql 'select count(*) from sessions'
+sessions query --db /tmp/sessions.sqlite \
+  --sql-file queries/slow-tools.sql --format grid
+```
+
+Reusable databases are created atomically with mode `0600`. A refresh records opaque candidate-source fingerprints before scanning, so a source that changes during the build makes the result visibly stale without exposing paths outside the selected projection. Each reuse reports its build time, stored scope and text mode, and changed, missing, or new source files. Scope and text flags apply when building, not when reusing. Run again with `--refresh` when fresh results are required; Sessions never silently refreshes or treats a stale database as current.
+
 ## Development
 
 ```bash
@@ -310,7 +321,7 @@ cd sessions && mise trust && mise install
 mise run test
 ```
 
-**363 tests** across 24 BATS and Python unittest suites. Shell and integration cases use [KKL BATS 1.14.0-kkl.3](https://github.com/KnickKnackLabs/bats-core). Tasks are bash scripts (session creation, wake, metadata) and Python scripts with [Rich](https://github.com/Textualize/rich) output (list, read, wait, wait-any, usage, inspect, search). The shared Python support library is 3576 lines in `lib/`.
+**371 tests** across 24 BATS and Python unittest suites. Shell and integration cases use [KKL BATS 1.14.0-kkl.3](https://github.com/KnickKnackLabs/bats-core). Tasks are bash scripts (session creation, wake, metadata) and Python scripts with [Rich](https://github.com/Textualize/rich) output (list, read, wait, wait-any, usage, inspect, search). The shared Python support library is 3835 lines in `lib/`.
 
 Python code is checked with [Ruff](https://docs.astral.sh/ruff/) via `mise run lint:python`, and CI runs the same lint/format check in addition to the BATS and Elixir suites.
 
@@ -351,7 +362,7 @@ sessions/
 │   └── harness/        # Per-harness adapters (pi, …)
 ├── queries/            # Packaged sessions query SQL presets
 └── test/
-    ├── *.bats          # 357 shell and integration tests
+    ├── *.bats          # 365 shell and integration tests
     └── *_test.py       # 6 focused Python unit tests
 ```
 

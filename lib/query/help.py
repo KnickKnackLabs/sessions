@@ -4,8 +4,12 @@ from __future__ import annotations
 def schema_text() -> str:
     return """# sessions query
 
-Build an ephemeral SQLite projection over local session JSONL files. The JSONL
-session store remains the source of truth; no durable DB is required.
+Build a SQLite projection over local session JSONL files. The JSONL session store
+remains the source of truth; no durable DB is required. Pass `--db PATH --refresh`
+to atomically build an explicit reusable projection, then use `--db PATH` for
+later queries. Refresh can run without SQL. Reuse queries the stored
+scope and text mode, reports source drift, and never silently rebuilds; the
+default still builds a fresh ephemeral projection.
 
 Default text mode is `commands`: bash command text is redacted and queryable, but
 message text and tool output text are not inserted. Use `--text none` for fully
@@ -31,6 +35,12 @@ Tables/views:
   duration_ms, tool_call_id, tool_name, command, command_category, is_error,
   exit_status, output_bytes, output_lines, output_excerpt)`
 - `bash_calls` view over `tool_pairs where tool_name = 'bash'`
+- reusable databases also include `projection_meta` and `projection_sources`;
+  the latter records opaque candidate-source fingerprints from before the build
+
+The projection indexes `(session_id, entry_id)` and `(session_id, tool_call_id)`
+for lineage and pairing queries. Scope and text flags affect new projections,
+including `--refresh`; they do not reshape an existing `--db` projection.
 
 `sessions.meta` contains generic session-header metadata as JSON, or `NULL` when
 none exists. Use SQLite JSON functions such as `json_extract(meta, '$.agent.name')`
@@ -40,6 +50,8 @@ Examples:
 
 ```sh
 sessions query --project junior/home --limit 30 --sql-file queries/bash-status.sql --format grid
+sessions query --db /tmp/sessions.sqlite --refresh --sql 'select count(*) from sessions'
+sessions query --db /tmp/sessions.sqlite --sql-file queries/bash-status.sql --format grid
 sessions query 019ed94e --sql 'select * from bash_calls where is_error = 1 limit 20' --format grid
 sessions query --text compact --sql-file queries/bash-with-output.sql --format jsonl
 sessions query --project junior/home --limit 30 --sql-file queries/bash-status.sql --browser

@@ -5,8 +5,8 @@ import sys
 from pathlib import Path
 
 from .browser import open_html, render_html, write_html_file
-from .db import build_db
 from .help import schema_text
+from .snapshot import open_database
 from .query import rows_for_query
 from .render import render
 from .util import resolve_path
@@ -51,7 +51,7 @@ def non_negative_int(value: str) -> int:
 
 def parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Query local sessions through an ephemeral SQLite projection"
+        description="Query local sessions through a SQLite projection"
     )
     parser.add_argument(
         "session_ids", nargs="*", help="Optional session ID prefixes to query"
@@ -66,7 +66,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         "--text",
         choices=["none", "commands", "compact", "full"],
         default="commands",
-        help="Text columns to insert into the ephemeral DB",
+        help="Text columns to insert into a freshly built DB",
     )
     parser.add_argument(
         "--max-output-chars",
@@ -115,17 +115,33 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         "--title", default="sessions query", help="HTML/browser result title"
     )
     parser.add_argument("--out", default="", help="Write query output to a file")
+    parser.add_argument("--db", default="", help="Reuse an explicit SQLite projection")
+    parser.add_argument(
+        "--refresh", action="store_true", help="Atomically rebuild the --db projection"
+    )
     return parser.parse_args(argv)
 
 
 def main(argv: list[str]) -> int:
     args = parse_args(argv)
+    if args.refresh and not args.db:
+        raise SystemExit("--refresh requires --db")
+    if args.db and args.out and resolve_path(args.db) == resolve_path(args.out):
+        raise SystemExit("--out must not replace the --db projection")
+
     sql = read_sql(args)
     if not sql:
-        print(schema_text())
+        if args.refresh:
+            open_database(args).close()
+        else:
+            print(schema_text())
         return 0
-    conn = build_db(args)
-    names, rows = rows_for_query(conn, sql)
+
+    conn = open_database(args)
+    try:
+        names, rows = rows_for_query(conn, sql)
+    finally:
+        conn.close()
     output = resolve_path(args.out) if args.out else None
     if args.browser:
         html_path = write_html_file(names, rows, title=args.title, output=output)
