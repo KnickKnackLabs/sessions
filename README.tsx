@@ -473,8 +473,11 @@ sessions usage --after 2026-06-01 --json # machine-readable aggregate`}</CodeBlo
 
     <Section title="Querying session history">
       <Paragraph>
+        {"By default, "}
         <Code>sessions query</Code>
-        {" builds an ephemeral in-memory SQLite projection over local session JSONL files. JSONL remains the source of truth; no durable database is created. This is useful for ad hoc analysis across sessions, tools, messages, usage, and bash command status."}
+        {" builds a fresh ephemeral in-memory SQLite projection over local session JSONL files. JSONL remains the source of truth; a reusable database is created only when explicitly requested with "}
+        <Code>--db PATH --refresh</Code>
+        {". This is useful for ad hoc analysis across sessions, tools, messages, usage, and bash command status."}
       </Paragraph>
 
       <Paragraph>
@@ -508,6 +511,24 @@ limit 20;
 sessions query e96bd43a --text compact \\
   --sql-file queries/bash-with-output.sql \\
   --format jsonl`}</CodeBlock>
+
+      <Paragraph>
+        {"The packaged examples include broader questions discovered through real corpus use:"}
+      </Paragraph>
+
+      <List>
+        <Item><Code>queries/attribution-health.sql</Code>{" — Is agent metadata complete enough for attribution?"}</Item>
+        <Item><Code>queries/agent-activity.sql</Code>{" — Who owns the attributed sessions and activity?"}</Item>
+        <Item><Code>queries/agent-segment-density.sql</Code>{" — How dense is attributed work by active day and inferred settled segment?"}</Item>
+        <Item><Code>queries/bash-failure-recovery.sql</Code>{" — What follows a failed Bash call?"}</Item>
+        <Item><Code>queries/bash-size-risk.sql</Code>{" — Do large inline Bash commands behave differently?"}</Item>
+        <Item><Code>queries/intentional-waits.sql</Code>{" — Which slow calls look like deliberate waits or watchers?"}</Item>
+        <Item><Code>queries/tool-pair-integrity.sql</Code>{" — Where are tool calls and results unmatched?"}</Item>
+      </List>
+
+      <Paragraph>
+        {"These are starting points, not product conclusions. Each query states its scope, heuristics, and analysis choices so callers can adapt them to their corpus."}
+      </Paragraph>
 
       <Paragraph>
         {"Large result sets can be rendered as "}

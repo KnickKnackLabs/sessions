@@ -554,3 +554,28 @@ assert len(rows) == 1, rows
 assert rows[0]['command'] == 'cat ~/.config/sccache/config', rows
 "
 }
+
+@test "query bundled analysis examples execute against one projection" {
+  db="$BATS_TEST_TMPDIR/examples.sqlite"
+  run --separate-stderr sessions query "${SESSION_1:0:8}" \
+    --db "$db" --refresh --text commands
+  [ "$status" -eq 0 ]
+
+  for preset in \
+    agent-activity \
+    agent-segment-density \
+    attribution-health \
+    bash-failure-recovery \
+    bash-size-risk \
+    intentional-waits \
+    tool-pair-integrity
+  do
+    run --separate-stderr sessions query --db "$db" \
+      --sql-file "queries/$preset.sql" --format json
+    if [ "$status" -ne 0 ]; then
+      echo "$preset failed: $output $stderr" >&3
+      return 1
+    fi
+    echo "$output" | python3 -m json.tool >/dev/null
+  done
+}

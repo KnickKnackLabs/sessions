@@ -50,6 +50,13 @@ Examples:
 
 ```sh
 sessions query --project junior/home --limit 30 --sql-file queries/bash-status.sql --format grid
+sessions query --limit 10000 --sql-file queries/attribution-health.sql --format grid
+sessions query --limit 10000 --sql-file queries/agent-activity.sql --format grid
+sessions query --limit 10000 --sql-file queries/agent-segment-density.sql --browser
+sessions query --sql-file queries/bash-failure-recovery.sql --browser
+sessions query --sql-file queries/bash-size-risk.sql --format grid
+sessions query --sql-file queries/intentional-waits.sql --browser
+sessions query --sql-file queries/tool-pair-integrity.sql --format grid
 sessions query --db /tmp/sessions.sqlite --refresh --sql 'select count(*) from sessions'
 sessions query --db /tmp/sessions.sqlite --sql-file queries/bash-status.sql --format grid
 sessions query 019ed94e --sql 'select * from bash_calls where is_error = 1 limit 20' --format grid

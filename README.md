@@ -8,7 +8,7 @@ Create sessions with structured metadata, wake agents into them,
 observe transcripts in real time, and query your history.
 
 ![lang: bash + python](https://img.shields.io/badge/lang-bash%20%2B%20python-4EAA25?style=flat&logo=gnubash&logoColor=white)
-[![tests: 371 passing](https://img.shields.io/badge/tests-371%20passing-brightgreen?style=flat)](test/)
+[![tests: 372 passing](https://img.shields.io/badge/tests-372%20passing-brightgreen?style=flat)](test/)
 ![commands: 20](https://img.shields.io/badge/commands-20-blue?style=flat)
 ![license: MIT](https://img.shields.io/badge/license-MIT-blue?style=flat)
 
@@ -272,7 +272,7 @@ sessions copy e96bd43a --context "continue the review"
 
 ## Querying session history
 
-`sessions query` builds an ephemeral in-memory SQLite projection over local session JSONL files. JSONL remains the source of truth; no durable database is created. This is useful for ad hoc analysis across sessions, tools, messages, usage, and bash command status.
+By default, `sessions query` builds a fresh ephemeral in-memory SQLite projection over local session JSONL files. JSONL remains the source of truth; a reusable database is created only when explicitly requested with `--db PATH --refresh`. This is useful for ad hoc analysis across sessions, tools, messages, usage, and bash command status.
 
 Privacy defaults are conservative: the default `--text commands` mode inserts redacted bash commands, but not message text or tool output excerpts. Use `--text compact` only when you intentionally want bounded excerpts, and reserve `--text full` for explicitly scoped local analysis.
 
@@ -300,6 +300,18 @@ sessions query e96bd43a --text compact \
   --format jsonl
 ```
 
+The packaged examples include broader questions discovered through real corpus use:
+
+- `queries/attribution-health.sql` — Is agent metadata complete enough for attribution?
+- `queries/agent-activity.sql` — Who owns the attributed sessions and activity?
+- `queries/agent-segment-density.sql` — How dense is attributed work by active day and inferred settled segment?
+- `queries/bash-failure-recovery.sql` — What follows a failed Bash call?
+- `queries/bash-size-risk.sql` — Do large inline Bash commands behave differently?
+- `queries/intentional-waits.sql` — Which slow calls look like deliberate waits or watchers?
+- `queries/tool-pair-integrity.sql` — Where are tool calls and results unmatched?
+
+These are starting points, not product conclusions. Each query states its scope, heuristics, and analysis choices so callers can adapt them to their corpus.
+
 Large result sets can be rendered as `--format html` or opened with `--browser` for a temporary local table with sticky headers and row filtering. Richer browser table controls are tracked separately so the first query surface can stay small.
 
 One-off queries build a fresh ephemeral projection. For repeated analysis, explicitly build and reuse a private SQLite projection:
@@ -321,7 +333,7 @@ cd sessions && mise trust && mise install
 mise run test
 ```
 
-**371 tests** across 24 BATS and Python unittest suites. Shell and integration cases use [KKL BATS 1.14.0-kkl.3](https://github.com/KnickKnackLabs/bats-core). Tasks are bash scripts (session creation, wake, metadata) and Python scripts with [Rich](https://github.com/Textualize/rich) output (list, read, wait, wait-any, usage, inspect, search). The shared Python support library is 3835 lines in `lib/`.
+**372 tests** across 24 BATS and Python unittest suites. Shell and integration cases use [KKL BATS 1.14.0-kkl.3](https://github.com/KnickKnackLabs/bats-core). Tasks are bash scripts (session creation, wake, metadata) and Python scripts with [Rich](https://github.com/Textualize/rich) output (list, read, wait, wait-any, usage, inspect, search). The shared Python support library is 3842 lines in `lib/`.
 
 Python code is checked with [Ruff](https://docs.astral.sh/ruff/) via `mise run lint:python`, and CI runs the same lint/format check in addition to the BATS and Elixir suites.
 
@@ -362,7 +374,7 @@ sessions/
 │   └── harness/        # Per-harness adapters (pi, …)
 ├── queries/            # Packaged sessions query SQL presets
 └── test/
-    ├── *.bats          # 365 shell and integration tests
+    ├── *.bats          # 366 shell and integration tests
     └── *_test.py       # 6 focused Python unit tests
 ```
 
