@@ -35,6 +35,9 @@ sessions_sanitize_harness_path() {
 
   local installs="$data_dir/installs"
   local shims="$data_dir/shims"
+  local shim_dir_exists=false
+  [ ! -d "$shims" ] || shim_dir_exists=true
+
   local path_rest="${PATH:-}:"
   local entry new_path="" have_entry=false
 
@@ -44,6 +47,7 @@ sessions_sanitize_harness_path() {
 
     case "$entry" in
       "$installs"/*) continue ;;
+      "$shims") [ "$shim_dir_exists" = false ] || continue ;;
     esac
 
     if [ "$have_entry" = false ]; then
@@ -54,17 +58,12 @@ sessions_sanitize_harness_path() {
     fi
   done
 
-  if [ -d "$shims" ]; then
-    case ":$new_path:" in
-      *":$shims:"*) ;;
-      *)
-        if [ "$have_entry" = true ]; then
-          new_path="$shims:$new_path"
-        else
-          new_path="$shims"
-        fi
-        ;;
-    esac
+  if [ "$shim_dir_exists" = true ]; then
+    if [ "$have_entry" = true ]; then
+      new_path="$shims:$new_path"
+    else
+      new_path="$shims"
+    fi
   fi
 
   export PATH="$new_path"

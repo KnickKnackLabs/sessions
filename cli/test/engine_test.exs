@@ -153,7 +153,7 @@ defmodule Cli.EngineTest do
     try do
       with_env(
         %{
-          "PATH" => Enum.join([stale_bin, ordinary_bin], ":"),
+          "PATH" => Enum.join([stale_bin, ordinary_bin, shim_bin, shim_bin], ":"),
           "MISE_DATA_DIR" => mise_data,
           "MISE_CONFIG_ROOT" => "/stale/sessions/root",
           "MISE_TASK_NAME" => "run",
@@ -245,12 +245,19 @@ defmodule Cli.EngineTest do
     stale_codebase = Path.join([mise_data_dir, "installs", "shiv-codebase", "0.1.0", "bin"])
     fresh_codebase = Path.join([mise_data_dir, "installs", "shiv-codebase", "0.2.0", "bin"])
     mise_shims = Path.join(mise_data_dir, "shims")
-    non_mise = Path.join(System.tmp_dir!(), "sessions-non-mise-bin")
+    ordinary_a = Path.join(System.tmp_dir!(), "sessions-ordinary-a-bin")
+    ordinary_b = Path.join(System.tmp_dir!(), "sessions-ordinary-b-bin")
 
     previous_path = System.get_env("PATH")
 
     try do
-      System.put_env("PATH", Enum.join([stale_codebase, non_mise, fresh_codebase], ":"))
+      System.put_env(
+        "PATH",
+        Enum.join(
+          [stale_codebase, ordinary_a, mise_shims, ordinary_b, mise_shims, fresh_codebase],
+          ":"
+        )
+      )
 
       output =
         capture_io(fn ->
@@ -270,13 +277,15 @@ defmodule Cli.EngineTest do
         end)
 
       assert_receive {:exit_code, 0}
-      refute output =~ stale_codebase
-      refute output =~ fresh_codebase
-      assert output =~ non_mise
 
-      if File.dir?(mise_shims) do
-        assert output =~ mise_shims
-      end
+      expected_entries =
+        if File.dir?(mise_shims) do
+          [mise_shims, ordinary_a, ordinary_b]
+        else
+          [ordinary_a, mise_shims, ordinary_b, mise_shims]
+        end
+
+      assert output == "PATH=#{Enum.join(expected_entries, ":")}\n"
     after
       restore_env("PATH", previous_path)
     end
