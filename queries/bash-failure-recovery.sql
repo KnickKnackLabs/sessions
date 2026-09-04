@@ -25,7 +25,11 @@ ordered as (
     lead(exit_status) over (
       partition by session_id
       order by call_seq, tool_call_id
-    ) as next_exit_status
+    ) as next_exit_status,
+    lead(result_seq) over (
+      partition by session_id
+      order by call_seq, tool_call_id
+    ) as next_result_seq
   from bash_calls
   where command is not null
 ), failures as (
@@ -41,6 +45,7 @@ select
   sum(
     case
       when next_command = command
+       and next_result_seq is not null
        and coalesce(next_is_error, 0) = 0
        and coalesce(next_exit_status, 0) = 0
       then 1 else 0
@@ -50,6 +55,7 @@ select
   sum(
     case
       when next_command is not null
+       and next_result_seq is not null
        and coalesce(next_is_error, 0) = 0
        and coalesce(next_exit_status, 0) = 0
       then 1 else 0

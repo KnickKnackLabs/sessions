@@ -555,6 +555,31 @@ assert rows[0]['command'] == 'cat ~/.config/sccache/config', rows
 "
 }
 
+@test "bash failure recovery does not count a following call without a result as success" {
+  file=$(find "$PROJECT_DIR" -name "*_${SESSION_1}.jsonl")
+  cat >> "$file" <<'JSONL'
+{"type":"message","id":"a-failed","parentId":"u4","timestamp":"2026-03-14T10:31:00.000Z","message":{"role":"assistant","content":[{"type":"toolCall","id":"tc-failed","name":"bash","arguments":{"command":"false"}}]}}
+{"type":"message","id":"tr-failed","parentId":"a-failed","timestamp":"2026-03-14T10:31:01.000Z","message":{"role":"toolResult","toolCallId":"tc-failed","toolName":"bash","content":[{"type":"text","text":"Command exited with code 1"}],"isError":true}}
+{"type":"message","id":"a-unpaired","parentId":"tr-failed","timestamp":"2026-03-14T10:31:02.000Z","message":{"role":"assistant","content":[{"type":"toolCall","id":"tc-unpaired","name":"bash","arguments":{"command":"false"}}]}}
+JSONL
+
+  run sessions query "${SESSION_1:0:8}" \
+    --sql-file queries/bash-failure-recovery.sql --format json
+
+  [ "$status" -eq 0 ]
+  echo "$output" | python3 -c '
+import json, sys
+rows = json.load(sys.stdin)
+assert len(rows) == 1, rows
+row = rows[0]
+assert row["failures"] == 1, row
+assert row["no_later_bash"] == 0, row
+assert row["immediate_exact_retries"] == 1, row
+assert row["exact_retry_successes"] == 0, row
+assert row["next_bash_successes"] == 0, row
+'
+}
+
 @test "query bundled analysis examples execute against one projection" {
   db="$BATS_TEST_TMPDIR/examples.sqlite"
   run --separate-stderr sessions query "${SESSION_1:0:8}" \
