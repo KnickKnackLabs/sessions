@@ -409,8 +409,8 @@ assert rows == [
 "
 }
 
-@test "query supports project and limit corpus scope" {
-  run sessions query --project test/project --limit 2 \
+@test "query supports encoded project and limit corpus scope" {
+  run sessions query --project "--test-project--" --limit 2 \
     --sql "select count(*) as n from sessions" \
     --format json
   [ "$status" -eq 0 ]

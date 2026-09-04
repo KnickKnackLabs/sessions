@@ -46,6 +46,12 @@ session_file_for() {
   [ "$status" -eq 0 ]
 }
 
+@test "ps accepts an encoded project filter" {
+  run sessions ps --project "--test-project--" --all --json
+  [ "$status" -eq 0 ]
+  [ "$output" = "[]" ]
+}
+
 @test "ps --json shows live process with matching pid start time" {
   local session_file token
   session_file=$(session_file_for "$SESSION_1")

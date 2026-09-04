@@ -35,6 +35,16 @@ teardown() { teardown_test_sessions; }
   echo "$output" | python3 -m json.tool > /dev/null
 }
 
+@test "list accepts an encoded project filter" {
+  run sessions list --project "--test-project--" --json
+  [ "$status" -eq 0 ]
+  echo "$output" | python3 -c "
+import json, sys
+data = json.load(sys.stdin)
+assert any(row['session_id'] == '$SESSION_1' for row in data), data
+"
+}
+
 @test "list --json includes session metadata" {
   run sessions list --json
   [ "$status" -eq 0 ]

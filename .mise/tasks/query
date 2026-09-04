@@ -2,7 +2,7 @@
 # fmt: off
 #MISE description="Query local sessions through a SQLite projection"
 #USAGE arg "[session_ids]" var=#true default="" help="Optional session ID prefixes to query"
-#USAGE flag "--project <filter>" default="" help="Project substring filter when querying a corpus"
+#USAGE flag "--project <filter>" allow_hyphen_values=#true default="" help="Project substring filter when querying a corpus"
 #USAGE flag "--limit <n>" default="20" help="Max sessions for corpus scope"
 #USAGE flag "--text <mode>" default="commands" help="Text mode: none, commands, compact, or full"
 #USAGE flag "--max-output-chars <n>" default="4000" help="Output excerpt budget for --text compact"
@@ -34,7 +34,7 @@ from query.cli import main
 
 def add_value(argv: list[str], flag: str, value: str) -> None:
     if value:
-        argv.extend([flag, value])
+        argv.append(f"{flag}={value}")
 
 
 def env(name: str, default: str = "") -> str:
