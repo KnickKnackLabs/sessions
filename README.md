@@ -8,8 +8,8 @@ Create sessions with structured metadata, wake agents into them,
 observe transcripts in real time, and query your history.
 
 ![lang: bash + python](https://img.shields.io/badge/lang-bash%20%2B%20python-4EAA25?style=flat&logo=gnubash&logoColor=white)
-[![tests: 379 passing](https://img.shields.io/badge/tests-379%20passing-brightgreen?style=flat)](test/)
-![commands: 20](https://img.shields.io/badge/commands-20-blue?style=flat)
+[![tests: 390 passing](https://img.shields.io/badge/tests-390%20passing-brightgreen?style=flat)](test/)
+![commands: 22](https://img.shields.io/badge/commands-22-blue?style=flat)
 ![license: MIT](https://img.shields.io/badge/license-MIT-blue?style=flat)
 
 </div>
@@ -325,6 +325,18 @@ sessions query --db /tmp/sessions.sqlite \
 
 Reusable databases are created atomically with mode `0600`. A refresh records opaque candidate-source fingerprints before scanning, so a source that changes during the build makes the result visibly stale without exposing paths outside the selected projection. Each reuse reports its build time, stored scope and text mode, and changed, missing, or new source files. Scope and text flags apply when building, not when reusing. Run again with `--refresh` when fresh results are required; Sessions never silently refreshes or treats a stale database as current.
 
+## CI cache maintenance
+
+`mise run ci:cache:status` lists the exact GitHub Actions mise caches for the current Sessions source branch, including IDs, keys, timestamps, age, ref, and byte size. Use its IDs to preview a bounded invalidation:
+
+```bash
+mise run ci:cache:status
+mise run ci:cache:invalidate 7336710345
+mise run ci:cache:invalidate 7336710345 --yes
+```
+
+Invalidation is a dry run unless `--yes` is explicit. Every requested ID must belong to this repository's current ref and the `mise-v1-` cache family before any deletion begins. The mutating path deletes only those IDs and then verifies their absence; there is no all-caches mode.
+
 ## Development
 
 ```bash
@@ -333,7 +345,7 @@ cd sessions && mise trust && mise install
 mise run test
 ```
 
-**379 tests** across 24 BATS and Python unittest suites. Shell and integration cases use [KKL BATS 1.14.0-kkl.3](https://github.com/KnickKnackLabs/bats-core). Tasks are bash scripts (session creation, wake, metadata) and Python scripts with [Rich](https://github.com/Textualize/rich) output (list, read, wait, wait-any, usage, inspect, search). The shared Python support library is 3842 lines in `lib/`.
+**390 tests** across 25 BATS and Python unittest suites. Shell and integration cases use [KKL BATS 1.14.0-kkl.3](https://github.com/KnickKnackLabs/bats-core). Tasks are bash scripts (session creation, wake, metadata) and Python scripts with [Rich](https://github.com/Textualize/rich) output (list, read, wait, wait-any, usage, inspect, search). The shared Python support library is 4149 lines in `lib/`.
 
 Python code is checked with [Ruff](https://docs.astral.sh/ruff/) via `mise run lint:python`, and CI runs the same lint/format check in addition to the BATS and Elixir suites.
 
@@ -358,6 +370,7 @@ sessions/
 │   ├── copy         # Duplicate sessions for handoff
 │   ├── remove       # Remove sessions (kill shell + delete file)
 │   ├── run          # Hidden low-level executor used by wake
+│   ├── ci/cache/    # Inspect and invalidate exact mise cache IDs
 │   ├── cli/build    # Build Elixir CLI dependencies
 │   ├── lint/python  # Ruff lint + format check for Python code
 │   ├── export       # Portable bundles (JSONL + metadata)
@@ -374,7 +387,7 @@ sessions/
 │   └── harness/        # Per-harness adapters (pi, …)
 ├── queries/            # Packaged sessions query SQL presets
 └── test/
-    ├── *.bats          # 373 shell and integration tests
+    ├── *.bats          # 384 shell and integration tests
     └── *_test.py       # 6 focused Python unit tests
 ```
 

@@ -17,11 +17,20 @@ const ROOT = resolve(import.meta.dirname);
 const TASK_DIR = join(ROOT, ".mise/tasks");
 const TEST_DIR = join(ROOT, "test");
 
-// Count tasks (excluding hidden/meta)
-const taskFiles = readdirSync(TASK_DIR).filter(
-  (f) => !f.startsWith(".") && !f.startsWith("_") && f !== "test"
-);
-const taskCount = taskFiles.length;
+// Count public command leaves (excluding internal build/lint tasks).
+function taskFiles(dir: string, prefix = ""): string[] {
+  return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+    if (entry.name.startsWith(".") || entry.name.startsWith("_")) return [];
+    const relativePath = prefix ? `${prefix}/${entry.name}` : entry.name;
+    if (entry.isDirectory()) {
+      return taskFiles(join(dir, entry.name), relativePath);
+    }
+    return [relativePath];
+  });
+}
+const taskCount = taskFiles(TASK_DIR).filter(
+  (path) => !path.startsWith("cli/") && !path.startsWith("lint/")
+).length;
 
 // Count public BATS cases and focused Python unit cases.
 const batsTestFiles = readdirSync(TEST_DIR).filter((f) => f.endsWith(".bats"));
@@ -556,6 +565,25 @@ sessions query --db /tmp/sessions.sqlite \\
       </Paragraph>
     </Section>
 
+    <Section title="CI cache maintenance">
+      <Paragraph>
+        <Code>mise run ci:cache:status</Code>
+        {" lists the exact GitHub Actions mise caches for the current Sessions source branch, including IDs, keys, timestamps, age, ref, and byte size. Use its IDs to preview a bounded invalidation:"}
+      </Paragraph>
+
+      <CodeBlock lang="bash">{`mise run ci:cache:status
+mise run ci:cache:invalidate 7336710345
+mise run ci:cache:invalidate 7336710345 --yes`}</CodeBlock>
+
+      <Paragraph>
+        {"Invalidation is a dry run unless "}
+        <Code>--yes</Code>
+        {" is explicit. Every requested ID must belong to this repository's current ref and the "}
+        <Code>mise-v1-</Code>
+        {" cache family before any deletion begins. The mutating path deletes only those IDs and then verifies their absence; there is no all-caches mode."}
+      </Paragraph>
+    </Section>
+
     <Section title="Development">
       <CodeBlock lang="bash">{`git clone https://github.com/KnickKnackLabs/sessions.git
 cd sessions && mise trust && mise install
@@ -598,6 +626,7 @@ mise run test`}</CodeBlock>
 │   ├── copy         # Duplicate sessions for handoff
 │   ├── remove       # Remove sessions (kill shell + delete file)
 │   ├── run          # Hidden low-level executor used by wake
+│   ├── ci/cache/    # Inspect and invalidate exact mise cache IDs
 │   ├── cli/build    # Build Elixir CLI dependencies
 │   ├── lint/python  # Ruff lint + format check for Python code
 │   ├── export       # Portable bundles (JSONL + metadata)

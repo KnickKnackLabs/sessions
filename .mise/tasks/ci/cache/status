@@ -1,0 +1,21 @@
+#!/usr/bin/env -S uv run --script
+#MISE description="Show this branch's GitHub Actions mise caches"
+#MISE dir="{{config_root}}"
+#USAGE example "mise run ci:cache:status" header="Inspect the current source branch's mise caches"
+# /// script
+# requires-python = ">=3.10"
+# ///
+
+import os
+import sys
+from pathlib import Path
+
+sys.path.insert(0, os.path.join(os.environ["MISE_CONFIG_ROOT"], "lib"))
+
+from ci_cache import CacheError, show_status
+
+try:
+    show_status(Path(os.environ["MISE_CONFIG_ROOT"]))
+except CacheError as error:
+    print(f"Error: {error}", file=sys.stderr)
+    raise SystemExit(1) from error
