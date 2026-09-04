@@ -164,23 +164,31 @@ NOW_ISO=$(date -u +"%Y-%m-%dT%H:%M:%S.000Z")
 # Build wake meta from --meta flags
 WAKE_META="{}"
 if [ -n "$WAKE_META_RAW" ]; then
-  while IFS= read -r entry; do
-    [ -z "$entry" ] && continue
-    if [[ "$entry" == "{"* ]]; then
-      FRAGMENT=$(jq -nc "$entry" 2>&1) || {
-        echo "Error: invalid jq expression in --meta: $entry" >&2
+  WAKE_META_ENTRIES=$(printf '%s' "$WAKE_META_RAW" | xargs printf '%s\n') || {
+    WAKE_META_ENTRIES_RC=$?
+    echo "Error: failed to parse --meta arguments" >&2
+    exit "$WAKE_META_ENTRIES_RC"
+  }
+
+  if [ -n "$WAKE_META_ENTRIES" ]; then
+    while IFS= read -r entry; do
+      [ -z "$entry" ] && continue
+      if [[ "$entry" == "{"* ]]; then
+        FRAGMENT=$(jq -nc "$entry" 2>&1) || {
+          echo "Error: invalid jq expression in --meta: $entry" >&2
+          exit 1
+        }
+        WAKE_META=$(echo "$WAKE_META" "$FRAGMENT" | jq -s '.[0] * .[1]')
+      elif [[ "$entry" == *"="* ]]; then
+        KEY="${entry%%=*}"
+        VALUE="${entry#*=}"
+        WAKE_META=$(echo "$WAKE_META" | jq --arg v "$VALUE" "setpath(\"$KEY\" | split(\".\"); \$v)")
+      else
+        echo "Error: invalid --meta format '$entry'" >&2
         exit 1
-      }
-      WAKE_META=$(echo "$WAKE_META" "$FRAGMENT" | jq -s '.[0] * .[1]')
-    elif [[ "$entry" == *"="* ]]; then
-      KEY="${entry%%=*}"
-      VALUE="${entry#*=}"
-      WAKE_META=$(echo "$WAKE_META" | jq --arg v "$VALUE" "setpath(\"$KEY\" | split(\".\"); \$v)")
-    else
-      echo "Error: invalid --meta format '$entry'" >&2
-      exit 1
-    fi
-  done < <(printf '%s' "$WAKE_META_RAW" | xargs printf '%s\n')
+      fi
+    done <<< "$WAKE_META_ENTRIES"
+  fi
 fi
 
 # wake_entry args: entry_id parent_id ts shell_name agent harness headless meta_json model os_user

@@ -7,7 +7,17 @@ sessions_scrub_caller_pwd_env() {
 }
 
 sessions_scrub_task_env() {
-  local name
+  local name env_names env_names_rc
+  if env_names=$(compgen -e); then
+    :
+  else
+    env_names_rc=$?
+    if [ "$env_names_rc" -ne 1 ] || [ -n "$env_names" ]; then
+      return "$env_names_rc"
+    fi
+  fi
+  [ -n "$env_names" ] || return 0
+
   while IFS= read -r name; do
     case "$name" in
       # MISE_DATA_DIR is user-owned tool storage. Retained shims need it to
@@ -15,7 +25,7 @@ sessions_scrub_task_env() {
       MISE_DATA_DIR) ;;
       MISE_*|usage_*) unset "$name" ;;
     esac
-  done < <(compgen -e)
+  done <<< "$env_names"
 }
 
 sessions_mise_data_dir() {

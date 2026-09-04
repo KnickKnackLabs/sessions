@@ -686,6 +686,24 @@ STUB
   [ ! -e "$prompt_path" ]
 }
 
+@test "harness environment scrub propagates enumeration failure" {
+  # shellcheck source=/dev/null
+  source "$REPO_DIR/lib/harness-env.sh"
+  compgen() { return 42; }
+
+  run sessions_scrub_task_env
+  [ "$status" -eq 42 ]
+}
+
+@test "harness environment scrub accepts an empty enumeration" {
+  # shellcheck source=/dev/null
+  source "$REPO_DIR/lib/harness-env.sh"
+  compgen() { return 1; }
+
+  run sessions_scrub_task_env
+  [ "$status" -eq 0 ]
+}
+
 @test "run interactive without message scrubs stale harness environment" {
   setup_isolated_mise_data
   local mise_data="$MISE_DATA_DIR"

@@ -111,6 +111,20 @@ teardown() { teardown_test_sessions; }
   echo "$output" | grep -qi "invalid"
 }
 
+@test "new --meta propagates metadata tokenization failure without writing" {
+  stub_failing_xargs "$BATS_TEST_TMPDIR/failing-xargs"
+  local before
+  before=$(find "$PI_DIR/agent/sessions" -type f | wc -l | tr -d ' ')
+
+  run sessions new --meta "purpose=test"
+  [ "$status" -eq 42 ]
+  [[ "$output" == *"failed to parse --meta arguments"* ]]
+
+  local after
+  after=$(find "$PI_DIR/agent/sessions" -type f | wc -l | tr -d ' ')
+  [ "$after" -eq "$before" ]
+}
+
 # --- sessions new --meta (jq expressions) ---
 
 @test "new --meta accepts a jq expression" {

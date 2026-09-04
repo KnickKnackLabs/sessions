@@ -311,6 +311,15 @@ JSONL
 
 # --- Cross-adapter find aggregator (hard error surfacing) ---
 
+@test "find_session_file propagates harness registry failure" {
+  # shellcheck source=/dev/null
+  source "$REPO_DIR/lib/find.sh"
+  harness_list() { return 42; }
+
+  run find_session_file anything
+  [ "$status" -eq 42 ]
+}
+
 @test "find_session_file surfaces stderr when adapter reports within-adapter ambiguity" {
   # Two sessions sharing a name — an adapter-level ambiguity condition.
   sid1="aaaaaaaa-1111-1111-1111-111111111111"

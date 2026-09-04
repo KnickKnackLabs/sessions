@@ -38,9 +38,17 @@ if ! host_user_in_group "$OS_USER" "$HOST_AGENTS_GROUP"; then
 fi
 
 if host_sudoers_needs_repair "$OS_USER"; then
-  while IFS= read -r cmd; do
-    [ -n "$cmd" ] && planned+=("$cmd")
-  done < <(host_install_sudoers_commands)
+  SUDOERS_COMMANDS=$(host_install_sudoers_commands) || {
+    SUDOERS_COMMANDS_RC=$?
+    echo "Error: failed to build sudoers repair commands" >&2
+    exit "$SUDOERS_COMMANDS_RC"
+  }
+
+  if [ -n "$SUDOERS_COMMANDS" ]; then
+    while IFS= read -r cmd; do
+      [ -n "$cmd" ] && planned+=("$cmd")
+    done <<< "$SUDOERS_COMMANDS"
+  fi
 fi
 
 if [ ${#planned[@]} -eq 0 ]; then

@@ -316,6 +316,21 @@ STUB
   jq -e 'select(.type == "wake" and .meta.timeout == "900")' "$src_file"
 }
 
+@test "wake --meta propagates metadata tokenization failure before recording" {
+  stub_failing_xargs "$BATS_TEST_TMPDIR/failing-xargs"
+  local src_file
+  src_file=$(find "$PROJECT_DIR" -name "*${SESSION_1}.jsonl")
+  cp "$src_file" "$BATS_TEST_TMPDIR/session-before-xargs-failure.jsonl"
+
+  run sessions wake "$SESSION_1" \
+    --background \
+    --model "openai-codex/gpt-5.5" \
+    --meta "timeout=900"
+  [ "$status" -eq 42 ]
+  [[ "$output" == *"failed to parse --meta arguments"* ]]
+  cmp -s "$src_file" "$BATS_TEST_TMPDIR/session-before-xargs-failure.jsonl"
+}
+
 # --- Model pass-through ---
 
 @test "wake --model records model on wake event" {
