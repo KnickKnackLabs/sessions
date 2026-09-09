@@ -1,6 +1,6 @@
 #!/usr/bin/env -S uv run --script
 #MISE description="List recent sessions with metadata"
-#USAGE flag "--limit <n>" default="20" help="Max sessions to show (default: 20)"
+#USAGE flag "--limit <n>" default="" help="Max sessions to show (default: 20 unless --all)"
 #USAGE flag "--project <filter>" allow_hyphen_values=#true help="Filter by project directory (substring match)"
 #USAGE flag "--filter <filter>" var=#true help="Filter sessions (type.meta.key=value, supports indexing e.g. wake[0].meta.by=ikma)"
 #USAGE flag "--all" default=#false help="Include empty/stub sessions hidden by default"
@@ -19,11 +19,13 @@ sys.path.insert(0, os.environ["MISE_CONFIG_ROOT"] + "/lib")
 import parse
 from format import console, format_duration, format_model, format_relative, make_table
 
-limit = int(os.environ.get("usage_limit", "20"))
+limit_raw = os.environ.get("usage_limit", "")
 project_filter = os.environ.get("usage_project", "")
 filter_raw = os.environ.get("usage_filter", "")
-include_empty = os.environ.get("usage_all", "") == "true"
+scan_all = os.environ.get("usage_all", "") == "true"
 output_json = os.environ.get("usage_json", "") == "true"
+
+limit = int(limit_raw) if limit_raw else (None if scan_all else 20)
 
 filters = parse.parse_filters(filter_raw) if filter_raw else []
 
@@ -53,7 +55,7 @@ files.sort(key=lambda x: -x[0])
 results = []
 count = 0
 for mtime, filepath in files:
-    if count >= limit:
+    if limit is not None and count >= limit:
         break
     try:
         session = parse.load(filepath)
@@ -62,7 +64,7 @@ for mtime, filepath in files:
             continue
         meta = session.metadata()
         # Skip empty/stub sessions — no real assistant interaction
-        if not include_empty:
+        if not scan_all:
             msgs = meta["user_messages"] + meta["assistant_messages"]
             if msgs == 0 or meta["model"] == "unknown":
                 continue

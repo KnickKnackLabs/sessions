@@ -99,6 +99,50 @@ JSONL
   [ "$status" -eq 0 ]
   echo "$output" | grep -q "stub-se"
 }
+make_bulk_sessions() {
+  local count="$1" i id
+  for i in $(seq 1 "$count"); do
+    id=$(printf 'bulk%04d-0000-0000-0000-000000000000' "$i")
+    cat > "${PROJECT_DIR}${id}.jsonl" <<JSONL
+{"type":"session","version":3,"id":"${id}","timestamp":"2026-03-15T15:00:00.000Z","cwd":"/test/project"}
+{"type":"model_change","id":"mc1","parentId":null,"timestamp":"2026-03-15T15:00:00.001Z","provider":"test","modelId":"test-model"}
+{"type":"message","id":"u1","parentId":"mc1","timestamp":"2026-03-15T15:00:01.000Z","message":{"role":"user","content":[{"type":"text","text":"test"}]}}
+{"type":"message","id":"a1","parentId":"u1","timestamp":"2026-03-15T15:00:02.000Z","message":{"role":"assistant","content":[{"type":"text","text":"done"}],"model":"test-model","provider":"test"}}
+JSONL
+  done
+}
+
+@test "list --all lifts the default limit" {
+  make_bulk_sessions 20
+
+  run sessions list --json
+  [ "$status" -eq 0 ]
+  echo "$output" | python3 -c "
+import json, sys
+data = json.load(sys.stdin)
+assert len(data) == 20, f'expected the default cap of 20, got {len(data)}'
+"
+
+  run sessions list --all --json
+  [ "$status" -eq 0 ]
+  echo "$output" | python3 -c "
+import json, sys
+data = json.load(sys.stdin)
+assert len(data) == 24, f'expected all 24 sessions, got {len(data)}'
+"
+}
+
+@test "list --all still respects an explicit --limit" {
+  make_bulk_sessions 20
+
+  run sessions list --all --limit 5 --json
+  [ "$status" -eq 0 ]
+  echo "$output" | python3 -c "
+import json, sys
+data = json.load(sys.stdin)
+assert len(data) == 5, f'expected 5 sessions, got {len(data)}'
+"
+}
 
 # --- --filter: session header metadata ---
 
