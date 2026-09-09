@@ -62,6 +62,34 @@ def exit_unsupported(harness: str, op: str) -> None:
     sys.exit(UNSUPPORTED_EXIT)
 
 
+def install_unsupported_excepthook() -> None:
+    """Route an uncaught `Unsupported` to the clean CLI message and exit.
+
+    Tasks with a natural catch site call `exit_unsupported` directly
+    (see `.mise/tasks/usage`). The rest are flat top-level scripts where
+    wrapping the body in try/except would mean re-indenting the whole
+    file for one error path, so they install this instead.
+
+    Uses `os._exit` because `sys.exit` inside an excepthook raises
+    during interpreter teardown rather than setting the status; streams
+    are flushed first since `os._exit` skips that.
+    """
+    previous = sys.excepthook
+
+    def hook(exc_type, exc, tb):
+        if isinstance(exc, Unsupported):
+            print(
+                f"sessions: '{exc.harness or 'unknown'}' harness does not support '{exc.op}' yet",
+                file=sys.stderr,
+            )
+            sys.stdout.flush()
+            sys.stderr.flush()
+            os._exit(UNSUPPORTED_EXIT)
+        previous(exc_type, exc, tb)
+
+    sys.excepthook = hook
+
+
 # --- Registry ---
 
 

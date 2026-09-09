@@ -72,6 +72,53 @@ harness_pi_project_trust_flag() {
   esac
 }
 
+# Build the interactive launch argv for pi.
+#
+# Adapters print nothing here: they populate the global array
+# `HARNESS_INTERACTIVE_ARGV`. Serializing an argv through stdout would
+# have to survive messages containing spaces and newlines, and the
+# bash 3.2 baseline (see the `${arr[@]+...}` idiom used throughout)
+# rules out `mapfile -d ''`. Setting a global is the portable option,
+# and `harness_call` runs adapter functions in the caller's shell.
+#
+#   $1 executable, $2 model, $3 system_prompt_file (may be empty),
+#   $4 session file (may be empty), $5 message (may be empty),
+#   $6 project trust policy, $7 extensions ("true"/"false"),
+#   $8 skills, $9 prompt templates
+harness_pi_interactive_argv() {
+  local executable="$1"
+  local model="$2"
+  local system_prompt_file="$3"
+  local session="$4"
+  local message="$5"
+  local project_trust="$6"
+  local extensions="$7"
+  local skills="$8"
+  local prompt_templates="$9"
+
+  local project_trust_flag
+  project_trust_flag=$(harness_pi_project_trust_flag "$project_trust") || return $?
+
+  local args=(--model "$model")
+  [ -n "$project_trust_flag" ] && args+=("$project_trust_flag")
+  [ "$extensions" = "true" ] || args+=(--no-extensions)
+  [ "$skills" = "true" ] || args+=(--no-skills)
+  [ "$prompt_templates" = "true" ] || args+=(--no-prompt-templates)
+  if [ -n "$system_prompt_file" ]; then
+    args=(--append-system-prompt "$system_prompt_file" ${args[@]+"${args[@]}"})
+  fi
+  if [ -n "$session" ]; then
+    args+=(--session "$session")
+  else
+    args+=(--no-session)
+  fi
+  if [ -n "$message" ]; then
+    args+=("$message")
+  fi
+
+  HARNESS_INTERACTIVE_ARGV=("$executable" ${args[@]+"${args[@]}"})
+}
+
 # --- Location ---
 
 # Print the absolute path of pi's sessions root.
@@ -216,6 +263,14 @@ harness_pi_header_entry() {
   fi
 
   jq -nc "${args[@]}" "$expr"
+}
+
+# Extra entries a new session needs before it can be launched. Pi
+# launches fine from a header-only file, so there are none.
+#
+#   $1 session_id, $2 timestamp_iso, $3 cwd_abs
+harness_pi_seed_entries() {
+  return 0
 }
 
 # Model change entry.

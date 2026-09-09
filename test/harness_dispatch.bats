@@ -271,18 +271,26 @@ JSONL
   [ "$final_count" = "$initial_count" ]
 }
 
-@test "new --harness claude exits UNSUPPORTED without side effects (step 3 acceptance)" {
-  # Step 3 claude is a skeleton; session_file_path is UNSUPPORTED, so
-  # `new` must fail before any directory is created. Uses \$CLAUDE_DIR
-  # for isolation so we don't poke at the real ~/.claude.
+@test "new --harness claude routes to the claude adapter's own layout (step 4 acceptance)" {
+  # Step 3 asserted that this failed UNSUPPORTED at session_file_path.
+  # Step 4 implements it, so the dispatch-level guarantee becomes: the
+  # --harness flag decides whose disk layout is used. The transcript
+  # lands under $CLAUDE_DIR, and nothing is written to pi's tree.
+  # Adapter-level behaviour is covered in test/claude_adapter.bats.
   export CLAUDE_DIR="$BATS_TEST_TMPDIR/claude-home"
 
-  run sessions new --cwd "$BATS_TEST_TMPDIR" --harness claude acceptance-foo
-  [ "$status" -eq 10 ]
-  echo "$output" | grep -q "'claude' harness does not support 'session_file_path'"
+  local initial_count
+  initial_count=$(find "$PI_DIR/agent/sessions" -name '*.jsonl' 2>/dev/null | wc -l | tr -d ' ')
 
-  # No artifacts: the claude projects dir should not have been created.
-  [ ! -d "$CLAUDE_DIR/projects" ]
+  run sessions new --cwd "$BATS_TEST_TMPDIR" --harness claude acceptance-foo
+  [ "$status" -eq 0 ]
+  local session_id="${lines[0]}"
+
+  [ -f "$(find "$CLAUDE_DIR/projects" -name "${session_id}.jsonl")" ]
+
+  local final_count
+  final_count=$(find "$PI_DIR/agent/sessions" -name '*.jsonl' 2>/dev/null | wc -l | tr -d ' ')
+  [ "$final_count" = "$initial_count" ]
 }
 
 @test "wake on a claude-declared session routes to claude and errors UNSUPPORTED (step 3 acceptance)" {

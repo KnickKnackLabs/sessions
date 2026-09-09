@@ -310,33 +310,31 @@ HEADLESS_EOF
 fi
 
 run_interactive() {
-  if [ "$HARNESS_NAME" != "pi" ]; then
-    echo "sessions: '$HARNESS_NAME' harness does not support interactive no-message run yet" >&2
-    exit "$HARNESS_UNSUPPORTED_EXIT"
+  # Adapters build their own argv into HARNESS_INTERACTIVE_ARGV. Build it
+  # before the launch environment is sanitized: adapters may need jq or
+  # the session file, and harness_call exits with the reserved
+  # UNSUPPORTED code for a harness that cannot run interactively.
+  HARNESS_INTERACTIVE_ARGV=()
+  harness_call "$HARNESS_NAME" interactive_argv \
+    "$HARNESS_EXECUTABLE" \
+    "$MODEL" \
+    "$SYSTEM_PROMPT_FILE" \
+    "$SESSION" \
+    "$MESSAGE" \
+    "$PROJECT_TRUST" \
+    "$EXTENSIONS" \
+    "$SKILLS" \
+    "$PROMPT_TEMPLATES" || exit 1
+
+  # nounset-safe emptiness check: bash < 4.4 errors on ${#arr[@]} for an
+  # empty array, the same reason the ${arr[@]+...} idiom is used below.
+  if [ -z "${HARNESS_INTERACTIVE_ARGV[0]:-}" ]; then
+    echo "Error: '$HARNESS_NAME' harness produced an empty launch command" >&2
+    exit 1
   fi
 
   sessions_prepare_harness_env
 
-  local -a pi_command=("$HARNESS_EXECUTABLE")
-  local project_trust_flag
-  project_trust_flag=$(harness_call "$HARNESS_NAME" project_trust_flag "$PROJECT_TRUST") || exit 1
-
-  local pi_args=(--model "$MODEL")
-  [ -n "$project_trust_flag" ] && pi_args+=("$project_trust_flag")
-  [ "$EXTENSIONS" = "true" ] || pi_args+=(--no-extensions)
-  [ "$SKILLS" = "true" ] || pi_args+=(--no-skills)
-  [ "$PROMPT_TEMPLATES" = "true" ] || pi_args+=(--no-prompt-templates)
-  if [ -n "$SYSTEM_PROMPT_FILE" ]; then
-    pi_args=(--append-system-prompt "$SYSTEM_PROMPT_FILE" ${pi_args[@]+"${pi_args[@]}"})
-  fi
-  if [ -n "$SESSION" ]; then
-    pi_args+=(--session "$SESSION")
-  else
-    pi_args+=(--no-session)
-  fi
-  if [ -n "$MESSAGE" ]; then
-    pi_args+=("$MESSAGE")
-  fi
   cd "$CWD"
 
   if [ -n "$TIMEOUT" ]; then
@@ -344,10 +342,10 @@ run_interactive() {
       echo "Error: timeout command is required for --timeout" >&2
       exit 1
     fi
-    run_and_exit timeout "$TIMEOUT" ${pi_command[@]+"${pi_command[@]}"} ${pi_args[@]+"${pi_args[@]}"}
+    run_and_exit timeout "$TIMEOUT" ${HARNESS_INTERACTIVE_ARGV[@]+"${HARNESS_INTERACTIVE_ARGV[@]}"}
   fi
 
-  run_and_exit ${pi_command[@]+"${pi_command[@]}"} ${pi_args[@]+"${pi_args[@]}"}
+  run_and_exit ${HARNESS_INTERACTIVE_ARGV[@]+"${HARNESS_INTERACTIVE_ARGV[@]}"}
 }
 
 if [ "$INTERACTIVE" = "true" ] || [ -z "$MESSAGE" ]; then

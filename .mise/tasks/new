@@ -127,6 +127,11 @@ harness_entry "$HARNESS_ENTRY_ID" "$SESSION_ID" "$NOW_ISO" "$HARNESS_NAME" >> "$
 
 LAST_ENTRY_ID="$HARNESS_ENTRY_ID"
 
+# Harness-specific seed entries. Some harnesses refuse to launch from a
+# file that holds no native message entry of their own; this is where
+# an adapter puts whatever it needs to make the session launchable.
+harness_call "$HARNESS_NAME" seed_entries "$SESSION_ID" "$NOW_ISO" "$CWD_ABS" >> "$SESSION_FILE"
+
 # Bake the system prompt into the session if provided. `sessions wake` does not
 # accept prompt flags; wake/run resolve this entry from the session file.
 if [ "$SYSTEM_PROMPT_PROVIDED" = "true" ]; then
@@ -138,7 +143,12 @@ fi
 # Inject context as a user message if provided
 if [ -n "$CONTEXT" ]; then
   MSG_ID=$(uuidgen | tr '[:upper:]' '[:lower:]' | cut -c1-8)
-  harness_call "$HARNESS_NAME" user_message_entry "$MSG_ID" "$LAST_ENTRY_ID" "$NOW_ISO" "$CONTEXT" >> "$SESSION_FILE"
+  # Built before the append, not piped into it: the adapter may read the
+  # session file to build the entry (claude needs the session id and cwd
+  # from the header), and reading a file inside its own append is both
+  # fragile and a shellcheck SC2094 violation.
+  CONTEXT_ENTRY=$(harness_call "$HARNESS_NAME" user_message_entry "$MSG_ID" "$LAST_ENTRY_ID" "$NOW_ISO" "$CONTEXT" "$SESSION_FILE")
+  printf '%s\n' "$CONTEXT_ENTRY" >> "$SESSION_FILE"
 fi
 
 # --- Output ---

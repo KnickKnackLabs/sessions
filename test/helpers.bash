@@ -103,6 +103,46 @@ STUB
   stub_mise_resolve_pi "$stub_dir"
 }
 
+stub_mise_resolve_claude() {
+  local stub_dir="$1"
+  local real_mise
+  real_mise=$(command -v mise)
+
+  mkdir -p "$stub_dir"
+  cat > "$stub_dir/mise" <<STUB
+#!/usr/bin/env bash
+set -euo pipefail
+if [ "\${1:-}" = "-C" ] && [ "\${3:-}" = "which" ] && [ "\${4:-}" = "claude" ]; then
+  command -v claude
+  exit 0
+fi
+exec "$real_mise" "\$@"
+STUB
+  chmod +x "$stub_dir/mise"
+}
+
+stub_claude_capture_argv_cwd() {
+  local stub_dir="$1"
+  local argv_capture="$2"
+  local cwd_capture="$3"
+
+  mkdir -p "$stub_dir"
+  cat > "$stub_dir/claude" <<STUB
+#!/usr/bin/env bash
+pwd -P > "$cwd_capture"
+printf '%s\n' "\$@" > "$argv_capture"
+exit 0
+STUB
+  chmod +x "$stub_dir/claude"
+  stub_mise_resolve_claude "$stub_dir"
+}
+
+# Create an isolated claude transcript root for adapter tests.
+setup_test_claude_dir() {
+  export CLAUDE_DIR="$BATS_TEST_TMPDIR/claude-test"
+  mkdir -p "$CLAUDE_DIR/projects"
+}
+
 stub_shell_exec_payload() {
   local stub_dir="$1"
   local argv_capture="$2"
