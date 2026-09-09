@@ -124,8 +124,8 @@ defmodule Cli.Engine do
       |> Enum.reject(&mise_install_path?(&1, mise_installs))
 
     entries =
-      if mise_shims && mise_shims not in entries && File.dir?(mise_shims) do
-        [mise_shims | entries]
+      if mise_shims && File.dir?(mise_shims) do
+        [mise_shims | Enum.reject(entries, &(&1 == mise_shims))]
       else
         entries
       end

@@ -5,7 +5,7 @@
 #USAGE flag "--after <date>" default="" help="Only include usage records on/after YYYY-MM-DD"
 #USAGE flag "--before <date>" default="" help="Only include usage records on/before YYYY-MM-DD"
 #USAGE flag "--limit <n>" default="" help="Max sessions to scan in aggregate mode (default: 20 unless date filters/--all)"
-#USAGE flag "--project <filter>" default="" help="Filter aggregate sessions by project directory substring"
+#USAGE flag "--project <filter>" allow_hyphen_values=#true default="" help="Filter aggregate sessions by project directory substring"
 #USAGE flag "--filter <filter>" var=#true default="" help="Filter sessions (same syntax as sessions list --filter)"
 #USAGE flag "--all" default=#false help="Scan all sessions in aggregate mode"
 #USAGE flag "--turns" default=#false help="Show per-turn usage records"

@@ -1,7 +1,7 @@
 #!/usr/bin/env -S uv run --script
 #MISE description="List recent sessions with metadata"
 #USAGE flag "--limit <n>" default="20" help="Max sessions to show (default: 20)"
-#USAGE flag "--project <filter>" help="Filter by project directory (substring match)"
+#USAGE flag "--project <filter>" allow_hyphen_values=#true help="Filter by project directory (substring match)"
 #USAGE flag "--filter <filter>" var=#true help="Filter sessions (type.meta.key=value, supports indexing e.g. wake[0].meta.by=ikma)"
 #USAGE flag "--all" default=#false help="Include empty/stub sessions hidden by default"
 #USAGE flag "--json" help="Output as JSON"

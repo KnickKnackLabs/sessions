@@ -35,6 +35,18 @@ setup_isolated_mise_data() {
   mkdir -p "$MISE_DATA_DIR/installs" "$MISE_DATA_DIR/shims"
 }
 
+stub_failing_xargs() {
+  local stub_dir="$1"
+  mkdir -p "$stub_dir"
+  cat > "$stub_dir/xargs" <<'STUB'
+#!/usr/bin/env bash
+echo "injected xargs failure" >&2
+exit 42
+STUB
+  chmod +x "$stub_dir/xargs"
+  export PATH="$stub_dir:$PATH"
+}
+
 stub_mise_resolve_pi() {
   local stub_dir="$1"
   local real_mise

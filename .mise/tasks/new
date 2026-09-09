@@ -84,27 +84,35 @@ SESSION_FILE=$(harness_call "$HARNESS_NAME" session_file_path "$CWD_ABS" "$SESSI
 
 META_JSON="{}"
 if [ -n "$META_RAW" ]; then
-  while IFS= read -r entry; do
-    [ -z "$entry" ] && continue
-    if [[ "$entry" == "{"* ]]; then
-      # jq expression — evaluate and merge
-      FRAGMENT=$(jq -nc "$entry" 2>&1) || {
-        echo "Error: invalid jq expression in --meta: $entry" >&2
-        echo "  jq said: $FRAGMENT" >&2
+  META_ENTRIES=$(printf '%s' "$META_RAW" | xargs printf '%s\n') || {
+    META_ENTRIES_RC=$?
+    echo "Error: failed to parse --meta arguments" >&2
+    exit "$META_ENTRIES_RC"
+  }
+
+  if [ -n "$META_ENTRIES" ]; then
+    while IFS= read -r entry; do
+      [ -z "$entry" ] && continue
+      if [[ "$entry" == "{"* ]]; then
+        # jq expression — evaluate and merge
+        FRAGMENT=$(jq -nc "$entry" 2>&1) || {
+          echo "Error: invalid jq expression in --meta: $entry" >&2
+          echo "  jq said: $FRAGMENT" >&2
+          exit 1
+        }
+        META_JSON=$(echo "$META_JSON" "$FRAGMENT" | jq -s '.[0] * .[1]')
+      elif [[ "$entry" == *"="* ]]; then
+        # dotted key=value
+        KEY="${entry%%=*}"
+        VALUE="${entry#*=}"
+        META_JSON=$(echo "$META_JSON" | jq --arg v "$VALUE" "setpath(\"$KEY\" | split(\".\"); \$v)")
+      else
+        echo "Error: invalid --meta format '$entry'" >&2
+        echo "  Expected key=value (e.g., agent.name=ikma) or jq expression (e.g., '{purpose: \"test\"}')" >&2
         exit 1
-      }
-      META_JSON=$(echo "$META_JSON" "$FRAGMENT" | jq -s '.[0] * .[1]')
-    elif [[ "$entry" == *"="* ]]; then
-      # dotted key=value
-      KEY="${entry%%=*}"
-      VALUE="${entry#*=}"
-      META_JSON=$(echo "$META_JSON" | jq --arg v "$VALUE" "setpath(\"$KEY\" | split(\".\"); \$v)")
-    else
-      echo "Error: invalid --meta format '$entry'" >&2
-      echo "  Expected key=value (e.g., agent.name=ikma) or jq expression (e.g., '{purpose: \"test\"}')" >&2
-      exit 1
-    fi
-  done < <(printf '%s' "$META_RAW" | xargs printf '%s\n')
+      fi
+    done <<< "$META_ENTRIES"
+  fi
 fi
 
 # --- Session header ---

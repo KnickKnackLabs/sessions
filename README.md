@@ -8,8 +8,8 @@ Create sessions with structured metadata, wake agents into them,
 observe transcripts in real time, and query your history.
 
 ![lang: bash + python](https://img.shields.io/badge/lang-bash%20%2B%20python-4EAA25?style=flat&logo=gnubash&logoColor=white)
-[![tests: 363 passing](https://img.shields.io/badge/tests-363%20passing-brightgreen?style=flat)](test/)
-![commands: 20](https://img.shields.io/badge/commands-20-blue?style=flat)
+[![tests: 391 passing](https://img.shields.io/badge/tests-391%20passing-brightgreen?style=flat)](test/)
+![commands: 22](https://img.shields.io/badge/commands-22-blue?style=flat)
 ![license: MIT](https://img.shields.io/badge/license-MIT-blue?style=flat)
 
 </div>
@@ -122,7 +122,7 @@ sessions wake review/pr-50 --model openai-codex/gpt-5.5 --message "You missed th
 
 The spawning stack uses [shell](https://github.com/KnickKnackLabs/shell) for persistent zmx sessions. `sessions wake` calls `sessions run` as its hidden low-level executor. For profile-specific sessions, use `new` + `wake`: bake profile or task instructions into the session with `--system-prompt-file` at creation, then wake it with task messages. If no explicit or baked prompt exists, the harness starts without an appended prompt and can rely on its native cwd context discovery.
 
-Before launch, Sessions resolves the selected harness executable from its own declared toolchain. The child then starts in the requested `--cwd` with Sessions' mise task context and direct tool-install paths removed. Sessions selects compatible KKL Pi patches from the `v0.83.0-kkl` release stream after a six-hour cooling period when its toolchain is installed or refreshed, without replacing the target project or agent home's own tool and resource context. A fixed Sessions release can therefore resolve a newer cooled Pi patch after refresh.
+Before launch, Sessions resolves the selected harness executable from its own declared toolchain. The child then starts in the requested `--cwd` with Sessions' mise task context and direct tool-install paths removed. Sessions selects compatible KKL Pi patches from the `v0.85.1-kkl` release stream after a six-hour cooling period when its toolchain is installed or refreshed, without replacing the target project or agent home's own tool and resource context. A fixed Sessions release can therefore resolve a newer cooled Pi patch after refresh.
 
 `sessions run` remains available as an advanced/compatibility command. It accepts an explicit `--system-prompt-file`, uses any prompt baked into the session, and otherwise starts without appending a system prompt. Caller-provided context belongs to the caller, not to `sessions`.
 
@@ -272,7 +272,7 @@ sessions copy e96bd43a --context "continue the review"
 
 ## Querying session history
 
-`sessions query` builds an ephemeral in-memory SQLite projection over local session JSONL files. JSONL remains the source of truth; no durable database is created. This is useful for ad hoc analysis across sessions, tools, messages, usage, and bash command status.
+By default, `sessions query` builds a fresh ephemeral in-memory SQLite projection over local session JSONL files. JSONL remains the source of truth; a reusable database is created only when explicitly requested with `--db PATH --refresh`. This is useful for ad hoc analysis across sessions, tools, messages, usage, and bash command status.
 
 Privacy defaults are conservative: the default `--text commands` mode inserts redacted bash commands, but not message text or tool output excerpts. Use `--text compact` only when you intentionally want bounded excerpts, and reserve `--text full` for explicitly scoped local analysis.
 
@@ -300,7 +300,42 @@ sessions query e96bd43a --text compact \
   --format jsonl
 ```
 
+The packaged examples include broader questions discovered through real corpus use:
+
+- `queries/attribution-health.sql` — Is agent metadata complete enough for attribution?
+- `queries/agent-activity.sql` — Who owns the attributed sessions and activity?
+- `queries/agent-segment-density.sql` — How dense is attributed work by active day and inferred settled segment?
+- `queries/bash-failure-recovery.sql` — What follows a failed Bash call?
+- `queries/bash-size-risk.sql` — Do large inline Bash commands behave differently?
+- `queries/intentional-waits.sql` — Which slow calls look like deliberate waits or watchers?
+- `queries/tool-pair-integrity.sql` — Where are tool calls and results unmatched?
+
+These are starting points, not product conclusions. Each query states its scope, heuristics, and analysis choices so callers can adapt them to their corpus.
+
 Large result sets can be rendered as `--format html` or opened with `--browser` for a temporary local table with sticky headers and row filtering. Richer browser table controls are tracked separately so the first query surface can stay small.
+
+One-off queries build a fresh ephemeral projection. For repeated analysis, explicitly build and reuse a private SQLite projection:
+
+```bash
+sessions query --db /tmp/sessions.sqlite --refresh --text none \
+  --sql 'select count(*) from sessions'
+sessions query --db /tmp/sessions.sqlite \
+  --sql-file queries/slow-tools.sql --format grid
+```
+
+Reusable databases are created atomically with mode `0600`. A refresh records opaque candidate-source fingerprints before scanning, so a source that changes during the build makes the result visibly stale without exposing paths outside the selected projection. Each reuse reports its build time, stored scope and text mode, and changed, missing, or new source files. Scope and text flags apply when building, not when reusing. Run again with `--refresh` when fresh results are required; Sessions never silently refreshes or treats a stale database as current.
+
+## CI cache maintenance
+
+`mise run ci:cache:status` lists the exact GitHub Actions mise caches for the current Sessions source branch, including IDs, keys, timestamps, age, ref, and byte size. Use its IDs to preview a bounded invalidation:
+
+```bash
+mise run ci:cache:status
+mise run ci:cache:invalidate 7336710345
+mise run ci:cache:invalidate 7336710345 --yes
+```
+
+Invalidation is a dry run unless `--yes` is explicit. Every requested ID must belong to this repository's current ref and the `mise-v1-` cache family before any deletion begins. The mutating path deletes only those IDs and then verifies their absence; there is no all-caches mode.
 
 ## Development
 
@@ -310,7 +345,7 @@ cd sessions && mise trust && mise install
 mise run test
 ```
 
-**363 tests** across 24 BATS and Python unittest suites. Shell and integration cases use [KKL BATS 1.14.0-kkl.3](https://github.com/KnickKnackLabs/bats-core). Tasks are bash scripts (session creation, wake, metadata) and Python scripts with [Rich](https://github.com/Textualize/rich) output (list, read, wait, wait-any, usage, inspect, search). The shared Python support library is 3576 lines in `lib/`.
+**391 tests** across 25 BATS and Python unittest suites. Shell and integration cases use [KKL BATS 1.14.0-kkl.3](https://github.com/KnickKnackLabs/bats-core). Tasks are bash scripts (session creation, wake, metadata) and Python scripts with [Rich](https://github.com/Textualize/rich) output (list, read, wait, wait-any, usage, inspect, search). The shared Python support library is 4149 lines in `lib/`.
 
 Python code is checked with [Ruff](https://docs.astral.sh/ruff/) via `mise run lint:python`, and CI runs the same lint/format check in addition to the BATS and Elixir suites.
 
@@ -335,6 +370,7 @@ sessions/
 │   ├── copy         # Duplicate sessions for handoff
 │   ├── remove       # Remove sessions (kill shell + delete file)
 │   ├── run          # Hidden low-level executor used by wake
+│   ├── ci/cache/    # Inspect and invalidate exact mise cache IDs
 │   ├── cli/build    # Build Elixir CLI dependencies
 │   ├── lint/python  # Ruff lint + format check for Python code
 │   ├── export       # Portable bundles (JSONL + metadata)
@@ -351,7 +387,7 @@ sessions/
 │   └── harness/        # Per-harness adapters (pi, …)
 ├── queries/            # Packaged sessions query SQL presets
 └── test/
-    ├── *.bats          # 357 shell and integration tests
+    ├── *.bats          # 385 shell and integration tests
     └── *_test.py       # 6 focused Python unit tests
 ```
 

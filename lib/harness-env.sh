@@ -7,7 +7,17 @@ sessions_scrub_caller_pwd_env() {
 }
 
 sessions_scrub_task_env() {
-  local name
+  local name env_names env_names_rc
+  if env_names=$(compgen -e); then
+    :
+  else
+    env_names_rc=$?
+    if [ "$env_names_rc" -ne 1 ] || [ -n "$env_names" ]; then
+      return "$env_names_rc"
+    fi
+  fi
+  [ -n "$env_names" ] || return 0
+
   while IFS= read -r name; do
     case "$name" in
       # MISE_DATA_DIR is user-owned tool storage. Retained shims need it to
@@ -15,7 +25,7 @@ sessions_scrub_task_env() {
       MISE_DATA_DIR) ;;
       MISE_*|usage_*) unset "$name" ;;
     esac
-  done < <(compgen -e)
+  done <<< "$env_names"
 }
 
 sessions_mise_data_dir() {
@@ -35,6 +45,9 @@ sessions_sanitize_harness_path() {
 
   local installs="$data_dir/installs"
   local shims="$data_dir/shims"
+  local shim_dir_exists=false
+  [ ! -d "$shims" ] || shim_dir_exists=true
+
   local path_rest="${PATH:-}:"
   local entry new_path="" have_entry=false
 
@@ -44,6 +57,7 @@ sessions_sanitize_harness_path() {
 
     case "$entry" in
       "$installs"/*) continue ;;
+      "$shims") [ "$shim_dir_exists" = false ] || continue ;;
     esac
 
     if [ "$have_entry" = false ]; then
@@ -54,17 +68,12 @@ sessions_sanitize_harness_path() {
     fi
   done
 
-  if [ -d "$shims" ]; then
-    case ":$new_path:" in
-      *":$shims:"*) ;;
-      *)
-        if [ "$have_entry" = true ]; then
-          new_path="$shims:$new_path"
-        else
-          new_path="$shims"
-        fi
-        ;;
-    esac
+  if [ "$shim_dir_exists" = true ]; then
+    if [ "$have_entry" = true ]; then
+      new_path="$shims:$new_path"
+    else
+      new_path="$shims"
+    fi
   fi
 
   export PATH="$new_path"

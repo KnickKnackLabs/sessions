@@ -46,41 +46,48 @@ find_session_file() {
     return 1
   fi
 
-  local harness matches=() adapter_stderr adapter_rc match
-  while IFS= read -r harness; do
-    [ -z "$harness" ] && continue
-    # shellcheck source=/dev/null
-    source "$HARNESS_LIB_DIR/$harness.sh"
+  local harness harnesses harnesses_rc matches=() adapter_stderr adapter_rc match
+  harnesses=$(harness_list) || {
+    harnesses_rc=$?
+    return "$harnesses_rc"
+  }
 
-    # Capture adapter stdout (match path) and stderr (error details)
-    # separately so we can distinguish "no match" from "hard error."
-    local stderr_file
-    stderr_file=$(mktemp)
-    match=$("harness_${harness}_find_session" "$query" 2>"$stderr_file")
-    adapter_rc=$?
-    adapter_stderr=$(cat "$stderr_file")
-    rm -f "$stderr_file"
+  if [ -n "$harnesses" ]; then
+    while IFS= read -r harness; do
+      [ -z "$harness" ] && continue
+      # shellcheck source=/dev/null
+      source "$HARNESS_LIB_DIR/$harness.sh"
 
-    case "$adapter_rc" in
-      0)
-        matches+=("$match")
-        ;;
-      1)
-        # No match for this adapter; continue.
-        :
-        ;;
-      *)
-        # Hard error (within-adapter ambiguity, corrupted state, etc.) —
-        # surface and stop.
-        if [ -n "$adapter_stderr" ]; then
-          printf '%s\n' "$adapter_stderr" >&2
-        else
-          echo "Error: $harness adapter failed (exit $adapter_rc)" >&2
-        fi
-        return "$adapter_rc"
-        ;;
-    esac
-  done < <(harness_list)
+      # Capture adapter stdout (match path) and stderr (error details)
+      # separately so we can distinguish "no match" from "hard error."
+      local stderr_file
+      stderr_file=$(mktemp)
+      match=$("harness_${harness}_find_session" "$query" 2>"$stderr_file")
+      adapter_rc=$?
+      adapter_stderr=$(cat "$stderr_file")
+      rm -f "$stderr_file"
+
+      case "$adapter_rc" in
+        0)
+          matches+=("$match")
+          ;;
+        1)
+          # No match for this adapter; continue.
+          :
+          ;;
+        *)
+          # Hard error (within-adapter ambiguity, corrupted state, etc.) —
+          # surface and stop.
+          if [ -n "$adapter_stderr" ]; then
+            printf '%s\n' "$adapter_stderr" >&2
+          else
+            echo "Error: $harness adapter failed (exit $adapter_rc)" >&2
+          fi
+          return "$adapter_rc"
+          ;;
+      esac
+    done <<< "$harnesses"
+  fi
 
   case ${#matches[@]} in
     0)

@@ -686,13 +686,32 @@ STUB
   [ ! -e "$prompt_path" ]
 }
 
+@test "harness environment scrub propagates enumeration failure" {
+  # shellcheck source=/dev/null
+  source "$REPO_DIR/lib/harness-env.sh"
+  compgen() { return 42; }
+
+  run sessions_scrub_task_env
+  [ "$status" -eq 42 ]
+}
+
+@test "harness environment scrub accepts an empty enumeration" {
+  # shellcheck source=/dev/null
+  source "$REPO_DIR/lib/harness-env.sh"
+  compgen() { return 1; }
+
+  run sessions_scrub_task_env
+  [ "$status" -eq 0 ]
+}
+
 @test "run interactive without message scrubs stale harness environment" {
   setup_isolated_mise_data
   local mise_data="$MISE_DATA_DIR"
   local stale_bin="$mise_data/installs/sessions-test-stale/bin"
   local fresh_bin="$mise_data/installs/sessions-test-fresh/bin"
   local shim_bin="$mise_data/shims"
-  mkdir -p "$stale_bin" "$fresh_bin"
+  local ordinary_bin="$BATS_TEST_TMPDIR/ordinary-bin"
+  mkdir -p "$stale_bin" "$fresh_bin" "$ordinary_bin"
   local pi_bin="$BATS_TEST_TMPDIR/pi-bin"
   local env_capture="$BATS_TEST_TMPDIR/pi-env"
   stub_pi_capture_env "$pi_bin" "$env_capture"
@@ -704,7 +723,7 @@ STUB
   export OTHER_CALLER_PWD="/other/package/context"
   export usage_stale_probe="stale task value"
 
-  PATH="$stale_bin:$pi_bin:$shim_bin:$fresh_bin:$PATH" run sessions run \
+  PATH="$stale_bin:$pi_bin:$ordinary_bin:$shim_bin:$shim_bin:$fresh_bin:$PATH" run sessions run \
     --system-prompt-file "$prompt" \
     --cwd "$BATS_TEST_TMPDIR" \
     --model "openai-codex/gpt-5.5"
@@ -719,8 +738,14 @@ STUB
   grep -q '^MISE_TASK_NAME=$' "$env_capture"
   grep -q '^usage_message=$' "$env_capture"
   grep -q '^usage_stale_probe=$' "$env_capture"
-  grep -q "$shim_bin" "$env_capture"
-  grep -q "$pi_bin" "$env_capture"
+
+  local harness_path
+  harness_path=$(sed -n 's/^PATH=//p' "$env_capture")
+  case "$harness_path" in
+    "$shim_bin:$pi_bin:$ordinary_bin:"*) ;;
+    *) echo "unexpected harness PATH: $harness_path" >&2; return 1 ;;
+  esac
+  [ "$(printf '%s\n' "$harness_path" | tr ':' '\n' | grep -Fxc "$shim_bin")" -eq 1 ]
   ! grep -q "$stale_bin" "$env_capture"
   ! grep -q "$fresh_bin" "$env_capture"
 }

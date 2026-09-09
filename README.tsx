@@ -17,11 +17,20 @@ const ROOT = resolve(import.meta.dirname);
 const TASK_DIR = join(ROOT, ".mise/tasks");
 const TEST_DIR = join(ROOT, "test");
 
-// Count tasks (excluding hidden/meta)
-const taskFiles = readdirSync(TASK_DIR).filter(
-  (f) => !f.startsWith(".") && !f.startsWith("_") && f !== "test"
-);
-const taskCount = taskFiles.length;
+// Count public command leaves (excluding internal build/lint tasks).
+function taskFiles(dir: string, prefix = ""): string[] {
+  return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+    if (entry.name.startsWith(".") || entry.name.startsWith("_")) return [];
+    const relativePath = prefix ? `${prefix}/${entry.name}` : entry.name;
+    if (entry.isDirectory()) {
+      return taskFiles(join(dir, entry.name), relativePath);
+    }
+    return [relativePath];
+  });
+}
+const taskCount = taskFiles(TASK_DIR).filter(
+  (path) => !path.startsWith("cli/") && !path.startsWith("lint/")
+).length;
 
 // Count public BATS cases and focused Python unit cases.
 const batsTestFiles = readdirSync(TEST_DIR).filter((f) => f.endsWith(".bats"));
@@ -249,7 +258,7 @@ sessions wake review/pr-50 --model openai-codex/gpt-5.5 --message "You missed th
       <Paragraph>
         {"Before launch, Sessions resolves the selected harness executable from its own declared toolchain. The child then starts in the requested "}
         <Code>--cwd</Code>
-        {" with Sessions' mise task context and direct tool-install paths removed. Sessions selects compatible KKL Pi patches from the `v0.83.0-kkl` release stream after a six-hour cooling period when its toolchain is installed or refreshed, without replacing the target project or agent home's own tool and resource context. A fixed Sessions release can therefore resolve a newer cooled Pi patch after refresh."}
+        {" with Sessions' mise task context and direct tool-install paths removed. Sessions selects compatible KKL Pi patches from the `v0.85.1-kkl` release stream after a six-hour cooling period when its toolchain is installed or refreshed, without replacing the target project or agent home's own tool and resource context. A fixed Sessions release can therefore resolve a newer cooled Pi patch after refresh."}
       </Paragraph>
 
       <Paragraph>
@@ -473,8 +482,11 @@ sessions usage --after 2026-06-01 --json # machine-readable aggregate`}</CodeBlo
 
     <Section title="Querying session history">
       <Paragraph>
+        {"By default, "}
         <Code>sessions query</Code>
-        {" builds an ephemeral in-memory SQLite projection over local session JSONL files. JSONL remains the source of truth; no durable database is created. This is useful for ad hoc analysis across sessions, tools, messages, usage, and bash command status."}
+        {" builds a fresh ephemeral in-memory SQLite projection over local session JSONL files. JSONL remains the source of truth; a reusable database is created only when explicitly requested with "}
+        <Code>--db PATH --refresh</Code>
+        {". This is useful for ad hoc analysis across sessions, tools, messages, usage, and bash command status."}
       </Paragraph>
 
       <Paragraph>
@@ -510,11 +522,65 @@ sessions query e96bd43a --text compact \\
   --format jsonl`}</CodeBlock>
 
       <Paragraph>
+        {"The packaged examples include broader questions discovered through real corpus use:"}
+      </Paragraph>
+
+      <List>
+        <Item><Code>queries/attribution-health.sql</Code>{" — Is agent metadata complete enough for attribution?"}</Item>
+        <Item><Code>queries/agent-activity.sql</Code>{" — Who owns the attributed sessions and activity?"}</Item>
+        <Item><Code>queries/agent-segment-density.sql</Code>{" — How dense is attributed work by active day and inferred settled segment?"}</Item>
+        <Item><Code>queries/bash-failure-recovery.sql</Code>{" — What follows a failed Bash call?"}</Item>
+        <Item><Code>queries/bash-size-risk.sql</Code>{" — Do large inline Bash commands behave differently?"}</Item>
+        <Item><Code>queries/intentional-waits.sql</Code>{" — Which slow calls look like deliberate waits or watchers?"}</Item>
+        <Item><Code>queries/tool-pair-integrity.sql</Code>{" — Where are tool calls and results unmatched?"}</Item>
+      </List>
+
+      <Paragraph>
+        {"These are starting points, not product conclusions. Each query states its scope, heuristics, and analysis choices so callers can adapt them to their corpus."}
+      </Paragraph>
+
+      <Paragraph>
         {"Large result sets can be rendered as "}
         <Code>--format html</Code>
         {" or opened with "}
         <Code>--browser</Code>
         {" for a temporary local table with sticky headers and row filtering. Richer browser table controls are tracked separately so the first query surface can stay small."}
+      </Paragraph>
+
+      <Paragraph>
+        {"One-off queries build a fresh ephemeral projection. For repeated analysis, explicitly build and reuse a private SQLite projection:"}
+      </Paragraph>
+
+      <CodeBlock lang="bash">{`sessions query --db /tmp/sessions.sqlite --refresh --text none \\
+  --sql 'select count(*) from sessions'
+sessions query --db /tmp/sessions.sqlite \\
+  --sql-file queries/slow-tools.sql --format grid`}</CodeBlock>
+
+      <Paragraph>
+        {"Reusable databases are created atomically with mode "}
+        <Code>0600</Code>
+        {". A refresh records opaque candidate-source fingerprints before scanning, so a source that changes during the build makes the result visibly stale without exposing paths outside the selected projection. Each reuse reports its build time, stored scope and text mode, and changed, missing, or new source files. Scope and text flags apply when building, not when reusing. Run again with "}
+        <Code>--refresh</Code>
+        {" when fresh results are required; Sessions never silently refreshes or treats a stale database as current."}
+      </Paragraph>
+    </Section>
+
+    <Section title="CI cache maintenance">
+      <Paragraph>
+        <Code>mise run ci:cache:status</Code>
+        {" lists the exact GitHub Actions mise caches for the current Sessions source branch, including IDs, keys, timestamps, age, ref, and byte size. Use its IDs to preview a bounded invalidation:"}
+      </Paragraph>
+
+      <CodeBlock lang="bash">{`mise run ci:cache:status
+mise run ci:cache:invalidate 7336710345
+mise run ci:cache:invalidate 7336710345 --yes`}</CodeBlock>
+
+      <Paragraph>
+        {"Invalidation is a dry run unless "}
+        <Code>--yes</Code>
+        {" is explicit. Every requested ID must belong to this repository's current ref and the "}
+        <Code>mise-v1-</Code>
+        {" cache family before any deletion begins. The mutating path deletes only those IDs and then verifies their absence; there is no all-caches mode."}
       </Paragraph>
     </Section>
 
@@ -560,6 +626,7 @@ mise run test`}</CodeBlock>
 │   ├── copy         # Duplicate sessions for handoff
 │   ├── remove       # Remove sessions (kill shell + delete file)
 │   ├── run          # Hidden low-level executor used by wake
+│   ├── ci/cache/    # Inspect and invalidate exact mise cache IDs
 │   ├── cli/build    # Build Elixir CLI dependencies
 │   ├── lint/python  # Ruff lint + format check for Python code
 │   ├── export       # Portable bundles (JSONL + metadata)

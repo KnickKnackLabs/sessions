@@ -1,7 +1,7 @@
 #!/usr/bin/env -S uv run --script
 #MISE description="Show managed session process liveness"
 #USAGE flag "--limit <n>" default="20" help="Max process rows to show"
-#USAGE flag "--project <filter>" default="" help="Filter by project directory/name substring"
+#USAGE flag "--project <filter>" allow_hyphen_values=#true default="" help="Filter by project directory/name substring"
 #USAGE flag "--all" default=#false help="Include exited and verified-dead process records"
 #USAGE flag "--json" default=#false help="Output as JSON"
 #USAGE example "sessions ps --all --json" header="Inspect all recorded processes as JSON"

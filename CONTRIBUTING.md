@@ -74,7 +74,7 @@ test path with real BATS behavior.
 Run targeted tests first, then the full suite before merge:
 
 ```sh
-mise run test ps run lint
+mise run test test/ps.bats test/run.bats test/lint.bats
 mise run test
 readme build --check
 git diff --check

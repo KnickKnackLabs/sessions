@@ -93,8 +93,8 @@ assert turns[2]['model'] == 'explicit-c'
   echo "$output" | grep -q "No recorded usage"
 }
 
-@test "usage aggregates date-filtered sessions" {
-  run sessions usage --after 2026-03-15 --before 2026-03-15 --project test-project --json
+@test "usage aggregates date-filtered sessions for an encoded project" {
+  run sessions usage --after 2026-03-15 --before 2026-03-15 --project "--test-project--" --json
 
   [ "$status" -eq 0 ]
   echo "$output" | python3 -c "
