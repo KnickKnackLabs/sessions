@@ -2,7 +2,11 @@
 
 load helpers
 
-setup() { setup_test_sessions; }
+setup() {
+  setup_test_sessions
+  stub_shell_recording "$BATS_TEST_TMPDIR/shell-stub" \
+    "$BATS_TEST_TMPDIR/shell-argv" "$BATS_TEST_TMPDIR/shell-names"
+}
 teardown() { teardown_test_sessions; }
 
 # --- basic removal ---

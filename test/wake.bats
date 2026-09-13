@@ -4,32 +4,15 @@ load helpers
 
 setup() {
   setup_test_sessions
-  # Isolate zmx sessions per-test to prevent bats FD hangs.
-  export ZMX_DIR="/tmp/swk-$$"
-  mkdir -p "$ZMX_DIR"
-
-  # Most wake tests care about the argv passed to shell, not about opening
-  # a real persistent zmx + pi process. Default to a recording shell stub;
-  # individual tests that need a different shell behavior prepend their own.
+  # Default to recording only. Nested-launch tests inject a synchronous
+  # shell fixture and a Pi fixture explicitly; no real shells are created.
   local shell_stub_dir="$BATS_TEST_TMPDIR/default-shell-stub"
   stub_shell_recording \
     "$shell_stub_dir" \
     "$BATS_TEST_TMPDIR/default-shell-argv" \
     "$BATS_TEST_TMPDIR/default-shell-names"
-  export PATH="$shell_stub_dir:$PATH"
 }
 teardown() {
-  # Clean up shell sessions in our isolated dir
-  for name in $(zmx list --short 2>/dev/null || true); do
-    shell kill "$name" 2>/dev/null || true
-  done
-  for pid in $(zmx list 2>/dev/null | tr '\t' '\n' | grep "^pid=" | cut -d= -f2); do
-    local children
-    children=$(pgrep -P "$pid" 2>/dev/null || true)
-    for cpid in $children; do kill "$cpid" 2>/dev/null || true; done
-    kill "$pid" 2>/dev/null || true
-  done
-  rm -rf "${ZMX_DIR:-}"
   teardown_test_sessions
 }
 
@@ -134,43 +117,41 @@ STUB
 # --- Background mode (shell/zmx) ---
 
 @test "wake --background launches session via shell" {
-  command -v shell >/dev/null 2>&1 || skip "shell not installed"
   run sessions wake "${SESSION_1:0:8}" --background --model "openai-codex/gpt-5.5"
   [ "$status" -eq 0 ]
   echo "$output" | grep -q "$SESSION_1"
-  shell list 2>/dev/null | grep -q "${SESSION_1:0:8}"
+  "$SESSIONS_SHELL" list | grep -q "${SESSION_1:0:8}"
 }
 
 @test "wake --background derives shell name from session name" {
-  command -v shell >/dev/null 2>&1 || skip "shell not installed"
   run sessions new "wake-bg-name-test-$$"
   [ "$status" -eq 0 ]
 
   run sessions wake "wake-bg-name-test-$$" --background --model "openai-codex/gpt-5.5"
   [ "$status" -eq 0 ]
-  shell list 2>/dev/null | grep -q "wake-bg-name-test-$$"
+  "$SESSIONS_SHELL" list | grep -q "wake-bg-name-test-$$"
 }
 
 @test "wake --background translates slashes in session name for shell" {
-  command -v shell >/dev/null 2>&1 || skip "shell not installed"
   run sessions new "feature/bg-test-$$"
   [ "$status" -eq 0 ]
 
   run sessions wake "feature/bg-test-$$" --background --model "openai-codex/gpt-5.5"
   [ "$status" -eq 0 ]
-  shell list 2>/dev/null | grep -q "feature-bg-test-$$"
+  "$SESSIONS_SHELL" list | grep -q "feature-bg-test-$$"
 }
 
 @test "wake --background shows monitor instructions" {
-  command -v shell >/dev/null 2>&1 || skip "shell not installed"
   run sessions wake "$SESSION_1" --background --model "openai-codex/gpt-5.5"
   [ "$status" -eq 0 ]
   echo "$output" | grep -q "Monitor:"
 }
 
-@test "wake --background checks for shell dependency" {
-  # Verify the wake task source checks for shell when --background is used
-  grep -q 'command -v shell' "$REPO_DIR/.mise/tasks/wake"
+@test "wake --background fails when the selected shell is missing" {
+  export SESSIONS_SHELL="$BATS_TEST_TMPDIR/missing-shell"
+  run sessions wake "$SESSION_1" --background --model "openai-codex/gpt-5.5"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"shell is required for --background"* ]]
 }
 
 # --- Self-reference: call siblings through `mise -C`, not via PATH ---
@@ -183,7 +164,6 @@ STUB
   # always fails; wake must still succeed because it uses
   # `mise -C "$MISE_CONFIG_ROOT" run` for sibling dispatch (production
   # variable, not the test-level $REPO_DIR).
-  command -v shell >/dev/null 2>&1 || skip "shell not installed"
 
   local stub_dir="$BATS_TEST_TMPDIR/stub-path"
   mkdir -p "$stub_dir"
@@ -204,7 +184,6 @@ STUB
 # --- Context injection (works in both modes) ---
 
 @test "wake injects context into session file" {
-  command -v shell >/dev/null 2>&1 || skip "shell not installed"
   run sessions wake "$SESSION_1" --background --model "openai-codex/gpt-5.5" --context "Review PR #42"
   [ "$status" -eq 0 ]
   src_file=$(find "$PROJECT_DIR" -name "*${SESSION_1}.jsonl")
@@ -214,7 +193,6 @@ STUB
 # --- Wake event recording ---
 
 @test "wake records wake event in session file" {
-  command -v shell >/dev/null 2>&1 || skip "shell not installed"
   export GIT_AUTHOR_NAME="test-agent"
   run sessions wake "$SESSION_1" --background --model "openai-codex/gpt-5.5"
   [ "$status" -eq 0 ]
@@ -223,7 +201,6 @@ STUB
 }
 
 @test "wake --headless records harness=pi and headless=true" {
-  command -v shell >/dev/null 2>&1 || skip "shell not installed"
   run sessions wake "$SESSION_1" --headless --background --model "openai-codex/gpt-5.5" --message "review this"
   [ "$status" -eq 0 ]
   src_file=$(find "$PROJECT_DIR" -name "*${SESSION_1}.jsonl")
@@ -231,7 +208,6 @@ STUB
 }
 
 @test "wake without --headless records harness=pi and headless=false" {
-  command -v shell >/dev/null 2>&1 || skip "shell not installed"
   run sessions wake "$SESSION_1" --background --model "openai-codex/gpt-5.5"
   [ "$status" -eq 0 ]
   src_file=$(find "$PROJECT_DIR" -name "*${SESSION_1}.jsonl")
@@ -241,6 +217,7 @@ STUB
 @test "wake --os-user records os_user in wake event" {
   stub_os_user_host iris
   local stub_dir="$BATS_TEST_TMPDIR/stub-shell-os-user-record"
+  export SESSIONS_SHELL="$stub_dir/shell"
   mkdir -p "$stub_dir"
   cat > "$stub_dir/shell" <<'STUB'
 #!/usr/bin/env bash
@@ -257,6 +234,7 @@ STUB
 @test "wake defaults os_user from SHIMMER_OS_USER" {
   stub_os_user_host iris
   local stub_dir="$BATS_TEST_TMPDIR/stub-shell-os-user-env"
+  export SESSIONS_SHELL="$stub_dir/shell"
   mkdir -p "$stub_dir"
   cat > "$stub_dir/shell" <<'STUB'
 #!/usr/bin/env bash
@@ -274,6 +252,7 @@ STUB
 @test "wake explicit --os-user overrides SHIMMER_OS_USER" {
   stub_os_user_host iris
   local stub_dir="$BATS_TEST_TMPDIR/stub-shell-os-user-override"
+  export SESSIONS_SHELL="$stub_dir/shell"
   mkdir -p "$stub_dir"
   cat > "$stub_dir/shell" <<'STUB'
 #!/usr/bin/env bash
@@ -289,27 +268,21 @@ STUB
 }
 
 # --- Foreground mode ---
-# Foreground calls `exec sessions run` which requires the Elixir CLI.
-# We test that the wake event is recorded and the right command would be called
-# by checking the session file, without actually running the Elixir CLI.
+@test "wake foreground does not require shell" {
+  local stub_dir="$BATS_TEST_TMPDIR/foreground-pi"
+  local capture="$BATS_TEST_TMPDIR/foreground-argv"
+  stub_pi_capture_argv_cwd "$stub_dir" "$capture" "$BATS_TEST_TMPDIR/foreground-cwd"
+  export SESSIONS_SHELL="$BATS_TEST_TMPDIR/missing-shell"
 
-@test "wake (foreground) does not require shell on PATH" {
-  # Foreground mode shouldn't check for shell
-  # This test verifies the dependency check is conditional
-  src_file=$(find "$PROJECT_DIR" -name "*${SESSION_1}.jsonl")
-  # We can't actually run foreground (it execs into sessions run which needs Elixir),
-  # but we can verify the wake event is written by checking a --background wake
-  # and confirming the same code path writes events for foreground.
-  # The real foreground integration test would need the Elixir CLI.
-  command -v shell >/dev/null 2>&1 || skip "shell not installed"
-  run sessions wake "$SESSION_1" --background --model "openai-codex/gpt-5.5"
+  run sessions wake "$SESSION_1" --model "openai-codex/gpt-5.5"
   [ "$status" -eq 0 ]
+  [ -s "$capture" ]
+  jq -e 'select(.type == "wake")' "$(find "$PROJECT_DIR" -name "*${SESSION_1}.jsonl")"
 }
 
 # --- Meta parsing ---
 
 @test "wake --meta records metadata in wake event" {
-  command -v shell >/dev/null 2>&1 || skip "shell not installed"
   run sessions wake "$SESSION_1" --background --model "openai-codex/gpt-5.5" --meta "timeout=900"
   [ "$status" -eq 0 ]
   src_file=$(find "$PROJECT_DIR" -name "*${SESSION_1}.jsonl")
@@ -334,7 +307,6 @@ STUB
 # --- Model pass-through ---
 
 @test "wake --model records model on wake event" {
-  command -v shell >/dev/null 2>&1 || skip "shell not installed"
   run sessions wake "$SESSION_1" --background --model "openai-codex/gpt-5.5"
   [ "$status" -eq 0 ]
   src_file=$(find "$PROJECT_DIR" -name "*${SESSION_1}.jsonl")
@@ -342,24 +314,22 @@ STUB
 }
 
 @test "wake requires --model" {
-  command -v shell >/dev/null 2>&1 || skip "shell not installed"
   run sessions wake "$SESSION_1" --background
   [ "$status" -ne 0 ]
   echo "$output" | grep -q -- "--model is required"
 }
 
 @test "wake requires provider-qualified --model" {
-  command -v shell >/dev/null 2>&1 || skip "shell not installed"
   run sessions wake "$SESSION_1" --background --model "gpt-5.5"
   [ "$status" -ne 0 ]
   echo "$output" | grep -q -- "--model must be provider-qualified"
 }
 
 @test "wake --os-user wraps only the sessions run payload" {
-  command -v shell >/dev/null 2>&1 || skip "shell not installed"
   stub_os_user_host iris
 
   local stub_dir="$BATS_TEST_TMPDIR/stub-shell-os-user-argv"
+  export SESSIONS_SHELL="$stub_dir/shell"
   local capture="$BATS_TEST_TMPDIR/shell-argv-os-user"
   mkdir -p "$stub_dir"
   cat > "$stub_dir/shell" <<STUB
@@ -382,7 +352,7 @@ STUB
   [ "$(sed -n "$((run_as_line + 1))p" "$capture")" = "--user" ]
   [ "$(sed -n "$((run_as_line + 2))p" "$capture")" = "iris" ]
   [ "$(sed -n "$((run_as_line + 3))p" "$capture")" = "--" ]
-  [ "$(sed -n "$((run_as_line + 4))p" "$capture")" = "mise" ]
+  [ "$(sed -n "$((run_as_line + 4))p" "$capture")" = "$SESSIONS_MISE" ]
   [ "$(sed -n "$((run_as_line + 5))p" "$capture")" = "-C" ]
 }
 
@@ -403,9 +373,9 @@ STUB
   # the same RUN_CMD array, so the background test implicitly covers
   # foreground's argv shape; if those construction paths diverge,
   # adjust the test.
-  command -v shell >/dev/null 2>&1 || skip "shell not installed"
 
   local stub_dir="$BATS_TEST_TMPDIR/stub-shell"
+  export SESSIONS_SHELL="$stub_dir/shell"
   local capture="$BATS_TEST_TMPDIR/shell-argv"
   mkdir -p "$stub_dir"
   cat > "$stub_dir/shell" <<STUB
@@ -441,6 +411,7 @@ STUB
 
 @test "wake forwards project approval and explicit resource disables" {
   local stub_dir="$BATS_TEST_TMPDIR/stub-shell-resource-policy"
+  export SESSIONS_SHELL="$stub_dir/shell"
   local capture="$BATS_TEST_TMPDIR/shell-argv-resource-policy"
   mkdir -p "$stub_dir"
   cat > "$stub_dir/shell" <<STUB
@@ -504,7 +475,6 @@ STUB
   # also has its own --cwd option. Regression guard: the RUN_CMD handed to
   # shell must carry the session header cwd explicitly rather than depending
   # on transient invocation context.
-  command -v shell >/dev/null 2>&1 || skip "shell not installed"
 
   local session_cwd="$BATS_TEST_TMPDIR/session-cwd"
   mkdir -p "$session_cwd"
@@ -518,6 +488,7 @@ STUB
   mv "$updated_file" "$src_file"
 
   local stub_dir="$BATS_TEST_TMPDIR/stub-shell-cwd"
+  export SESSIONS_SHELL="$stub_dir/shell"
   local capture="$BATS_TEST_TMPDIR/shell-argv-cwd"
   mkdir -p "$stub_dir"
   cat > "$stub_dir/shell" <<STUB
@@ -546,9 +517,9 @@ STUB
   # Sessions' caller-cwd value becomes stale once the shell outlives that
   # invocation, so wake scrubs its own variable after materializing --cwd.
   # Other packages' caller context remains outside Sessions' ownership.
-  command -v shell >/dev/null 2>&1 || skip "shell not installed"
 
   local stub_dir="$BATS_TEST_TMPDIR/stub-shell-env"
+  export SESSIONS_SHELL="$stub_dir/shell"
   local capture="$BATS_TEST_TMPDIR/shell-env"
   mkdir -p "$stub_dir"
   cat > "$stub_dir/shell" <<STUB
@@ -575,7 +546,6 @@ STUB
   # directory". Once wake explicitly forwards --cwd to sessions run, that
   # fallback must be absolute; otherwise the run/CLI layer could interpret
   # "." from a later process directory.
-  command -v shell >/dev/null 2>&1 || skip "shell not installed"
 
   local missing_cwd="$BATS_TEST_TMPDIR/missing-session-cwd"
   local expected_cwd
@@ -588,6 +558,7 @@ STUB
   mv "$updated_file" "$src_file"
 
   local stub_dir="$BATS_TEST_TMPDIR/stub-shell-invalid-cwd"
+  export SESSIONS_SHELL="$stub_dir/shell"
   local capture="$BATS_TEST_TMPDIR/shell-argv-invalid-cwd"
   mkdir -p "$stub_dir"
   cat > "$stub_dir/shell" <<STUB
@@ -663,6 +634,7 @@ STUB
 
 @test "wake interactive without --message records no synthetic message" {
   local stub_dir="$BATS_TEST_TMPDIR/stub-shell-no-message"
+  export SESSIONS_SHELL="$stub_dir/shell"
   local capture="$BATS_TEST_TMPDIR/shell-argv-no-message"
   mkdir -p "$stub_dir"
   cat > "$stub_dir/shell" <<STUB

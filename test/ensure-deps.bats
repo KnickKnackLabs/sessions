@@ -10,19 +10,9 @@ setup() {
   # tree being tested regardless of how the suite was invoked.
   source "$REPO_DIR/lib/ensure-deps.sh"
 
-  TMP=$(mktemp -d)
+  TMP="$BATS_TEST_TMPDIR/ensure-deps"
   CLI="$TMP/cli"
   mkdir -p "$CLI/deps"
-
-  # Minimal mix project so real `mix deps.get` has something to read.
-  cat > "$CLI/mix.exs" <<'EOF'
-defmodule EnsureDepsTest.MixProject do
-  use Mix.Project
-  def project, do: [app: :ensure_deps_test, version: "0.0.1", elixir: "~> 1.19", deps: deps()]
-  def application, do: [extra_applications: [:logger]]
-  defp deps, do: [{:jason, "~> 1.4"}]
-end
-EOF
 }
 
 teardown() {
@@ -62,7 +52,7 @@ esac
 exit 43
 EOF
   chmod +x "$fakebin/mix"
-  export fakebin
+  export SESSIONS_MIX="$fakebin/mix"
 }
 
 # ----------------------------------------------------------------------------
@@ -129,28 +119,29 @@ EOF
 # ----------------------------------------------------------------------------
 
 @test "ensure_cli_deps: fetches deps when deps/ is empty" {
-  # deps/ exists but is empty — the fresh-install condition.
   [ -z "$(ls -A "$CLI/deps")" ]
+  write_fake_mix
+  export FAKE_MIX_LOADPATHS_FIRST_STATUS=1
+  export FAKE_MIX_LOADPATHS_NEXT_STATUS=0
 
   run ensure_cli_deps "$CLI"
   [ "$status" -eq 0 ]
-
-  # First-run notice must be emitted.
   [[ "$output" == *"first-run setup"* ]]
-
-  # deps/ should now be populated. jason is the only dep in our fixture.
-  [ -d "$CLI/deps/jason" ]
+  grep -qx 'deps.get' "$MIX_LOG"
+  [ "$(grep -c '^deps.loadpaths --no-compile$' "$MIX_LOG")" -eq 2 ]
 }
 
 @test "ensure_cli_deps: fetches deps when deps/ does not exist at all" {
-  # Nuke the deps dir entirely — the Mix readiness check should fail closed.
   rm -rf "$CLI/deps"
+  write_fake_mix
+  export FAKE_MIX_LOADPATHS_FIRST_STATUS=1
+  export FAKE_MIX_LOADPATHS_NEXT_STATUS=0
 
   run ensure_cli_deps "$CLI"
   [ "$status" -eq 0 ]
-
   [[ "$output" == *"first-run setup"* ]]
-  [ -d "$CLI/deps/jason" ]
+  grep -qx 'deps.get' "$MIX_LOG"
+  [ "$(grep -c '^deps.loadpaths --no-compile$' "$MIX_LOG")" -eq 2 ]
 }
 
 # ----------------------------------------------------------------------------

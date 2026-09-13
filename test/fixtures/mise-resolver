@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+# Only executable lookup is mocked; task discovery, parsing and activation
+# still run through the real Mise binary.
+set -euo pipefail
+if [ "${1:-}" = "-C" ] && [ "${3:-}" = "which" ] && [ "${4:-}" = "pi" ]; then
+  printf '%s\n' "${SESSIONS_TEST_PI_EXECUTABLE:?test Pi executable is required}"
+  exit 0
+fi
+exec "${SESSIONS_TEST_REAL_MISE:?real Mise executable is required}" "$@"

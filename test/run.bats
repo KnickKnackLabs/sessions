@@ -72,7 +72,19 @@ teardown() {
   [ "$(cat "$cwd_capture")" = "$(cd "$expected" && pwd -P)" ]
 
   rm "$cwd_capture"
-  SESSIONS_CALLER_PWD="$caller" PATH="$stub_dir:$PATH" run sessions run \
+  cat > "$stub_dir/mix" <<STUB
+#!/usr/bin/env bash
+set -euo pipefail
+case "\$*" in
+  "local.hex --force --if-missing"|"deps.loadpaths --no-compile") exit 0 ;;
+esac
+[ "\$1" = sessions ]
+[ "\$2" = --cwd ]
+printf '%s\n' "\$3" > "$cwd_capture"
+STUB
+  chmod +x "$stub_dir/mix"
+  export SESSIONS_MIX="$stub_dir/mix"
+  SESSIONS_CALLER_PWD="$caller" run sessions run \
     --cwd target \
     --model "openai-codex/gpt-5.5" \
     "probe"
@@ -94,7 +106,7 @@ teardown() {
 set -euo pipefail
 if [ "\${1:-}" = "-C" ] && [ "\${3:-}" = "which" ] && [ "\${4:-}" = "pi" ]; then
   printf '%s\n' "\$@" > "$mise_capture"
-  command -v pi
+  printf '%s\n' "$stub_dir/pi"
   exit 0
 fi
 exec "$real_mise" "\$@"
@@ -185,6 +197,7 @@ STUB
 
 @test "run with message works without any system prompt" {
   local stub_dir="$BATS_TEST_TMPDIR/stub-mix-no-prompt"
+  export SESSIONS_MIX="$stub_dir/mix"
   local argv_capture="$BATS_TEST_TMPDIR/mix-argv-no-prompt"
   mkdir -p "$stub_dir"
   cat > "$stub_dir/mix" <<STUB
@@ -217,6 +230,7 @@ STUB
 
 @test "run forwards explicit resource disables and project approval" {
   local stub_dir="$BATS_TEST_TMPDIR/stub-mix-resource-policy"
+  export SESSIONS_MIX="$stub_dir/mix"
   local argv_capture="$BATS_TEST_TMPDIR/mix-argv-resource-policy"
   mkdir -p "$stub_dir"
   cat > "$stub_dir/mix" <<STUB
@@ -268,7 +282,19 @@ STUB
   echo "$output" | grep -q -- "--project-trust must be inherit, approve, or deny"
 }
 
-@test "run lets the selected adapter reject unsupported trust and records the failed attempt" {
+@test "run records a failing CLI attempt and propagates its exit status" {
+  local stub_dir="$BATS_TEST_TMPDIR/stub-mix-failure"
+  mkdir -p "$stub_dir"
+  cat > "$stub_dir/mix" <<'STUB'
+#!/usr/bin/env bash
+case "$*" in
+  "local.hex --force --if-missing"|"deps.loadpaths --no-compile") exit 0 ;;
+esac
+printf 'injected CLI failure\n' >&2
+exit 10
+STUB
+  chmod +x "$stub_dir/mix"
+  export SESSIONS_MIX="$stub_dir/mix"
   local session_file
   session_file=$(find "$PROJECT_DIR" -name "*${SESSION_1}.jsonl")
   echo '{"type":"harness","id":"h-claude","parentId":"u4","timestamp":"2026-03-14T10:31:00.000Z","name":"claude"}' >> "$session_file"
@@ -281,7 +307,7 @@ STUB
     "do work"
 
   [ "$status" -eq 10 ]
-  echo "$output" | grep -q -- "claude.*does not support.*build_command"
+  echo "$output" | grep -q -- "injected CLI failure"
   jq -s -e '
     ([.[] | select(.type == "process_start" and .harness == "claude")] | length) == 1 and
     ([.[] | select(.type == "process_exit" and .exit_code == 10)] | length) == 1
@@ -311,6 +337,7 @@ STUB
 
 @test "run with message prepares CLI deps before mix sessions" {
   local stub_dir="$BATS_TEST_TMPDIR/stub-mix-readiness-order"
+  export SESSIONS_MIX="$stub_dir/mix"
   local command_log="$BATS_TEST_TMPDIR/mix-readiness-order.log"
   mkdir -p "$stub_dir"
   cat > "$stub_dir/mix" <<STUB
@@ -347,8 +374,9 @@ printf invoked > "$invoked_capture"
 exit 0
 STUB
   chmod +x "$stub_dir/pi"
+  stub_mise_resolve_pi "$stub_dir"
 
-  PATH="$stub_dir:$PATH" run sessions run \
+  run sessions run \
     --system-prompt-file "$BATS_TEST_TMPDIR/missing-prompt.md" \
     --cwd "$BATS_TEST_TMPDIR" \
     --model "openai-codex/gpt-5.5"
@@ -433,6 +461,7 @@ STUB
 
 @test "run headless with message uses baked session system prompt" {
   local stub_dir="$BATS_TEST_TMPDIR/stub-mix-baked-prompt"
+  export SESSIONS_MIX="$stub_dir/mix"
   local argv_capture="$BATS_TEST_TMPDIR/mix-argv-baked-prompt"
   local prompt_capture="$BATS_TEST_TMPDIR/mix-prompt-baked-prompt"
   mkdir -p "$stub_dir"
@@ -481,6 +510,7 @@ STUB
 
 @test "run headless with message creates runtime context prompt without profile prompt" {
   local stub_dir="$BATS_TEST_TMPDIR/stub-mix-headless-no-profile"
+  export SESSIONS_MIX="$stub_dir/mix"
   local argv_capture="$BATS_TEST_TMPDIR/mix-argv-headless-no-profile"
   local prompt_capture="$BATS_TEST_TMPDIR/mix-prompt-headless-no-profile"
   mkdir -p "$stub_dir"
@@ -610,6 +640,7 @@ printf invoked > "$invoked_capture"
 exit 0
 STUB
   chmod +x "$stub_dir/pi"
+  stub_mise_resolve_pi "$stub_dir"
   printf '{"type":"session"\n' > "$bad_session"
 
   PATH="$stub_dir:$PATH" run sessions run \

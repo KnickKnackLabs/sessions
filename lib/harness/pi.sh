@@ -31,7 +31,7 @@ harness_pi_executable() {
     return 1
   fi
 
-  if ! executable=$(mise -C "$sessions_root" which pi); then
+  if ! executable=$("${SESSIONS_MISE:-mise}" -C "$sessions_root" which pi); then
     echo "Error: Sessions-owned pi executable is unavailable" >&2
     return 1
   fi

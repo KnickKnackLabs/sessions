@@ -3,7 +3,13 @@
 load helpers
 
 setup() { setup_test_sessions; }
-teardown() { teardown_test_sessions; }
+teardown() {
+  if [ -n "${match_appender:-}" ]; then
+    touch "$BATS_TEST_TMPDIR/stop-match-producer"
+    wait "$match_appender"
+  fi
+  teardown_test_sessions
+}
 
 session_path() {
   printf '%s\n' "$PROJECT_DIR"*"_$1.jsonl"
@@ -151,22 +157,29 @@ JSONL
   ! echo "$output" | grep -q "human/operator note"
 }
 
-@test "wait --match waits for a matching new message" {
+@test "wait --match waits for a matching new message despite slow startup" {
   file=$(session_path "$SESSION_1")
+  append_assistant_text "$file" "a-wait-old" "done with old work"
+  # Keep producing new records across the waiter's initial snapshot. One-shot
+  # writes after a fixed sleep can both arrive before Mise/uv finishes startup.
   (
-    sleep 1
-    append_assistant_text "$file" "a-wait-unmatched" "still working"
-    sleep 0.5
-    append_assistant_text "$file" "a-wait-matched" "Done with the requested work"
-  ) &
-  appender=$!
+    sequence=0
+    while [ ! -e "$BATS_TEST_TMPDIR/stop-match-producer" ]; do
+      sequence=$((sequence + 1))
+      append_assistant_text "$file" "a-wait-unmatched-$sequence" "still working"
+      append_assistant_text "$file" "a-wait-matched-$sequence" "Done with the requested work"
+      sleep 0.1
+    done
+  ) 3>&- &
+  match_appender=$!
 
-  run sessions wait "$SESSION_1" --match "done with" --timeout 5 --interval 0.1
-  wait "$appender"
+  # Deliberately start later than the old fixture's entire append schedule.
+  run bash -c 'sleep 2; sessions wait "$1" --match "done with" --timeout 5 --interval 0.1' _ "$SESSION_1"
 
   [ "$status" -eq 0 ]
   echo "$output" | grep -q "Done with the requested work"
   ! echo "$output" | grep -q "still working"
+  ! echo "$output" | grep -q "done with old work"
 }
 
 @test "wait --count collects multiple new matching messages" {

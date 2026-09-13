@@ -18,7 +18,7 @@ ensure_mix_hex() {
 
   if ! (
     cd "$cli_dir" || exit 1
-    mix local.hex --force --if-missing >&2
+    "${SESSIONS_MIX:-mix}" local.hex --force --if-missing >&2
   ); then
     echo "sessions: failed to install Hex package manager." >&2
     echo "  try: mix local.hex --force --if-missing   (in $cli_dir)" >&2
@@ -31,7 +31,7 @@ cli_deps_ready() {
 
   (
     cd "$cli_dir" || exit 1
-    mix deps.loadpaths --no-compile >/dev/null 2>&1
+    "${SESSIONS_MIX:-mix}" deps.loadpaths --no-compile >/dev/null 2>&1
   )
 }
 
@@ -63,7 +63,7 @@ ensure_cli_deps() {
   echo "sessions: first-run setup — fetching Elixir dependencies…" >&2
   (
     cd "$cli_dir" || exit 1
-    mix deps.get >&2 || exit 1
+    "${SESSIONS_MIX:-mix}" deps.get >&2 || exit 1
   ) || {
     echo "sessions: failed to fetch dependencies." >&2
     echo "  try: mise run cli:build   (in $cli_dir)" >&2

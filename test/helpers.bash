@@ -57,12 +57,13 @@ stub_mise_resolve_pi() {
 #!/usr/bin/env bash
 set -euo pipefail
 if [ "\${1:-}" = "-C" ] && [ "\${3:-}" = "which" ] && [ "\${4:-}" = "pi" ]; then
-  command -v pi
+  printf '%s\\n' "$stub_dir/pi"
   exit 0
 fi
 exec "$real_mise" "\$@"
 STUB
   chmod +x "$stub_dir/mise"
+  export SESSIONS_MISE="$stub_dir/mise"
 }
 
 stub_pi_capture_argv_cwd() {
@@ -134,6 +135,7 @@ cd "\$cwd"
 exec "\$@"
 STUB
   chmod +x "$stub_dir/shell"
+  export SESSIONS_SHELL="$stub_dir/shell"
 }
 
 stub_shell_recording() {
@@ -164,6 +166,7 @@ case "\${1:-}" in
 esac
 STUB
   chmod +x "$stub_dir/shell"
+  export SESSIONS_SHELL="$stub_dir/shell"
 }
 
 # Fixed UUIDs for reproducible tests

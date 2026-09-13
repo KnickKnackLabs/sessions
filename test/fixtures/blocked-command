@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# An unexpected external dependency must fail the suite even if its caller
+# intentionally ignores the command's nonzero status.
+set -euo pipefail
+message="test isolation: unmocked $(basename "$0"): $*"
+printf '%s\n' "$message" >&2
+printf '%s\n' "$message" >> "${SESSIONS_TEST_GUARD_LOG:?test guard log is required}"
+exit 97

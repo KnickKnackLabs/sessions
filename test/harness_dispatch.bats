@@ -285,14 +285,22 @@ JSONL
   [ ! -d "$CLAUDE_DIR/projects" ]
 }
 
-@test "wake on a claude-declared session routes to claude and errors UNSUPPORTED (step 3 acceptance)" {
-  # Hand-craft a session file with a harness=claude entry. The file
-  # lives under PI_DIR so pi's find_session locates it; the harness
-  # entry then wins over path-based detection (see the priority test
-  # above), so wake dispatches to claude — which errors UNSUPPORTED
-  # when the Elixir headless run path asks claude to build the harness command.
-  # Foreground wake (no --background) — execs mise run directly, so
-  # `shell` isn't required.
+@test "wake forwards a claude-declared session to the CLI and propagates failure" {
+  # Exercise wake -> run -> CLI routing, not the Elixir adapter's implementation.
+  local stub_dir="$BATS_TEST_TMPDIR/stub-claude-cli"
+  export CLI_ARGV="$BATS_TEST_TMPDIR/claude-cli-argv"
+  mkdir -p "$stub_dir"
+  cat > "$stub_dir/mix" <<'STUB'
+#!/usr/bin/env bash
+case "$*" in
+  "local.hex --force --if-missing"|"deps.loadpaths --no-compile") exit 0 ;;
+esac
+printf '%s\n' "$@" > "$CLI_ARGV"
+printf 'injected CLI failure\n' >&2
+exit 10
+STUB
+  chmod +x "$stub_dir/mix"
+  export SESSIONS_MIX="$stub_dir/mix"
 
   local sid="cccccccc-3333-3333-3333-333333333333"
   local sf="$PI_DIR/agent/sessions/--claude-acceptance--/2026-04-22T10-00-00-000Z_${sid}.jsonl"
@@ -304,9 +312,17 @@ JSONL
 
   run sessions wake "${sid:0:8}" --headless --model "openai-codex/gpt-5.5" --message "acceptance"
   [ "$status" -eq 10 ]
-  # The user-facing message should name the claude harness and the
-  # specific unsupported op.
-  echo "$output" | grep -q "'claude' harness does not support 'build_command'"
+  echo "$output" | grep -q "injected CLI failure"
+  jq -R -s -e --arg sf "$sf" '
+    split("\n")[:-1] |
+    .[0] == "sessions" and .[-1] == "acceptance" and
+    .[index("--session") + 1] == $sf and
+    index("--harness-executable") == null
+  ' "$CLI_ARGV" >/dev/null
+  jq -s -e '
+    ([.[] | select(.type == "process_start" and .harness == "claude")] | length) == 1 and
+    ([.[] | select(.type == "process_exit" and .exit_code == 10)] | length) == 1
+  ' "$sf" >/dev/null
 }
 
 # --- Cross-adapter find aggregator (hard error surfacing) ---

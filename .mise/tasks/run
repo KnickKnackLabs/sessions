@@ -376,4 +376,4 @@ source "$MISE_CONFIG_ROOT/lib/ensure-deps.sh"
 ensure_cli_deps "$CLI_DIR"
 
 cd "$CLI_DIR"
-run_and_exit mix sessions ${CLI_ARGS[@]+"${CLI_ARGS[@]}"} "$MESSAGE"
+run_and_exit "${SESSIONS_MIX:-mix}" sessions ${CLI_ARGS[@]+"${CLI_ARGS[@]}"} "$MESSAGE"

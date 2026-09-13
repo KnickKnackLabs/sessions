@@ -74,7 +74,7 @@ fi
 # --- Dependencies ---
 
 if [ "$BACKGROUND" = "true" ]; then
-  if ! command -v shell >/dev/null 2>&1; then
+  if ! command -v "${SESSIONS_SHELL:-shell}" >/dev/null 2>&1; then
     echo "Error: shell is required for --background (shiv install shell)" >&2
     exit 1
   fi
@@ -88,7 +88,7 @@ command -v jq >/dev/null 2>&1 || { echo "Error: jq is required" >&2; exit 1; }
 # revision. The `-C` argument is required because wake later runs
 # `cd "$SESSION_CWD"` before the final exec — without `-C`, `mise run`
 # would look for tasks in the session cwd.
-mise_run=(mise -C "$MISE_CONFIG_ROOT" run -q)
+mise_run=("${SESSIONS_MISE:-mise}" -C "$MISE_CONFIG_ROOT" run -q)
 
 # --- Find session file ---
 
@@ -254,7 +254,7 @@ scrub_sessions_caller_pwd_env
 
 if [ "$BACKGROUND" = "true" ]; then
   # Background: launch via shell/zmx (fire-and-forget)
-  CHAT_IDENTITY="$SHELL_NAME" shell run "$SHELL_NAME" --cwd "$SESSION_CWD" ${RUN_CMD[@]+"${RUN_CMD[@]}"}
+  CHAT_IDENTITY="$SHELL_NAME" "${SESSIONS_SHELL:-shell}" run "$SHELL_NAME" --cwd "$SESSION_CWD" ${RUN_CMD[@]+"${RUN_CMD[@]}"}
 
   echo "$FULL_SESSION_ID"
   if [ -n "$SESSION_NAME" ]; then

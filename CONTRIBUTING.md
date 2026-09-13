@@ -69,6 +69,34 @@ BATS. BATS owns default-target selection, option parsing, path handling, runner
 selection, and validation. `test/test-task.bats` exercises the public Sessions
 test path with real BATS behavior.
 
+## External-command isolation in BATS
+
+Nested Mise activation may reorder `PATH`. Do not rely on prepending a mock
+of a Mise-managed command. Select the executable explicitly instead:
+
+- `SESSIONS_MISE` (default `mise`) owns sibling task calls and Pi executable
+  lookup. Tests intercept only `-C <Sessions root> which pi`, returning an
+  exact fixture path; all task parsing and activation still use real Mise.
+- `SESSIONS_MIX` (default `mix`) owns CLI dependency setup and execution.
+- `SESSIONS_SHELL` (default `shell`) owns background launch and removal checks.
+
+Use absolute executable paths (not shell command strings) for overrides.
+An invalid nonempty override does not retry with the production default.
+Shared helpers export these overrides when they create fixtures.
+
+`test/setup_suite.bash` installs explicit blocking defaults for Pi, Mix and
+Shell and disables tool auto-installation. An unmocked call exits nonzero and
+writes a suite-local guard log; teardown fails even if the caller swallowed
+that exit. Only guard regressions should redirect that log to a test-local
+file. These are dependency-boundary guards, not an OS/network sandbox, and
+must not be bypassed by direct calls to installed executables.
+
+Default BATS tests use synthetic sessions and inert command fixtures. They do
+not start live agents or persistent shells, download Hex dependencies, or clean
+up user-owned processes. Dependency-readiness tests prove orchestration, not
+real package installation. Keep any real-runtime acceptance separate and
+explicitly authorized.
+
 ## Validation
 
 Run targeted tests first, then the full suite before merge:
