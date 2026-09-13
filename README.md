@@ -8,7 +8,7 @@ Create sessions with structured metadata, wake agents into them,
 observe transcripts in real time, and query your history.
 
 ![lang: bash + python](https://img.shields.io/badge/lang-bash%20%2B%20python-4EAA25?style=flat&logo=gnubash&logoColor=white)
-[![tests: 391 passing](https://img.shields.io/badge/tests-391%20passing-brightgreen?style=flat)](test/)
+[![tests: 405](https://img.shields.io/badge/tests-405-blue?style=flat)](test/)
 ![commands: 22](https://img.shields.io/badge/commands-22-blue?style=flat)
 ![license: MIT](https://img.shields.io/badge/license-MIT-blue?style=flat)
 
@@ -300,6 +300,27 @@ sessions query e96bd43a --text compact \
   --format jsonl
 ```
 
+<details>
+<summary><b>Catch up on one known session</b></summary>
+
+```bash
+# Latest nonblank assistant message (default count: 1)
+sessions query e96bd43a --text compact \
+  --sql-file queries/last-assistant-messages.sql --format jsonl
+
+# After copying conversation-since.sql locally and setting its checkpoint
+sessions query e96bd43a --text compact \
+  --sql-file /tmp/conversation-since.sql --format jsonl
+```
+
+Copy [last-assistant-messages.sql](queries/last-assistant-messages.sql) or [conversation-since.sql](queries/conversation-since.sql) to a caller-owned file before changing the values in its `params` CTE; there are no extra CLI parameters. Set `message_count` to a positive integer, or explicitly to SQL `NULL` for all matching rows. The assistant example selects the newest N text messages, then displays them in recorded order, including text accompanying tool calls.
+
+The conversation example defaults to `after_seq = 0, message_count = 20`. Set the checkpoint to a previously observed `seq` from the same session: it returns the earliest user/assistant text rows strictly after that JSONL line number. Continue from the last returned seq. This is not a turn number, entry ID, timestamp, or navigation anchor.
+
+Both queries require exactly one projected session; zero or multiple sessions return no rows. They read recorded history, including abandoned branches after rewinds, not the current active conversation or proof that a reply is final. Use `--text compact --max-message-chars 2000` for redacted head/tail excerpts, or `--text full` for complete recorded text (not external overflow files). The default commands mode and none mode return no rows. `text_chars` is the original text length; JSON/JSONL avoids display clipping. `--limit` limits sessions, not result rows. Reused databases retain their original scope and text mode until explicitly refreshed.
+
+</details>
+
 The packaged examples include broader questions discovered through real corpus use:
 
 - `queries/attribution-health.sql` — Is agent metadata complete enough for attribution?
@@ -345,7 +366,7 @@ cd sessions && mise trust && mise install
 mise run test
 ```
 
-**391 tests** across 25 BATS and Python unittest suites. Shell and integration cases use [KKL BATS 1.14.0-kkl.3](https://github.com/KnickKnackLabs/bats-core). Tasks are bash scripts (session creation, wake, metadata) and Python scripts with [Rich](https://github.com/Textualize/rich) output (list, read, wait, wait-any, usage, inspect, search). The shared Python support library is 4149 lines in `lib/`.
+**405 tests** across 27 BATS and Python unittest suites. Shell and integration cases use [KKL BATS 1.14.0-kkl.3](https://github.com/KnickKnackLabs/bats-core). Tasks are bash scripts (session creation, wake, metadata) and Python scripts with [Rich](https://github.com/Textualize/rich) output (list, read, wait, wait-any, usage, inspect, search). The shared Python support library is 4149 lines in `lib/`.
 
 Python code is checked with [Ruff](https://docs.astral.sh/ruff/) via `mise run lint:python`, and CI runs the same lint/format check in addition to the BATS and Elixir suites.
 
@@ -387,7 +408,7 @@ sessions/
 │   └── harness/        # Per-harness adapters (pi, …)
 ├── queries/            # Packaged sessions query SQL presets
 └── test/
-    ├── *.bats          # 385 shell and integration tests
+    ├── *.bats          # 399 shell and integration tests
     └── *_test.py       # 6 focused Python unit tests
 ```
 

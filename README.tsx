@@ -151,7 +151,7 @@ const readme = (
 
       <Badges>
         <Badge label="lang" value="bash + python" color="4EAA25" logo="gnubash" logoColor="white" />
-        <Badge label="tests" value={`${testCount} passing`} color="brightgreen" href="test/" />
+        <Badge label="tests" value={`${testCount}`} color="blue" href="test/" />
         <Badge label="commands" value={`${taskCount}`} color="blue" />
         <Badge label="license" value="MIT" color="blue" />
       </Badges>
@@ -520,6 +520,50 @@ limit 20;
 sessions query e96bd43a --text compact \\
   --sql-file queries/bash-with-output.sql \\
   --format jsonl`}</CodeBlock>
+
+      <Details summary="Catch up on one known session">
+        <CodeBlock lang="bash">{`# Latest nonblank assistant message (default count: 1)
+sessions query e96bd43a --text compact \\
+  --sql-file queries/last-assistant-messages.sql --format jsonl
+
+# After copying conversation-since.sql locally and setting its checkpoint
+sessions query e96bd43a --text compact \\
+  --sql-file /tmp/conversation-since.sql --format jsonl`}</CodeBlock>
+
+        <Paragraph>
+          {"Copy "}
+          <Link href="queries/last-assistant-messages.sql">last-assistant-messages.sql</Link>
+          {" or "}
+          <Link href="queries/conversation-since.sql">conversation-since.sql</Link>
+          {" to a caller-owned file before changing the values in its "}
+          <Code>params</Code>
+          {" CTE; there are no extra CLI parameters. Set "}
+          <Code>message_count</Code>
+          {" to a positive integer, or explicitly to SQL "}
+          <Code>NULL</Code>
+          {" for all matching rows. The assistant example selects the newest N text messages, then displays them in recorded order, including text accompanying tool calls."}
+        </Paragraph>
+
+        <Paragraph>
+          {"The conversation example defaults to "}
+          <Code>after_seq = 0, message_count = 20</Code>
+          {". Set the checkpoint to a previously observed "}
+          <Code>seq</Code>
+          {" from the same session: it returns the earliest user/assistant text rows strictly after that JSONL line number. Continue from the last returned seq. This is not a turn number, entry ID, timestamp, or navigation anchor."}
+        </Paragraph>
+
+        <Paragraph>
+          {"Both queries require exactly one projected session; zero or multiple sessions return no rows. They read recorded history, including abandoned branches after rewinds, not the current active conversation or proof that a reply is final. Use "}
+          <Code>--text compact --max-message-chars 2000</Code>
+          {" for redacted head/tail excerpts, or "}
+          <Code>--text full</Code>
+          {" for complete recorded text (not external overflow files). The default commands mode and none mode return no rows. "}
+          <Code>text_chars</Code>
+          {" is the original text length; JSON/JSONL avoids display clipping. "}
+          <Code>--limit</Code>
+          {" limits sessions, not result rows. Reused databases retain their original scope and text mode until explicitly refreshed."}
+        </Paragraph>
+      </Details>
 
       <Paragraph>
         {"The packaged examples include broader questions discovered through real corpus use:"}
